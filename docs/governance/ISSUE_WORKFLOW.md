@@ -60,6 +60,16 @@ Append meaningful dated findings, root cause, linked fix/PR/commit and actual ve
 
 Closing a verified finding follows the owner's authorized workflow. Tags, draft releases and publication continue to follow [RELEASING.md](RELEASING.md); issue authorization is not blanket publication authority.
 
+## Required completion audit
+
+Run an issue audit after each implementation task and before each release candidate. Read linked issues plus the current open list, for example with `gh issue list --state open --limit 100 --json number,title,url`; paginate when needed. Check the actual issue body and acceptance criteria rather than relying on its title or an old local status.
+
+For fully verified work, append a concise resolution comment with the fix commit, build/version, relevant test or native/package evidence and any remaining scope limitation. Mark only verified acceptance checkboxes complete. Close the issue with reason `completed` through `gh issue close <number> --reason completed` under the verified owner account. The standing instruction authorizes this closure; do not ask for routine confirmation again. Closing is appropriate only when every required acceptance condition for that issue has passed, including distribution evidence if the issue concerns an installed build.
+
+For partial or unverified work, leave the issue open and state the exact outstanding check. A planned feature, generated specification, passing compilation, available archive or published release is not by itself completion evidence. Reuse/reopen the existing issue when a confirmed regression invalidates its resolution. Do not use automatic closing keywords for a change whose issue acceptance is still pending.
+
+Record the audit outcome in the task/release verification or handoff: issues closed, issues still open and the concrete reason. An audit does not select the next release scope or authorize implementing deferred features.
+
 ## Initial tracked findings
 
 - [Issue #1: macOS application/Dock icon behavior](https://github.com/avacadorun-dev/writer-craft/issues/1) — owner-authored account `avacadorun-dev`, labeled `bug`. Link actual fix and packaged-app retest evidence before considering it resolved.
