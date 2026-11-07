@@ -49,6 +49,10 @@ Native OS file-association registration is deferred until opening a file through
 
 The stdlib-only `scripts/generate-notices.py` traverses normal dependency edges from `studio-desktop` in locked, target-filtered Cargo metadata. It preserves available package notice texts, declared SPDX metadata and public repository URLs in `THIRD_PARTY_NOTICES.txt`, without local machine paths. Workspace entries and build/dev-only edges are excluded. Packages whose registry source omits notice files are explicitly inventoried; this is an attribution inventory, not a legal completeness assertion. Its fixture checks cover dependency closure, original text preservation, declared files and unavailable notices.
 
+## Selected editor milestone
+
+The owner selected complete current-editor parity for alpha.2 on 2026-11-08. The active source declares `workspace.metadata.writercraft.required-ux-scope = "full-editor-parity"`. Release validation requires the independent record to match that exact scope as well as source/version; an earlier native-foundation approval cannot qualify it. This scope covers the full editor matrices, not complete product parity. A model/storage/layout checkpoint cannot pass it. Keep the released alpha.1 tag/assets unchanged; deferred installation packaging is not part of this editor-first scope.
+
 ## Independent UX evidence record
 
 Keep the narrative review and findings. For machine validation, the independent reviewer owns `docs/design/UX_GATE.json`. It is authoritative over historical review prose. Required fields:

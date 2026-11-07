@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "The working draft changed. Preserve your changes before retrying.",
+        [
+            "Рабочий черновик изменился. Сохраните свою работу отдельно перед повторной попыткой.",
+            "The working draft changed. Preserve your changes before retrying.",
+            "Der Arbeitsentwurf wurde geändert. Sichern Sie Ihre Änderungen vor einem erneuten Versuch.",
+            "Le brouillon a changé. Conservez vos modifications avant de réessayer.",
+            "El borrador ha cambiado. Conserve sus cambios antes de volver a intentarlo.",
+            "O rascunho foi alterado. Preserve suas alterações antes de tentar novamente.",
+            "工作草稿已更改。请先保留您的修改，再重试。",
+            "作業中の下書きが変更されました。変更内容を保全してから再試行してください。",
+        ],
+    ),
+    (
         "Close",
         [
             "Закрыть",

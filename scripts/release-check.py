@@ -51,7 +51,13 @@ def workspace_metadata(root: Path = ROOT):
     section = toml_section((root / "Cargo.toml").read_text(), "workspace.package")
     version = quoted_field(section, "version")
     parts = version_parts(version)
-    return {"version": version, "short_version": ".".join(parts[:3]), "license": quoted_field(section, "license")}
+    manifest = (root / "Cargo.toml").read_text()
+    required_scope = "native-foundation"
+    if "[workspace.metadata.writercraft]" in manifest:
+        required_scope = quoted_field(toml_section(manifest, "workspace.metadata.writercraft"), "required-ux-scope")
+    if required_scope not in {"native-foundation", "full-editor-parity", "full-parity"}:
+        raise ValueError("Unknown required independent UX scope: " + required_scope)
+    return {"version": version, "short_version": ".".join(parts[:3]), "license": quoted_field(section, "license"), "required_ux_scope": required_scope}
 
 
 def source_fingerprint(root: Path = ROOT) -> str:
@@ -106,7 +112,7 @@ def review_records(root: Path):
     return [(path.relative_to(root).as_posix(), record)]
 
 
-def accepted_ux(root: Path, version: str, fingerprint: str):
+def accepted_ux(root: Path, version: str, fingerprint: str, required_scope=None):
     reasons = []
     for review_path, record in reversed(review_records(root)):
         if record.get("status") != "accepted":
@@ -118,6 +124,8 @@ def accepted_ux(root: Path, version: str, fingerprint: str):
                 raise ValueError("acceptance does not match the current version/source fingerprint")
             if not str(record.get("scope", "")).strip():
                 raise ValueError("acceptance must name its implemented scope")
+            if required_scope is not None and record.get("scope") != required_scope:
+                raise ValueError("acceptance must cover the required scope: " + required_scope)
             if record.get("blockers") != []:
                 raise ValueError("independent review still has release blockers")
             evidence = record.get("evidence")
@@ -250,7 +258,7 @@ def main(argv=None):
         issues.append("Tag must exactly match v" + metadata["version"])
     if args.require_prerelease and not version_parts(metadata["version"])[3]:
         issues.append("This workflow creates prerelease candidates only; use a SemVer prerelease version")
-    acceptance, ux_reason = accepted_ux(ROOT, metadata["version"], fingerprint)
+    acceptance, ux_reason = accepted_ux(ROOT, metadata["version"], fingerprint, metadata["required_ux_scope"])
     if args.mode == "release" and acceptance is None:
         issues.append(ux_reason)
     if args.mode == "release" and int(version_parts(metadata["version"])[0]) >= 1:
@@ -356,6 +364,17 @@ class ReleaseChecks(unittest.TestCase):
             acceptance, reason = accepted_ux(root, "0.1.0-alpha.1", "a" * 64)
             self.assertIsNotNone(acceptance)
             self.assertIsNone(reason)
+
+    def test_foundation_review_cannot_satisfy_selected_full_editor_scope(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, gate = self.make_review(root)
+            acceptance, reason = accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")
+            self.assertIsNone(acceptance)
+            self.assertIn("required scope: full-editor-parity", reason)
+            record["scope"] = "full-editor-parity"
+            gate.write_text(json.dumps(record))
+            self.assertIsNotNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")[0])
 
     def test_stale_blocked_and_unreviewed_scopes_do_not_pass(self):
         with tempfile.TemporaryDirectory() as folder:

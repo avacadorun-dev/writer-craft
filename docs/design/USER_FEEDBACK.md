@@ -83,3 +83,11 @@ The owner observed excessive space between the monk and WriterCraft name and ask
 ## F-28 — Application and Dock icon
 
 The owner observed an unfamiliar application icon despite the new toolbar mark. A bundled ICNS alone is insufficient when the native framework supplies a default runtime icon. The first alpha must explicitly use the generated matching monk/book PNG as its viewport/application icon, alongside the ICNS bundle asset. Keep both outputs reproducible through the icon-generation script. Verify a fresh isolated launch; do not overwrite the owner's active preview merely to refresh its icon.
+
+## F-29 — Editor-first alpha.2 with complete original editor scope (2026-11-08)
+
+The owner selected editor work first for the next alpha and deferred the other candidate feature streams. The owner then explicitly clarified that this means **all functionality currently present in the original editor, with no cuts**, not a basic-formatting subset. The implementation owner relayed this clarification to the independent designer. Earlier tree/named-version/installer planning is not implementation authorization for this editor-first scope.
+
+Consequence: inventory the actual toolbar/extensions, all current blocks and marks, native selection across blocks/tables, context actions, typography, persistent note/dictionary decorations, clipboard/composition/accessibility, source references, editor history/save/recovery and real editor integration handoffs. The contract is `EDITOR_UX_PARITY.md`, coordinated with the technical parity matrix. Source bugs should be corrected rather than copied; do not introduce NER, notification or other unrelated domain features.
+
+A prioritized native slice may validate the model/input/anchor architecture internally, but cannot satisfy the final release gate. Independent eventual acceptance must name `full-editor-parity`, distinct from full-product parity, and requires complete compiled/native evidence. The existing alpha.1 native-foundation acceptance does not approve new editor code. No acceptance or implementation-completion claim is created by this feedback entry.

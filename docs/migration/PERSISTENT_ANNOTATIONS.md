@@ -1,6 +1,6 @@
 # Persistent text marks and attached notes
 
-Status: future legacy-parity proposal, not implemented or scheduled. Updated 2026-11-08. Explicitly outside `0.1.0-alpha.1`; the owner will choose the next release scope after testing the first alpha. This document records the clarified workflow without extending the current alpha.
+Status: selected within the owner-approved full-editor scope for `0.1.0-alpha.2`, not implemented or accepted. Updated 2026-11-08. Explicitly outside the published `0.1.0-alpha.1`. Read `openspec/changes/full-editor-parity/` and the full source/UX matrices; a model-only or visual-highlight subset is insufficient.
 
 ## Author workflow
 
@@ -41,6 +41,6 @@ The native migration must preserve those established guarantees rather than trea
 
 ## Unselected implementation decisions
 
-The current native core stores plain prose and read-only imported rich JSON. The owner has not chosen whether the next milestone is a focused bug-fix alpha or a richer document-model foundation. Stable block identity, native decoration/caret mapping, exact schema migration and the first supported selection granularity need review in that scope. No table, editor dependency, API or release version is committed here. Read the [proposed change](../../openspec/changes/persistent-text-annotations/design.md) before eventual implementation.
+The current native core stores plain prose and read-only imported rich JSON. The owner selected the complete native editor as the next milestone. Technical choices still need validation against the full original editor; no capability may be dropped to fit a smaller implementation. Stable block identity, native decoration/caret mapping, exact schema migration and the first supported selection granularity need review in that scope. No table, editor dependency, API or release version is committed here. Read the [proposed change](../../openspec/changes/persistent-text-annotations/design.md) before eventual implementation.
 
 Tracking: [persistent text marks and author notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2).

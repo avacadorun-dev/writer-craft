@@ -533,6 +533,9 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
             }
+            StudioError::DraftChanged => {
+                "The working draft changed. Preserve your changes before retrying."
+            }
             StudioError::DraftConflict { .. } => {
                 "Recover the unsaved draft from another revision first."
             }
