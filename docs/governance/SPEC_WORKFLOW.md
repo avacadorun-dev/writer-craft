@@ -26,10 +26,10 @@ The initial canonical specs are a bootstrap target contract. Some explicitly mar
 
 ## OpenSpec integration status
 
-The `openspec/` config, canonical specs and native-mvp change were authored against official conventions. Official OpenSpec1.16.1 strict CLI validation passed for all four canonical specs and the native-mvp change; see [validation evidence](OPENSPEC_VALIDATION.md). `openspec init` and generated agent integrations were not run. Project instructions work by reading these files even before optional CLI integration.
+The `openspec/` config, canonical specs and native-mvp change were authored against official conventions. Official OpenSpec1.16.1 strict CLI validation passed for all five canonical specs and the native-mvp change; see [validation evidence](OPENSPEC_VALIDATION.md). `openspec init` and generated agent integrations were not run. Project instructions work by reading these files even before optional CLI integration.
 
 When a pinned CLI is available, the official [CLI reference](https://github.com/Fission-AI/OpenSpec/blob/main/docs/cli.md) documents `openspec list --specs`, `openspec status --change native-mvp`, and `openspec validate native-mvp --strict`. Capture the actual version, command and result before marking validation complete. Keep generated tool files separate from hand-maintained repository instructions. Installing or updating tooling must not rewrite project rules implicitly.
 
 ## Minimal acceptance evidence
 
-Every completed change names the relevant spec IDs, actual test names/commands, visible UI evidence if applicable, limitations and remaining risks. The native core currently has twenty-four acceptance tests; the MVP task document maps all twenty-four by their real function names. Theme and rich-parity scenarios stay pending until implemented and observed.
+Every completed change names the relevant spec IDs, actual test names/commands, visible UI evidence if applicable, limitations and remaining risks. The native core currently has twenty-eight acceptance tests; the MVP task document maps all twenty-eight by their real function names. Theme and rich-parity scenarios stay pending until implemented and observed.

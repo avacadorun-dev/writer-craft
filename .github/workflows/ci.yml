@@ -1,0 +1,194 @@
+name: Verify WriterCraft
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENSPEC_TELEMETRY: '0'
+  OPENSPEC_NO_UPDATE_CHECK: '1'
+
+jobs:
+  macos:
+    name: macOS source and engineering checks
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      # Official action refs verified through GitHub API on 2026-11-07.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install Rust checks
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          echo "compiler=$(rustc -V | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-verify
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test the complete workspace
+        run: cargo test --workspace --locked
+      - name: Check all workspace targets
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Qualify the isolated editor-model hypothesis
+        run: CARGO_TARGET_DIR=target cargo test --manifest-path tests/editor-compatibility/Cargo.toml --locked
+      - name: Validate OpenSpec contracts
+        run: npx --yes --package @fission-ai/openspec@1.16.1 openspec validate --all --strict --json
+      - name: Test release metadata and evidence checks
+        run: python3 scripts/release-check.py --self-test
+      - name: Test portable archive packaging without building
+        run: python3 scripts/package-portable.py --self-test
+      - name: Validate source metadata and honest UX disposition
+        run: python3 scripts/release-check.py --mode source --json
+
+  portable-core:
+    name: Shared core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust checks
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+      - name: Test portable core, transfer and CLI
+        run: cargo test -p studio-core -p studio-transfer -p studio-cli --locked
+      - name: Check portable core targets
+        run: cargo clippy -p studio-core -p studio-transfer -p studio-cli --all-targets --all-features --locked -- -D warnings
+      - name: State platform scope
+        run: echo 'These are shared-core checks; Windows/Linux desktop UX and installers are not qualified.'
+
+  preview:
+    name: Engineering preview (${{ matrix.platform }})
+    needs: [macos, portable-core]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            platform: windows-x64
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-24.04
+            platform: linux-x64
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      RUST_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install Linux native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libwayland-dev libx11-dev
+      - name: Prepare native Rust target
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "$RUST_TARGET"
+          python - <<'PYTHON'
+          import hashlib, os, platform, subprocess
+          if os.environ['RUNNER_OS'] == 'macOS' and platform.machine() != 'arm64':
+              raise SystemExit('The macOS preview requires an ARM64 runner')
+          compiler = subprocess.check_output(['rustc', '-V'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('compiler=' + hashlib.sha256(compiler).hexdigest()[:16] + '\n')
+          PYTHON
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-distribution
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Read checked workspace version
+        id: metadata
+        run: python scripts/release-check.py --mode source --github-output
+      - name: Retain source-gate evidence
+        run: |
+          mkdir -p artifacts
+          python scripts/release-check.py --mode source --json > artifacts/source-evidence.json
+      - name: Build and package macOS on GitHub
+        if: runner.os == 'macOS'
+        run: ./scripts/package-macos.sh --release --target "$RUST_TARGET" --output artifacts/WriterCraft.app
+      - name: Build and package Windows or Linux on GitHub
+        if: runner.os != 'macOS'
+        run: python scripts/package-portable.py --target "$RUST_TARGET" --output artifacts
+      - name: Verify macOS bundle and retain evidence
+        if: runner.os == 'macOS'
+        run: |
+          python scripts/release-check.py --mode source --bundle artifacts/WriterCraft.app --json > artifacts/build-evidence.json
+          codesign --verify --deep --strict artifacts/WriterCraft.app
+      - name: Archive macOS engineering preview
+        if: runner.os == 'macOS'
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent artifacts/WriterCraft.app "artifacts/WriterCraft-${VERSION}-macos-arm64-preview.zip"
+          cd artifacts
+          shasum -a 256 "WriterCraft-${VERSION}-macos-arm64-preview.zip" > SHA256SUMS
+          echo 'Engineering preview only. Hosted build checks do not grant independent UX or full-parity acceptance.' > PREVIEW.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WriterCraft-${{ steps.metadata.outputs.version }}-${{ matrix.platform }}-preview
+          path: |
+            artifacts/*.zip
+            artifacts/*.tar.gz
+            artifacts/SHA256SUMS
+            artifacts/build-evidence.json
+            artifacts/source-evidence.json
+            artifacts/PREVIEW.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
