@@ -13,6 +13,7 @@ Prepared first engineering prerelease. This entry does not assert that a tag, pu
 
 ### Added
 
+- MIT-licensed project source with retained third-party asset notices.
 - Native Rust macOS foundation with a local project library and continuous prose workspace.
 - Shared SQLite core, immutable revisions, durable drafts and conflict-aware recovery.
 - Staged exact-edit proposals with explicit Apply/Reject and guarded Undo.

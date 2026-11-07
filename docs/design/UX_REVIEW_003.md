@@ -91,9 +91,9 @@ No blocking P0/P1/P2 issue remains **within this declared engineering-alpha scop
 
 The following are not approved by this decision: full author-pilot/daily-use or legacy parity; rich editing/annotations/voice/real AI/MCP/Canvas/publishing; full IME/VoiceOver/system-menu qualification; native Shift+F10 behavior; Windows/Linux desktop interaction; exhaustive native journeys in all eight languages and every palette/mode combination. Existing catalog, glyph and contrast tests plus English/German/Japanese captures and Russian launch evidence must not be described as that exhaustive qualification. Each later capability earns its own acceptance.
 
-## Frozen source and evidence
+## Accepted client baseline and retained visual evidence
 
-Current source/design fingerprint: `b50be2e95ba105ce0589a0e07c817cc5832ba7d76f0887ab44c0e08c23c3cf60`. The reviewer independently recomputed it after inspecting the final captures. A source/design change invalidates this acceptance until the relevant retest and gate update.
+Accepted client-surface baseline fingerprint: `b50be2e95ba105ce0589a0e07c817cc5832ba7d76f0887ab44c0e08c23c3cf60`. The reviewer independently recomputed it after inspecting these captures. The nine captures below remain the unchanged client-geometry/theme/icon evidence; the bounded startup-icon delta is reviewed separately below. A source/design change requires the relevant retest and gate update.
 
 | Checked-in evidence | SHA-256 |
 |---|---|
@@ -106,3 +106,31 @@ Current source/design fingerprint: `b50be2e95ba105ce0589a0e07c817cc5832ba7d76f08
 | `docs/images/qa/settings-general-en.png` | `962aa121378feaa8a9baf959579d72da23cf2f0e0e4d125907daa0b81e0b7ddc` |
 | `docs/images/qa/settings-ja-light.png` | `542f8292af578e2021fcd944839b2ce1788ffe50d593f4fab058e1cb14d29d28` |
 | `docs/images/qa/settings-mcp-en.png` | `168a92d57636db3ba1dea093c15b5964417825c783ea812ad469999271157072` |
+
+## F-28 bounded application-icon startup delta
+
+**Delta disposition: accepted for the same `native-foundation` engineering-alpha scope; this does not close issue #1 or claim direct Dock visual confirmation.**
+
+The owner reported an unfamiliar application/Dock icon. The reviewer inspected the exact change against the accepted client baseline: the only runtime crate change is startup loading of the embedded PNG through `eframe::icon_data::from_png_bytes`, propagated as an application-creation error on decode failure, and explicit `ViewportBuilder::with_icon`. No manuscript, pane, preference, utility-mesh or client-rendering code changed. The new PNG and the existing ICNS are reproduced by `scripts/make-icon.sh`. The owner-feedback update records F-28 without expanding feature scope.
+
+The reviewer independently read the installed primary eframe 0.36.2 implementation: `src/native/epi_integration.rs` falls back to the framework icon when no viewport icon is supplied, and `src/native/app_icon.rs` applies the selected image to the macOS application at runtime. Supplying the intended icon directly addresses that startup path. This is a source-based causal conclusion, not a claim that an ICNS file alone proves running-process identity.
+
+The reviewer viewed `assets/WriterCraft.png`: a valid 512×512 monk/book application mark matching the approved identity, byte-identical to the generated 512px iconset output. Asset SHA-256: `9f14929016a6991929e337fbae0932302aebd2da7c963c409c95096360394b70`.
+
+Reviewed the new F-28 section in `docs/verification/NATIVE_INTERACTIONS.md`: after rebuilding and re-signing the proper packaged debug app, the implementation owner performed a fresh native launch and observed the standard macOS About panel showing the monk/book application image with WriterCraft/version metadata. Closing About returned to the saved manuscript, and the updated app was left running. That native OS observation was supplied by the implementation owner; the independent reviewer personally inspected the source/asset/evidence record. The current source's 71 tests, formatting and strict Clippy pass are recorded there.
+
+The automation surface did not independently capture the Dock. Direct Dock appearance and the hosted candidate still need the confirmation tracked in [issue #1](https://github.com/avacadorun-dev/writer-craft/issues/1); do not describe About evidence as a direct Dock screenshot or close the issue on the compiler result alone. The source fix plus asset validation and fresh native OS About observation are sufficient to accept this bounded startup delta for the engineering alpha. Existing full-parity/accessibility/platform limitations above remain unchanged.
+
+The nine client captures were not repeated: they predate only this startup/OS-icon delta and their code/content hashes remain unchanged. They prove the previously reviewed client geometry, not a recaptured OS icon. Repeating them while the owner explores would add no relevant icon evidence; the fresh native launch/About check is the relevant retest.
+
+Accepted application-icon startup-delta fingerprint: `5f1dd22c19a24da04045377200aebf88d415ff39e363c5f62a08e7b1aea125fb`. The reviewer independently recomputed this value for that delta. The subsequent metadata-only refresh below is the current gate fingerprint.
+
+## Owner-authorized MIT metadata refresh
+
+**Metadata-delta disposition: accepted without changing the `native-foundation` engineering-alpha scope.** The owner explicitly selected MIT for WriterCraft. Root package metadata, the editor-compatibility harness metadata, license file and release documentation/checks were updated to that instruction; this adds no application behavior or UX capability.
+
+The reviewer independently verified the source/design fingerprint relationship without modifying files: substituting only the previous `Cargo.toml` workspace-license value into the current fingerprint computation exactly reproduces the accepted startup-icon fingerprint `5f1dd22c19a24da04045377200aebf88d415ff39e363c5f62a08e7b1aea125fb`. The remaining fingerprinted client code, native icon startup code, assets and design contracts therefore match the accepted baseline. Offline Cargo metadata independently reports MIT for all four workspace crates. The nine retained PNG hashes are unchanged.
+
+The implementation owner records passing release-helper 9, portable-packager 4 and release-staging 5 tests after the metadata update. The reviewer reran the source release check against the refreshed gate. No additional native launch or client recapture is warranted for this administrative metadata delta: the accepted client visual evidence and fresh application-icon/About evidence remain applicable, with their existing explicit limits. Direct Dock confirmation in issue #1, future annotations and full migration remain outside this refresh.
+
+Current accepted source/design fingerprint: `6bb777e7ced2e4559bc14312ab54beea2f28160b63ccaaf7bb770d2bffd14fd0`. The reviewer independently recomputed it before refreshing the gate.

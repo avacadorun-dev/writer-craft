@@ -183,7 +183,7 @@ class PortablePackageTests(unittest.TestCase):
             with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "assets/fonts").mkdir(parents=True)
-                (root / "LICENSE").write_text("Apache License fixture")
+                (root / "LICENSE").write_text("MIT License fixture")
                 (root / "assets/fonts/Source-LICENSE.md").write_text("OFL fixture")
                 (root / "assets/icons/lucide").mkdir(parents=True)
                 (root / "assets/icons/lucide/LICENSE").write_text("ISC + MIT fixture")

@@ -52,7 +52,7 @@ Pushes to `main` and manual dispatch run checks, then build **macOS, Windows and
 
 Each artifact includes SHA-256 checksums, build/source evidence and an engineering-preview notice. Check the actual run result; defining a workflow does not mean a hosted build passed. Extract the archive before starting the application. The Linux archive requires a compatible desktop, GNU libc and X11/Wayland/GPU runtime libraries; it is not a universal AppImage. These portable archives are not installers.
 
-The macOS app uses ad-hoc signing. Windows/Linux previews are unsigned. Developer ID notarization, platform UX qualification and automatic updates are separate work. A compiled artifact does not establish independent interaction acceptance or full workflow parity on that platform. Tagged macOS candidates can produce a **draft prerelease** after independent UX acceptance; stable releases are not published automatically. See [release and verification policy](docs/governance/RELEASING.md).
+The macOS app uses ad-hoc signing. Windows/Linux previews are unsigned. Developer ID notarization, platform UX qualification and automatic updates are separate work. A compiled artifact does not establish independent interaction acceptance or full workflow parity on that platform. Tagged candidates can produce a **draft prerelease with all three platform archives** after the macOS named-scope UX gate; Windows/Linux remain engineering previews. Stable releases are not published automatically. See [release and verification policy](docs/governance/RELEASING.md).
 
 ## Run from source
 
@@ -114,4 +114,4 @@ WriterCraft stays focused on author workflows. A substantial reusable editor or 
 
 ## License and credits
 
-WriterCraft uses the repository's [Apache License 2.0](LICENSE). Bundled Adobe Source and Noto fonts retain their own OFL notices in [assets/fonts](assets/fonts). Lucide utility icons retain their [upstream license and pinned provenance](assets/icons/lucide/NOTICE.md). Repo-local agent skills preserve their upstream licenses and provenance. Artcraft informed the architecture research; its application source and branding are not copied into this foundation.
+WriterCraft uses the repository's [MIT License](LICENSE). Bundled Adobe Source and Noto fonts retain their own OFL notices in [assets/fonts](assets/fonts). Lucide utility icons retain their [upstream license and pinned provenance](assets/icons/lucide/NOTICE.md). Repo-local agent skills preserve their upstream licenses and provenance. Artcraft informed the architecture research; its application source and branding are not copied into this foundation.

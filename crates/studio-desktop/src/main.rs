@@ -35,9 +35,12 @@ fn main() -> eframe::Result {
             _ => {}
         }
     }
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/WriterCraft.png"))
+        .map_err(|error| eframe::Error::AppCreation(Box::new(error)))?;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("WriterCraft")
+            .with_icon(std::sync::Arc::new(icon))
             .with_app_id("app.writercraft.desktop")
             .with_inner_size(if compact {
                 [1000.0, 680.0]

@@ -154,11 +154,11 @@ def source_issues(root: Path, metadata):
         changelog_section(root, metadata["version"])
     except (ValueError, OSError) as error:
         issues.append(str(error))
-    if metadata["license"] != "Apache-2.0":
-        issues.append("workspace.package.license must preserve the repository's Apache-2.0 license")
+    if metadata["license"] != "MIT":
+        issues.append("workspace.package.license must match the owner's selected MIT license")
     license_path = root / "LICENSE"
-    if not license_path.is_file() or "Apache License" not in license_path.read_text():
-        issues.append("The original Apache2 LICENSE must be preserved")
+    if not license_path.is_file() or "MIT License" not in license_path.read_text():
+        issues.append("The repository must include its selected MIT LICENSE")
     lock_text = (root / "Cargo.lock").read_text()
     lock_versions = {}
     for package in re.split(r'^\[\[package\]\]\s*$', lock_text, flags=re.MULTILINE)[1:]:
@@ -301,7 +301,7 @@ class ReleaseChecks(unittest.TestCase):
     def test_workspace_version_comes_from_single_authored_section(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            (root / "Cargo.toml").write_text('[workspace.package]\nversion = "0.1.0-alpha.1"\nlicense = "Apache-2.0"\n')
+            (root / "Cargo.toml").write_text('[workspace.package]\nversion = "0.1.0-alpha.1"\nlicense = "MIT"\n')
             self.assertEqual(workspace_metadata(root)["short_version"], "0.1.0")
 
     def test_changelog_requires_matching_version(self):

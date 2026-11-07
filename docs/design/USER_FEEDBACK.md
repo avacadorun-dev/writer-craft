@@ -79,3 +79,7 @@ After receiving the same-size Dark/Light comparison of Lucide Outline, Phosphor 
 ## F-27 — Compact identity group and native window controls
 
 The owner observed excessive space between the monk and WriterCraft name and asked for alignment with the sidebar. The owner then acknowledged the macOS traffic-light controls require a reserved leading region and accepted that constraint. Keep that native exclusion region; left-align the product name directly beside the mark with the normal fixed gap. Do not center the name within the entire remaining identity region.
+
+## F-28 — Application and Dock icon
+
+The owner observed an unfamiliar application icon despite the new toolbar mark. A bundled ICNS alone is insufficient when the native framework supplies a default runtime icon. The first alpha must explicitly use the generated matching monk/book PNG as its viewport/application icon, alongside the ICNS bundle asset. Keep both outputs reproducible through the icon-generation script. Verify a fresh isolated launch; do not overwrite the owner's active preview merely to refresh its icon.
