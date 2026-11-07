@@ -1,0 +1,9 @@
+/target/
+/artifacts/
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+!.env.example
