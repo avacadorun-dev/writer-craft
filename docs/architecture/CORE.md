@@ -14,7 +14,7 @@ Canonical document revisions start at one. Changed text appends a revision, unch
 
 ## Proposal protocol
 
-1. `stage_replace(document, revision, expected_text, replacement, reason)` verifies editable content, current revision and exactly one literal occurrence. It stores before/after snapshots with SHA-256 digests and a Unicode-scalar anchor. Overlapping matches are ambiguous. Canonical text and history do not change.
+1. `stage_replace_range(document, revision, anchor, replacement, reason)` validates the exact captured Unicode-scalar range, expected text and current revision; repeated phrases are disambiguated by the selection. `stage_replace(document, revision, expected_text, replacement, reason)` remains a phrase-only fallback requiring exactly one literal occurrence. It stores before/after snapshots with SHA-256 digests and a Unicode-scalar anchor. Overlapping matches are ambiguous. Canonical text and history do not change.
 2. `apply_proposal(id)` requires staged state and the exact canonical revision/body used to prepare the proposal. It appends the new revision and changes proposal state atomically. A stale proposal remains staged and cannot apply without a new review.
 3. `reject_proposal(id)` changes only staged proposal state.
 4. `undo_proposal(id)` requires the exact revision/body resulting from apply. It appends a compensating revision and marks the proposal undone. A later manual or proposal edit causes `UndoConflict`, preserving newer work.

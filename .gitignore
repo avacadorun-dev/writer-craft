@@ -1,4 +1,4 @@
-/target/
+**/target/
 /artifacts/
 .DS_Store
 *.sqlite
@@ -7,3 +7,6 @@
 .env
 .env.*
 !.env.example
+
+__pycache__/
+*.pyc

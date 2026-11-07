@@ -1,4 +1,4 @@
-# Working agreements
+# WriterCraft working agreements
 
 - Use Rust for application code. No WebView, Electron or browser UI.
 - Never create branches prefixed `codex/`; use `feature/`, `fix/`, `chore/`.
@@ -15,3 +15,21 @@
 - Run cargo fmt, tests and clippy. Verify native app visually after UI changes.
 - Commit focused, working increments. Update handoff and verification evidence when work stops.
 - Do not modify the original Writers Studio repository or user projects without a separate instruction.
+
+## Specification-driven changes
+
+Read `docs/PRD.md`, `docs/governance/SPEC_WORKFLOW.md` and `openspec/config.yaml`.
+Use the OpenSpec proposal → specs → design → tasks → implementation → verification flow for behavior changes.
+Record architecture and dependency decisions in ADRs; distinguish target parity from verified MVP.
+All visible UI messages belong in complete localization catalogs. Support ru/en/de/fr/es/pt/zh/ja; preserve user content verbatim.
+Appearance mode and palette are independent; preserve the six non-green legacy palettes and the native blue default.
+Large reusable generic engines belong in separate repositories; business workflows and integration remain here.
+Do not replace/restart a running preview while the user is exploring it without a clear request.
+
+## Independent UX acceptance
+
+Read `docs/design/UX_ACCEPTANCE.md` and the append-only `docs/design/USER_FEEDBACK.md` before UI changes.
+A separate designer must review named behavior, actual compiled captures and interaction evidence.
+Treat blocking findings as required rework. A later user correction updates the feedback log, reviewer guidance and regression scenarios before another acceptance.
+The authoritative gate is `docs/design/UX_GATE.json`; previews may disclose pending acceptance, but tagged releases require matching accepted source/evidence.
+Match existing Writers Studio features one for one; add no new product features without a direct user request. Improve desktop presentation and fix documented source bugs.

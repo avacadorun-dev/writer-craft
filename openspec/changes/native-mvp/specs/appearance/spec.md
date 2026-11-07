@@ -31,12 +31,17 @@ WriterCraft SHALL offer cedar-and-copper, dried-rose-and-wine, fog-graphite, lin
 
 ### Requirement: AP-03 One native workspace
 
-WriterCraft SHALL present one shared command bar, bounded navigator and inspector panes, and a central writing surface with contained scrolling and visible save state.
+WriterCraft SHALL present one shared command bar, bounded navigator and inspector panes, and a central continuous-text writing surface with contained scrolling and visible save state.
 
 #### Scenario: Resize a writing window
 
 - **WHEN** an author resizes the window or toggles the inspector
 - **THEN** the writing surface remains usable, panes stay bounded and the editor draft is preserved
+
+#### Scenario: Edit a long manuscript continuously
+
+- **WHEN** the author writes or scrolls through a long manuscript
+- **THEN** text flows continuously inside the bounded editor pane and page layout is presented only in publication preview or export
 
 ### Requirement: AP-04 Accessible controls and typography
 

@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  Product: WriterCraft, an open-source native writing desktop for Russian and English authors.
+  Product: WriterCraft, an open-source native writing desktop with ru/en/de/fr/es/pt/zh/ja built-in UI languages.
   Goal: full Writers Studio workflow parity through verified increments; current MVP is plain prose.
   Stack: Rust 2024, native egui/eframe, SQLite through rusqlite, shared domain core and CLI.
   Native application code has no WebView, Electron, Docker or server installation requirement.
@@ -9,6 +9,7 @@ context: |
   Proposals remain noncanonical until explicit Apply; Apply and Undo validate exact revisions.
   Exact text anchors use Unicode scalar positions, with literal expected text.
   Imported rich JSON is retained and read-only until lossless editing is implemented.
+  Localization: immediate switching, persistent choice, CJK fonts, localized dynamic messages; user writing stays unchanged.
   Appearance: independent Light/Dark mode and six non-green legacy palettes plus native default.
   Read AGENTS.md, docs/PRD.md, docs/architecture/DECISIONS.md and relevant capability specs.
   The canonical specs are a target contract; later parity requirements are explicitly marked.

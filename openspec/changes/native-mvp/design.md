@@ -12,10 +12,13 @@ Non-goals for this increment: rich editing equivalence, complete binary import, 
 
 ## Decisions
 
+- First full desktop release targets macOS, with portable core/transfer CI and later Windows/Linux UI/installer acceptance.
+- Manuscript composition uses continuous text in a bounded editor pane; publication preview/export owns pagination.
 - Native egui/eframe with a separate SQLite command core; avoid duplicating save/apply logic in UI adapters.
 - Immutable text revisions and independent revision-pinned working drafts. Clear recovery text only when it matches the exact successful save.
 - Store exact proposal snapshots, hashes and Unicode-scalar anchors. Apply validates the base; Undo validates the applied result and appends history.
 - Retain imported JSON and keep it read-only. Archive inspection reads bounded declared entries and verifies integrity without extraction or canonical mutation.
+- Resolve interface strings from eight built-in catalogs; keep language and semantic message IDs in preferences/state so existing statuses rerender on switching. Preserve author text and separately labelled raw diagnostics. Verify CJK font coverage in the packaged build.
 - Keep theme brightness separate from palette identity; use one semantic token set across editor, panes and dialogs.
 - Adopt OpenSpec's default artifact structure manually first; official CLI integration and validation are recorded separately when executed.
 

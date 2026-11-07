@@ -513,3 +513,94 @@ fn recovered_document_title_preserves_suffix_within_title_limit() {
     assert_eq!(recovered.title.chars().count(), 200);
     assert!(recovered.title.ends_with(" · восстановленный черновик"));
 }
+
+#[test]
+fn selected_second_repeated_phrase_applies_and_undoes_exact_unicode_range() {
+    let (workspace, document) = document("Я 🦀 слово и слово.");
+    let anchor = studio_core::TextAnchor {
+        start: 12,
+        end: 17,
+        expected_text: "слово".into(),
+    };
+    let proposal = workspace
+        .stage_replace_range(
+            &document.id,
+            1,
+            &anchor,
+            "образ",
+            "Clarify the selected occurrence",
+        )
+        .unwrap();
+    assert_eq!(proposal.anchor, anchor);
+    assert_eq!(proposal.after, "Я 🦀 слово и образ.");
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    let applied = workspace.apply_proposal(&proposal.id).unwrap();
+    assert_eq!(applied.body, "Я 🦀 слово и образ.");
+    let undone = workspace.undo_proposal(&proposal.id).unwrap();
+    assert_eq!(undone.body, "Я 🦀 слово и слово.");
+    assert_eq!(undone.revision, 3);
+}
+
+#[test]
+fn selected_invalid_scalar_ranges_stage_nothing_and_preserve_history() {
+    let (workspace, document) = document("Я 🦀 слово и слово.");
+    for (start, end) in [
+        (12, 12),
+        (17, 12),
+        (12, usize::MAX),
+        (usize::MAX, usize::MAX),
+    ] {
+        let anchor = studio_core::TextAnchor {
+            start,
+            end,
+            expected_text: "слово".into(),
+        };
+        assert!(matches!(
+            workspace.stage_replace_range(&document.id, 1, &anchor, "образ", "Edit selection"),
+            Err(StudioError::InvalidTextRange { .. })
+        ));
+    }
+    assert!(workspace.proposals(&document.id).unwrap().is_empty());
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    assert_eq!(workspace.revisions(&document.id).unwrap().len(), 1);
+}
+
+#[test]
+fn selected_literal_mismatch_stages_nothing_and_preserves_history() {
+    let (workspace, document) = document("Я 🦀 слово и слово.");
+    let anchor = studio_core::TextAnchor {
+        start: 12,
+        end: 17,
+        expected_text: "друго".into(),
+    };
+    assert!(matches!(
+        workspace.stage_replace_range(&document.id, 1, &anchor, "образ", "Edit selection"),
+        Err(StudioError::ExpectedTextMismatch)
+    ));
+    assert!(workspace.proposals(&document.id).unwrap().is_empty());
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    assert_eq!(workspace.revisions(&document.id).unwrap().len(), 1);
+}
+
+#[test]
+fn selected_stale_revision_stages_nothing_and_preserves_newer_work() {
+    let (workspace, document) = document("Я 🦀 слово и слово.");
+    let anchor = studio_core::TextAnchor {
+        start: 12,
+        end: 17,
+        expected_text: "слово".into(),
+    };
+    let updated = workspace
+        .save_document(&document.id, 1, "Поздняя авторская редакция")
+        .unwrap();
+    assert!(matches!(
+        workspace.stage_replace_range(&document.id, 1, &anchor, "образ", "Edit selection"),
+        Err(StudioError::RevisionConflict {
+            expected: 1,
+            actual: 2
+        })
+    ));
+    assert!(workspace.proposals(&document.id).unwrap().is_empty());
+    assert_eq!(workspace.document(&document.id).unwrap(), updated);
+    assert_eq!(workspace.revisions(&document.id).unwrap().len(), 2);
+}

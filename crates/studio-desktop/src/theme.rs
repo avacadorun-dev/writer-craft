@@ -18,9 +18,9 @@ impl Appearance {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::System => "Системная",
-            Self::Light => "Светлая",
-            Self::Dark => "Тёмная",
+            Self::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
         }
     }
 }
@@ -52,13 +52,13 @@ impl Palette {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::SolidCraftBlue => "Графит и синий",
-            Self::CedarAndCopper => "Кедр и медь",
-            Self::DriedRoseAndWine => "Сухая роза и вино",
-            Self::FogGraphite => "Туман и графит",
-            Self::LinenClay => "Лён и глина",
-            Self::DustyLavender => "Пыльная лаванда",
-            Self::PorcelainInk => "Фарфор и чернила",
+            Self::SolidCraftBlue => "Graphite and blue",
+            Self::CedarAndCopper => "Cedar and copper",
+            Self::DriedRoseAndWine => "Dried rose and wine",
+            Self::FogGraphite => "Fog and graphite",
+            Self::LinenClay => "Linen and clay",
+            Self::DustyLavender => "Dusty lavender",
+            Self::PorcelainInk => "Porcelain and ink",
         }
     }
 
@@ -437,19 +437,18 @@ mod tests {
     }
 
     #[test]
-    fn settings_roundtrip_without_exposing_excluded_green_palettes() {
+    fn settings_roundtrip_without_exposing_excluded_green_palettes() -> Result<(), serde_json::Error>
+    {
         for palette in Palette::ALL {
             let original = ThemeSettings {
                 appearance: Appearance::System,
                 palette,
             };
-            let bytes = serde_json::to_vec(&original).expect("theme serialization");
-            assert_eq!(
-                serde_json::from_slice::<ThemeSettings>(&bytes).expect("theme deserialization"),
-                original
-            );
+            let bytes = serde_json::to_vec(&original)?;
+            assert_eq!(serde_json::from_slice::<ThemeSettings>(&bytes)?, original);
         }
         assert!(serde_json::from_str::<Palette>("\"quiet\"").is_err());
         assert!(serde_json::from_str::<Palette>("\"olive-ink\"").is_err());
+        Ok(())
     }
 }

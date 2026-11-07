@@ -1,0 +1,12 @@
+[package]
+name = "writercraft-editor-compatibility"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+prosemirror = "=0.5.2"
+serde_json = {version="1",features=["preserve_order"]}
+
+[workspace]

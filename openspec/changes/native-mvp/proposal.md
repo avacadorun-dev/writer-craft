@@ -9,6 +9,7 @@ Authors need a desktop writing workspace they can install and use without operat
 - Introduce a native WriterCraft window with local projects, plain prose documents and recoverable working drafts.
 - Share revisioned save and exact proposal commands across desktop and CLI.
 - Inspect legacy .wstudio archives with preserved structured source and an explicit preview boundary.
+- Provide eight built-in interface languages with immediate switching, saved choice and CJK glyph coverage.
 - Provide Light/Dark appearance and the six requested non-green legacy palettes.
 - Record requirements, decisions, tasks and real verification before claiming completion.
 
@@ -19,6 +20,7 @@ Authors need a desktop writing workspace they can install and use without operat
 - `native-workspace`: local library, recovery, compatible opening and truthful source inspection.
 - `manuscript-editing`: revisioned prose, Unicode identity and imported rich-data protection.
 - `assistant-review`: exact staged proposals with guarded apply/reject/undo and truthful origin.
+- `localization`: eight offline catalogs, live/persistent language choice, dynamic message and CJK coverage.
 - `appearance`: brightness, retained palettes, one native workspace and accessible controls.
 
 ### Modified Capabilities

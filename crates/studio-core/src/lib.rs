@@ -47,6 +47,18 @@ pub enum StudioError {
     /// The literal replacement target was absent.
     #[error("The exact text was not found; refresh the document and choose an existing phrase")]
     NoMatch,
+    /// A selected range is outside the document's Unicode scalar bounds.
+    #[error(
+        "Selected range {start}..{end} is invalid for {length} characters; select the text again"
+    )]
+    InvalidTextRange {
+        start: usize,
+        end: usize,
+        length: usize,
+    },
+    /// Selected range no longer contains its captured literal text.
+    #[error("Selected text changed; refresh the selection before preparing a replacement")]
+    ExpectedTextMismatch,
     /// A replacement target was not uniquely addressable.
     #[error("The exact text appears more than once; choose a longer unique phrase")]
     AmbiguousMatch,
@@ -489,7 +501,7 @@ impl Workspace {
     }
 
     /// Stages one uniquely located exact replacement without changing the document.
-    /// The returned anchor uses Unicode scalar offsets and includes expected text.
+    /// Use stage_replace_range when a captured selection disambiguates repeated text.
     pub fn stage_replace(
         &self,
         document_id: &str,
@@ -498,21 +510,7 @@ impl Workspace {
         replacement: &str,
         reason: &str,
     ) -> Result<Proposal> {
-        if expected_text.is_empty() {
-            return Err(StudioError::Validation(
-                "Choose a nonempty exact phrase to replace".into(),
-            ));
-        }
-        if expected_text == replacement {
-            return Err(StudioError::Validation(
-                "Replacement must change the selected text".into(),
-            ));
-        }
-        if reason.trim().is_empty() || reason.chars().count() > 4_000 {
-            return Err(StudioError::Validation(
-                "Proposal reason must contain 1–4000 characters".into(),
-            ));
-        }
+        validate_replacement(expected_text, replacement, reason)?;
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let document = read_document(&transaction, document_id)?;
@@ -527,34 +525,35 @@ impl Workspace {
         if matches.next().is_some() {
             return Err(StudioError::AmbiguousMatch);
         }
-        let mut after =
-            String::with_capacity(document.body.len().saturating_add(replacement.len()));
-        after.push_str(&document.body[..start_byte]);
-        after.push_str(replacement);
-        after.push_str(&document.body[start_byte + expected_text.len()..]);
-        validate_body(&after)?;
         let start = document.body[..start_byte].chars().count();
-        let proposal = Proposal {
-            id: Uuid::new_v4().to_string(),
-            document_id: document.id,
-            base_revision: document.revision,
-            before: document.body,
-            after,
-            reason: reason.trim().into(),
-            status: ProposalStatus::Staged,
-            applied_revision: None,
-            anchor: TextAnchor {
-                start,
-                end: start + expected_text.chars().count(),
-                expected_text: expected_text.into(),
-            },
+        let anchor = TextAnchor {
+            start,
+            end: start + expected_text.chars().count(),
+            expected_text: expected_text.into(),
         };
-        transaction.execute(
-            "INSERT INTO proposals(id,document_id,base_revision,before_body,after_body,reason,status,anchor_json,before_hash,after_hash) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-            params![proposal.id, proposal.document_id, proposal.base_revision, proposal.before, proposal.after,
-                proposal.reason, proposal.status.as_str(), serde_json::to_string(&proposal.anchor)?,
-                digest(&proposal.before), digest(&proposal.after)],
-        )?;
+        let proposal = store_replacement(&transaction, document, &anchor, replacement, reason)?;
+        transaction.commit()?;
+        Ok(proposal)
+    }
+
+    /// Stages exactly the captured Unicode scalar range, including repeated text.
+    /// The literal target, current revision and editable state are checked inside
+    /// the same transaction that persists the proposal and its snapshot hashes.
+    pub fn stage_replace_range(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+        anchor: &TextAnchor,
+        replacement: &str,
+        reason: &str,
+    ) -> Result<Proposal> {
+        validate_replacement(&anchor.expected_text, replacement, reason)?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let document = read_document(&transaction, document_id)?;
+        require_editable(&document)?;
+        require_revision(&document, expected_revision)?;
+        let proposal = store_replacement(&transaction, document, anchor, replacement, reason)?;
         transaction.commit()?;
         Ok(proposal)
     }
@@ -645,6 +644,80 @@ impl Workspace {
         transaction.commit()?;
         Ok(result)
     }
+}
+
+fn validate_replacement(expected_text: &str, replacement: &str, reason: &str) -> Result<()> {
+    if expected_text.is_empty() {
+        return Err(StudioError::Validation(
+            "Choose a nonempty exact phrase to replace".into(),
+        ));
+    }
+    if expected_text == replacement {
+        return Err(StudioError::Validation(
+            "Replacement must change the selected text".into(),
+        ));
+    }
+    validate_body(replacement)?;
+    if reason.trim().is_empty() || reason.chars().count() > 4_000 {
+        return Err(StudioError::Validation(
+            "Proposal reason must contain 1–4000 characters".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn store_replacement(
+    connection: &Connection,
+    document: Document,
+    anchor: &TextAnchor,
+    replacement: &str,
+    reason: &str,
+) -> Result<Proposal> {
+    let length = document.body.chars().count();
+    let invalid_range = || StudioError::InvalidTextRange {
+        start: anchor.start,
+        end: anchor.end,
+        length,
+    };
+    if anchor.start >= anchor.end || anchor.end > length {
+        return Err(invalid_range());
+    }
+    let scalar_boundary = |position| {
+        document
+            .body
+            .char_indices()
+            .map(|(byte, _)| byte)
+            .chain(std::iter::once(document.body.len()))
+            .nth(position)
+    };
+    let start_byte = scalar_boundary(anchor.start).ok_or_else(invalid_range)?;
+    let end_byte = scalar_boundary(anchor.end).ok_or_else(invalid_range)?;
+    if document.body[start_byte..end_byte] != anchor.expected_text {
+        return Err(StudioError::ExpectedTextMismatch);
+    }
+    let mut after = String::with_capacity(document.body.len().saturating_add(replacement.len()));
+    after.push_str(&document.body[..start_byte]);
+    after.push_str(replacement);
+    after.push_str(&document.body[end_byte..]);
+    validate_body(&after)?;
+    let proposal = Proposal {
+        id: Uuid::new_v4().to_string(),
+        document_id: document.id,
+        base_revision: document.revision,
+        before: document.body,
+        after,
+        reason: reason.trim().into(),
+        status: ProposalStatus::Staged,
+        applied_revision: None,
+        anchor: anchor.clone(),
+    };
+    connection.execute(
+        "INSERT INTO proposals(id,document_id,base_revision,before_body,after_body,reason,status,anchor_json,before_hash,after_hash) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+        params![proposal.id, proposal.document_id, proposal.base_revision, proposal.before, proposal.after,
+            proposal.reason, proposal.status.as_str(), serde_json::to_string(&proposal.anchor)?,
+            digest(&proposal.before), digest(&proposal.after)],
+    )?;
+    Ok(proposal)
 }
 
 fn validate_title(title: &str, limit: usize) -> Result<&str> {

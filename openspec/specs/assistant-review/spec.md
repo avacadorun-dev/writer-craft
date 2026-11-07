@@ -17,12 +17,27 @@ WriterCraft SHALL keep proposed text separate from the canonical document until 
 
 ### Requirement: AR-02 Unambiguous exact targets
 
-WriterCraft SHALL reject an exact replacement target that is missing or occurs more than once, including overlapping occurrences.
+WriterCraft SHALL use a captured revision-pinned range to identify the selected exact occurrence, including repeated text. A phrase-only target SHALL be rejected when missing or ambiguous, including overlapping occurrences.
 
-#### Scenario: Overlapping phrase
+#### Scenario: Overlapping phrase without a captured selection
 
-- **WHEN** the requested phrase is ana in banana
+- **WHEN** a phrase-only target is ana in banana
 - **THEN** WriterCraft reports an ambiguous target and stages no replacement
+
+#### Scenario: Select a repeated second occurrence
+
+- **WHEN** the author selects the second occurrence of a repeated phrase using its captured Unicode scalar range and source revision
+- **THEN** the proposal changes only that occurrence and Apply or Undo preserves the other occurrence
+
+#### Scenario: Selected range or literal is invalid
+
+- **WHEN** a captured range is out of bounds or does not contain the captured expected text
+- **THEN** no proposal is staged and canonical content and history remain unchanged
+
+#### Scenario: Selected source revision is stale
+
+- **WHEN** the selected text was captured before a newer canonical revision was saved
+- **THEN** staging reports a revision conflict and preserves the newer writing without adding a proposal
 
 ### Requirement: AR-03 Validated apply and reject
 

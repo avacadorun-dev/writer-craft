@@ -46,7 +46,7 @@ Keep the serializable `ThemeSettings` (appearance/palette) independent of egui v
 
 ## Icon contract
 
-All utility icons come from `icons.rs`: native egui painter paths normalized to a 20 px square, drawn at 18–20 px with a nominal 1.6 px stroke. This system is independent of installed symbol fonts. Never use emoji or Unicode font symbols as fallback UI icons. A microphone, search, document, folder and settings icon have ordinary functional meanings; there are no decorative sparkles or mascot controls.
+All utility icons come from one coherent, licensed upstream family selected after the owner reviews an actual same-size comparison (F-25). Lucide, Tabler and Phosphor Regular are candidates; Lucide was an example, not a mandatory choice. Retain unmodified upstream geometry, source/version provenance and license notices for the chosen subset. Render through the native icon adapter, independently of installed symbol fonts; generation-time tessellation into static native meshes is permitted. Qualify the actual 16/20/24px output rather than substituting hand-drawn approximations. Never use emoji or Unicode font symbols as fallback UI icons. A microphone, search, document, folder and settings icon have ordinary functional meanings; there are no decorative sparkles or mascot controls.
 
 `icon` allocates a decorative symbol. `icon_button` uses an actual egui button, preserves keyboard activation, paints hover/focus, and supplies an accessible name plus tooltip. Icon-only primary actions need nearby text or a familiar context. Disabled states must not conceal why an action is unavailable.
 
@@ -76,3 +76,49 @@ Show the actual provider, current scope and active status. Local deterministic c
 Inspect real native screenshots at multiple window widths, with and without the inspector. Verify Cyrillic text, keyboard selection, paste, undo/redo, focus visibility, scroll containment and icon coverage. Check empty, loading, no-provider, cancelled, stale-proposal and save-error states. A successful compiler run does not establish visual quality or rich-editor parity.
 
 This egui UI is native-rendered custom application chrome. egui explicitly does not aim to produce system-native-looking controls: [official README](https://github.com/emilk/egui#non-goals). AppKit-style integration and accessibility behavior require their own verification.
+
+## Structured desktop preferences — owner correction F-20
+
+Preferences are a single owned desktop surface with a stable category sidebar, a bounded content pane and a footer. The previous small all-in-one form is superseded. The categories below reorganize verified existing Writers Studio capabilities and the explicitly requested native appearance/localization/shortcut behavior; they are not a new feature backlog.
+
+| Category | Working in the foundation | Existing parity scope placed here | Legacy source evidence |
+|---|---|---|---|
+| General | Interface language, with existing draft/content preserved | Application-level preferences where required by an existing capability | Explicit owner localization requirement; preference ownership in original settings |
+| Appearance | Independent Light/Dark/System and seven palettes | Existing theme behavior; keep brightness independent from palette | `src/pages/settings/ui/settings-page.tsx:505`, `editor-theme-picker.tsx` |
+| Editor | Manuscript text size | Manuscript font, line/paragraph/list spacing, measure, formatting-toolbar mode, word goal, spelling and source autoplay | Original `settings-page.tsx:395–582` |
+| AI & providers | Informational scaffold only | Provider/model/endpoint configuration, actual connection/capability checks, assistant speech checkpoint and existing project step limit | Original `settings-page.tsx:242–315`, `src/pages/assistant-providers/ui/assistant-providers-page.tsx` |
+| Agents & MCP | Informational scaffold only | Existing MCP server/client connection and agent configuration | Original `src/pages/mcp-settings/ui/mcp-settings-page.tsx`, linked from `settings-page.tsx:308` |
+| Voice | Informational scaffold only | Microphone, transcription language, command prefix, voice-command and live-transcript choices | Original `settings-page.tsx:316–394` |
+| Files & recovery | Honest information about current local persistence; no invented backup or repair action | Existing local working data, recovery, backup and audio-retention behavior adapted to local ownership | Original `settings-page.tsx:583–678`; native recovery contract |
+| Keyboard shortcuts | Readable table of actual current commands | Existing command bindings as their native workflows become available | Native command contract; original editor command behavior |
+
+The original browser's quota protection and server-account operations cannot be copied literally into a local application. Preserve their actual data/recovery purpose through explicit migration contracts; do not invent an operational native account/delete/cloud control merely to fill a category. Project-specific settings must retain an explicit project scope when they are implemented.
+
+### Geometry and spacing
+
+- Preferred maximum outer size: 860×620 logical pixels, clamped to the viewport with at least 32px clearance on each side. At the 1000×680 minimum workspace, the settings surface must fit rather than rely on off-window controls.
+- Header 44px, footer 56px; fixed category region approximately 196px wide. A single 1px divider aligns the sidebar and content boundary. Header/footer remain outside the content scroll area.
+- Content padding 24px; category heading 21px; concise supporting text separated by 8px; group gap 24px; field-row gap 16px; label/hint gap 8px; compact subordinate gap 12px. Use the shared 8/12/16/24 scale consistently instead of unrelated arbitrary whitespace.
+- Category rows 36–40px with coherent 18–20px outline icons, 12px horizontal inset, visible selected/focus state and complete accessible labels. Truncate a long category label within its allocated width and reveal the complete label; never draw it into content.
+- Ordinary inputs and segmented choices have a consistent 32–36px height. Align label and input columns when the content width permits; use a deliberate stacked form when a long translated label needs it. Do not create many decorative cards around simple fields.
+- Palette choices use a responsive grid of miniature-window preview cards with names. Selection must be visible in both appearances; the grid belongs to Appearance rather than displacing all other preferences.
+- The manuscript font-size preference changes manuscript text only. It must not enlarge the settings shell or invalidate category/control geometry.
+- Done remains visible at the footer's trailing edge. Working appearance/interface preferences preview and persist immediately; do not display a fake Apply/Save action. Failed persistence remains actionable. Escape closes the innermost transient and returns the prior editor focus.
+
+### Functional settings versus scaffold
+
+Working controls must change actual persisted state. General, Appearance, Editor and the current shortcut table are functional foundation sections. Unimplemented parity sections remain selectable for orientation, but show a plain, short `Not available in this alpha` message and a source-backed summary of the existing capability being migrated. They do not contain editable fake endpoint fields, disabled Connect/Test buttons or switches with no effect. Scaffold visibility is explicitly requested by F-20 and must not imply feature completion.
+
+No search field is required until real category/setting search is implemented. A decorative search box or fabricated connection success is unacceptable. As each category becomes functional, give its real success/error/cancel states their own OpenSpec scenario and independent UX acceptance.
+
+### Settings acceptance after F-20
+
+Review General, Appearance, Editor and at least one informational parity category in actual compiled screenshots. Exercise the sidebar and Done by keyboard/pointer, Escape, language switching, mode/palette choice and persistence while an unfinished draft exists. At minimum/common sizes and German/CJK languages, verify clear hierarchy, aligned controls, visible category state, regular vertical spacing and a reachable footer. Catalog completeness and token contrast alone cannot close the owner's spacing rejection.
+
+### Settings reference refinements
+
+The selected shell uses a left-aligned category hierarchy with a coherent licensed utility icon family. Final family selection follows the comparison and owner participation recorded in F-25; no Lucide preference is assumed. Group labels follow the same inset grid as navigation content. The normal header and footer have explicit heights; content allocation cannot stretch either row. Appearance uses miniature-window mode/palette cards with a selected accent outline and accessible labels. These refinements supersede earlier plain swatch-button presentation. The monk/book crest remains the product identity in the command bar and app icon.
+
+### Final utility family choice
+
+The owner selected Lucide after the official-SVG comparison and independent designer recommendation (F-26). Use its exact source geometry consistently at 20px for primary utility controls and 16–18px for secondary rows. Retain upstream licenses and immutable source provenance. Native generated geometry must preserve path curves, round caps/joins, consistent weight and accessible command labels. The comparison artifacts informed the choice; actual compiled rendering remains the acceptance evidence.

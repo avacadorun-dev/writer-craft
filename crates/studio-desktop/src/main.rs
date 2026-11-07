@@ -1,19 +1,36 @@
 //! WriterCraft native executable; the domain engine is shared with the CLI.
 mod app;
+mod brand;
+pub mod i18n;
 pub mod icons;
 pub mod theme;
 
 use std::path::PathBuf;
 
 fn main() -> eframe::Result {
-    let mut database = default_database();
-    let mut demo = false;
+    let mut database = std::env::var_os("WRITERCRAFT_DATABASE")
+        .map(PathBuf::from)
+        .unwrap_or_else(default_database);
+    let mut demo = std::env::var("WRITERCRAFT_DEMO").as_deref() == Ok("1");
+    let mut compact = false;
     let mut capture = None;
     let mut arguments = std::env::args().skip(1);
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--database" => database = arguments.next().map(PathBuf::from).unwrap_or(database),
             "--demo" => demo = true,
+            "--compact" => compact = true,
+            "--version" | "-V" => {
+                println!("WriterCraft {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            "--help" | "-h" => {
+                println!(
+                    "WriterCraft {}\n\nUsage: writercraft [--database PATH] [--demo]\n\n--demo       Create a local sample project if the library is empty\n--database   Use an isolated workspace database\n--version    Print the application version",
+                    env!("CARGO_PKG_VERSION")
+                );
+                return Ok(());
+            }
             "--capture" => capture = arguments.next().map(PathBuf::from),
             _ => {}
         }
@@ -22,7 +39,11 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("WriterCraft")
             .with_app_id("app.writercraft.desktop")
-            .with_inner_size([1440.0, 940.0])
+            .with_inner_size(if compact {
+                [1000.0, 680.0]
+            } else {
+                [1440.0, 940.0]
+            })
             .with_min_inner_size([1000.0, 680.0])
             .with_fullsize_content_view(true)
             .with_title_shown(false)

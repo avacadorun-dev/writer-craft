@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "writers-studio-native"
+name = "writercraft"
 path = "src/main.rs"
 
 [lints]

@@ -50,11 +50,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     let workspace = Workspace::open(&path)?;
     if command == "demo" {
-        let project = workspace.create_project("Моя первая книга")?;
+        let project = workspace.create_project("My first book")?;
         let document = workspace.create_document(
             &project.id,
-            "Первая сцена",
-            "Утро началось с письма.\n\nУ каждого слова есть своя история.",
+            "First scene",
+            "The morning began with a letter.\n\nEvery word has its own story.",
         )?;
         println!(
             "{}",
