@@ -8,7 +8,7 @@ The CLI ran through `npx --yes --package @fission-ai/openspec@1.16.1` from an is
 openspec validate --all --strict --json
 ```
 
-Result: exit0; six items passed, none failed; every item returned an empty `issues` array.
+Result: exit0; seven items passed, none failed; every item returned an empty `issues` array.
 
 | Item | Type | Result |
 |---|---|---|
@@ -18,5 +18,6 @@ Result: exit0; six items passed, none failed; every item returned an empty `issu
 | localization | spec | valid |
 | native-workspace | spec | valid |
 | native-mvp | change | valid |
+| persistent-text-annotations | proposed future change | valid |
 
 This validates artifact syntax and supported contract structure. It does not prove implementation completion, native UX, migration parity or generated agent integration. `openspec init` was not run; repository instructions and config remain hand-maintained. Future contract changes rerun the pinned validation and update this evidence when results differ.
