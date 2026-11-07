@@ -1,0 +1,24 @@
+[package]
+name = "studio-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "writers-studio-native"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+studio-core.workspace = true
+studio-transfer.workspace = true
+rfd.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+image.workspace = true

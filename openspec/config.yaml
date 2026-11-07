@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  Product: WriterCraft, an open-source native writing desktop for Russian and English authors.
+  Goal: full Writers Studio workflow parity through verified increments; current MVP is plain prose.
+  Stack: Rust 2024, native egui/eframe, SQLite through rusqlite, shared domain core and CLI.
+  Native application code has no WebView, Electron, Docker or server installation requirement.
+  Canonical text, revisions, unfinished drafts and imported source must remain recoverable.
+  Proposals remain noncanonical until explicit Apply; Apply and Undo validate exact revisions.
+  Exact text anchors use Unicode scalar positions, with literal expected text.
+  Imported rich JSON is retained and read-only until lossless editing is implemented.
+  Appearance: independent Light/Dark mode and six non-green legacy palettes plus native default.
+  Read AGENTS.md, docs/PRD.md, docs/architecture/DECISIONS.md and relevant capability specs.
+  The canonical specs are a target contract; later parity requirements are explicitly marked.
+  No feature or validation is complete merely because its document exists.
+
+rules:
+  proposal:
+    - State concrete user behavior and affected capability IDs; distinguish MVP from parity target.
+    - Record compatibility, data preservation and rollback impact.
+  specs:
+    - Use normative SHALL or MUST and exact four-hash Scenario headings with WHEN and THEN.
+    - Keep each requirement focused on one observable outcome; separate future parity milestones.
+    - Include stale state, recovery, Unicode and unsupported-input behavior where relevant.
+  design:
+    - Reference accepted ADRs; explain any new dependency, migration or deviation.
+    - Keep GUI/provider I/O outside core mutation authority and preserve imported source.
+  tasks:
+    - Link tasks to spec IDs and real acceptance evidence; never invent passing checks.
+    - Include native visual checks for appearance and interaction changes.
+
+operations:
+  apply:
+    guidance:
+      - Work within existing user authorization; do not add repetitive approval gates.
+      - Run focused tests before required workspace checks and retain recovery data on failures.
+  archive:
+    guidance:
+      - Archive only verified scope; retain unfinished parity work and open hypotheses explicitly.
