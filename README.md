@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/avacadorun-dev/writer-craft/actions/workflows/ci.yml">Preview builds</a> ·
+  <a href="https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.1">Download alpha</a> ·
   <a href="#what-works-today">Current scope</a> ·
   <a href="#run-from-source">Run from source</a> ·
   <a href="docs/migration/FEATURE_PARITY.md">Parity roadmap</a> ·
@@ -42,7 +42,9 @@ Rich-document editing, anchored notes and dictionary links, real AI providers, d
 
 ## Get a preview
 
-Pushes to `main` and manual dispatch run checks, then build **macOS, Windows and Linux engineering previews on GitHub**. Open a completed [Verify WriterCraft run](https://github.com/avacadorun-dev/writer-craft/actions/workflows/ci.yml) and download the artifact for your computer:
+Download **[WriterCraft 0.1.0-alpha.1](https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.1)** for macOS, Windows or Linux. The release includes SHA-256 checksums and platform-specific verification evidence; see the [release record](docs/verification/RELEASE_ALPHA_1.md). macOS is the first reviewed desktop platform. Windows/Linux files are additional engineering previews.
+
+For continuous builds after the alpha, pushes to `main` and manual dispatch run checks and build all three targets on GitHub. Open a completed [Verify WriterCraft run](https://github.com/avacadorun-dev/writer-craft/actions/workflows/ci.yml) and download its artifact:
 
 | Build target | Artifact suffix | Inside |
 | --- | --- | --- |
@@ -114,4 +116,4 @@ WriterCraft stays focused on author workflows. A substantial reusable editor or 
 
 ## License and credits
 
-WriterCraft uses the repository's [MIT License](LICENSE). Bundled Adobe Source and Noto fonts retain their own OFL notices in [assets/fonts](assets/fonts). Lucide utility icons retain their [upstream license and pinned provenance](assets/icons/lucide/NOTICE.md). Repo-local agent skills preserve their upstream licenses and provenance. Artcraft informed the architecture research; its application source and branding are not copied into this foundation.
+WriterCraft uses the repository's [MIT License](LICENSE). Distribution archives preserve available Rust dependency notices in `THIRD_PARTY_NOTICES.txt`. Bundled Adobe Source and Noto fonts retain their own OFL notices in [assets/fonts](assets/fonts). Lucide utility icons retain their [upstream license and pinned provenance](assets/icons/lucide/NOTICE.md). Repo-local agent skills preserve their upstream licenses and provenance. Artcraft informed the architecture research; its application source and branding are not copied into this foundation.
