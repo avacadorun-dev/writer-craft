@@ -47,10 +47,12 @@ def validate_binary(data, target):
             raise ValueError("Preview must contain a Windows x86-64 PE32+ executable")
 
 
-def package_preview(root, binary, version, target, output, commit):
+def package_preview(root, binary, version, target, output, commit, third_party_notices):
     if not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise ValueError("Unsafe preview version")
     _, platform_name, _, executable, suffix = TARGETS[target]
+    if third_party_notices.is_symlink() or not third_party_notices.is_file() or not third_party_notices.stat().st_size:
+        raise ValueError("Generated Rust dependency notices are missing or empty")
     data = binary.read_bytes()
     validate_binary(data, target)
     stem = "WriterCraft-" + version + "-" + platform_name + "-preview"
@@ -86,6 +88,7 @@ def package_preview(root, binary, version, target, output, commit):
     members = {
         executable: (data, 0o755),
         "LICENSE": ((root / "LICENSE").read_bytes(), 0o644),
+        "THIRD_PARTY_NOTICES.txt": (third_party_notices.read_bytes(), 0o644),
         "PREVIEW.txt": (preview.encode(), 0o644),
         "build-evidence.json": (evidence_bytes, 0o644),
     }
@@ -145,7 +148,11 @@ def main():
         target_dir = ROOT / target_dir
     binary = target_dir / args.target / "release" / TARGETS[args.target][2]
     output = args.output if args.output.is_absolute() else ROOT / args.output
-    archive = package_preview(ROOT, binary, version, args.target, output, os.environ.get("GITHUB_SHA", "unknown"))
+    third_party_notices = output / "THIRD_PARTY_NOTICES.txt"
+    subprocess.run([sys.executable, str(ROOT / "scripts/generate-notices.py"),
+                    "--target", args.target, "--output", str(third_party_notices)], cwd=ROOT, check=True)
+    archive = package_preview(ROOT, binary, version, args.target, output,
+                              os.environ.get("GITHUB_SHA", "unknown"), third_party_notices)
     print("Packaged " + str(archive))
     return 0
 
@@ -178,6 +185,13 @@ class PortablePackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "x86-64"):
             validate_binary(bytes(wrong), "x86_64-unknown-linux-gnu")
 
+    def test_missing_dependency_notices_are_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "dependency notices"):
+                package_preview(root, root / "binary", "0.1.0-alpha.1", "x86_64-unknown-linux-gnu",
+                                root / "output", "fixture", root / "missing.txt")
+
     def test_archives_include_executable_licenses_evidence_and_matching_checksum(self):
         for target in TARGETS:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
@@ -190,7 +204,10 @@ class PortablePackageTests(unittest.TestCase):
                 (root / "assets/icons/lucide/NOTICE.md").write_text("Pinned icon provenance fixture")
                 binary = root / "binary"
                 binary.write_bytes(self.fake_binary(target))
-                archive = package_preview(root, binary, "0.1.0-alpha.1", target, root / "output", "fixture")
+                third_party_notices = root / "THIRD_PARTY_NOTICES.txt"
+                third_party_notices.write_bytes(b"Dependency license and copyright fixture\n")
+                archive = package_preview(root, binary, "0.1.0-alpha.1", target, root / "output",
+                                          "fixture", third_party_notices)
                 if archive.suffix == ".zip":
                     with zipfile.ZipFile(archive) as bundle:
                         files = {name.split("/", 1)[1]: bundle.read(name) for name in bundle.namelist()}
@@ -202,6 +219,7 @@ class PortablePackageTests(unittest.TestCase):
                         files = {item.name.split("/", 1)[1]: bundle.extractfile(item).read() for item in entries}
                 self.assertEqual(files[TARGETS[target][3]], binary.read_bytes())
                 self.assertIn("LICENSE", files)
+                self.assertEqual(files["THIRD_PARTY_NOTICES.txt"], third_party_notices.read_bytes())
                 self.assertIn("licenses/fonts/Source-LICENSE.md", files)
                 self.assertEqual(files["licenses/icons/lucide/LICENSE"], b"ISC + MIT fixture")
                 self.assertIn("licenses/icons/lucide/NOTICE.md", files)

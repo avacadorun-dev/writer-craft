@@ -96,6 +96,11 @@ with tempfile.TemporaryDirectory(prefix=".writercraft-package-", dir=output.pare
             destination = licenses / notice.relative_to("assets")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(notice, destination)
+    notice_command = [sys.executable, "scripts/generate-notices.py",
+                      "--output", str(licenses / "THIRD_PARTY_NOTICES.txt")]
+    if rust_target:
+        notice_command += ["--target", rust_target]
+    subprocess.run(notice_command, check=True)
     info = {
         "CFBundleExecutable": "WriterCraft", "CFBundleIdentifier": "app.writercraft.desktop",
         "CFBundleName": "WriterCraft", "CFBundleDisplayName": "WriterCraft", "CFBundlePackageType": "APPL",

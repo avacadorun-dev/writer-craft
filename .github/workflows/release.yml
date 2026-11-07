@@ -82,7 +82,7 @@ jobs:
           python3 scripts/release-check.py --self-test
           python3 scripts/package-portable.py --self-test
           python3 scripts/stage-release-assets.py --self-test
-          python3 scripts/stage-release-assets.py --self-test
+          python3 scripts/generate-notices.py --self-test
           npx --yes --package @fission-ai/openspec@1.16.1 openspec validate --all --strict --json
       - name: Build and package on GitHub
         run: env GITHUB_SHA="$(git rev-parse HEAD)" ./scripts/package-macos.sh --release --target aarch64-apple-darwin --output artifacts/WriterCraft.app

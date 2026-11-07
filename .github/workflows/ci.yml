@@ -64,8 +64,7 @@ jobs:
           python3 scripts/release-check.py --self-test
           python3 scripts/package-portable.py --self-test
           python3 scripts/stage-release-assets.py --self-test
-      - name: Test portable archive packaging without building
-        run: python3 scripts/package-portable.py --self-test
+          python3 scripts/generate-notices.py --self-test
       - name: Validate source metadata and honest UX disposition
         run: python3 scripts/release-check.py --mode source --json
 
