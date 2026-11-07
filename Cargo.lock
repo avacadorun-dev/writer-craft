@@ -683,7 +683,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=7084f99ce45199d81ee8edce6ee9b9388da07b7b#7084f99ce45199d81ee8edce6ee9b9388da07b7b"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=f2f6eb7c03d4e3437409db68d2121392e8c66ea7#f2f6eb7c03d4e3437409db68d2121392e8c66ea7"
 dependencies = [
  "prosemirror",
  "serde",

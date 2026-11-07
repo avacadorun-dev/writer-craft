@@ -6,7 +6,7 @@ Date: 2026-11-08. Scope: the owner's complete editor-first alpha.2; no reduced s
 
 A reusable native view/model component is necessary. The inspected libraries do not provide a verified drop-in replacement for the complete current Tiptap editor with continuous native selection, custom atoms/tables and lossless source metadata. This is an engineering conclusion from the inspected APIs, not a proof that no such library can exist.
 
-The separate [CraftEditor](https://github.com/avacadorun-dev/craft-editor) workspace owns generic model/view mechanics. WriterCraft owns its schema/media/annotation adapters, persistence and command authorization. The first model source pin is `7084f99ce45199d81ee8edce6ee9b9388da07b7b`; later tested changes require a deliberate pin update.
+The separate [CraftEditor](https://github.com/avacadorun-dev/craft-editor) workspace owns generic model/view mechanics. WriterCraft owns its schema/media/annotation adapters, persistence and command authorization. The first model checkpoint was `7084f99ce45199d81ee8edce6ee9b9388da07b7b`. The current consumer pin is `f2f6eb7c03d4e3437409db68d2121392e8c66ea7`: 35 model/structure tests plus 10 headless input checks passed locally and [all hosted source jobs passed](https://github.com/avacadorun-dev/craft-editor/actions/runs/42410688549). Later changes require deliberate pin updates. Full native/editor acceptance is still pending.
 
 ## Reuse assessment
 
