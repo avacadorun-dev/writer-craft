@@ -635,13 +635,6 @@ impl StudioApp {
     }
 }
 
-fn current_block(session: &EditorSession) -> Option<&Node> {
-    session
-        .document()
-        .block(&session.selection()?.head.block_id)
-        .ok()
-}
-
 fn find_path(node: &Node, id: &str, path: NodePath) -> Option<NodePath> {
     if node.block_id() == Some(id) {
         return Some(path);
@@ -761,24 +754,9 @@ impl TableContext {
             .iter()
             .find(|cell| cell.row == row && cell.cell_index == cell_index)?
             .clone();
-        let selected = session
-            .selection()
-            .and_then(|selection| Self::at(session, &selection.anchor.block_id))
-            .and_then(|(anchor, row, index)| {
-                if anchor != path {
-                    return None;
-                }
-                let first = grid
-                    .cells
-                    .iter()
-                    .find(|cell| cell.row == row && cell.cell_index == index)?;
-                Some(CellSelection {
-                    top: first.row.min(cell.row),
-                    left: first.column.min(cell.column),
-                    bottom: first.bottom().max(cell.bottom()),
-                    right: first.right().max(cell.right()),
-                })
-            });
+        // Only the engine's typed CellSelection is a rectangular table range.
+        // A text range keeps the source command's head-cell policy.
+        let selected = None;
         Some(Self {
             target,
             grid,
@@ -993,21 +971,26 @@ impl TableContext {
                     session.apply_commands_with_node_selection(commands, target)?;
                 }
             }
-        } else if matches!(action, TableAction::Split) && session.cell_selection().is_some() {
-            session.apply_commands_with_cell_selection(
-                commands,
-                craft_editor_egui::TableSelection {
-                    table_path: self.target.path.clone(),
-                    anchor: craft_editor_egui::CellPoint {
-                        row: self.cell.row,
-                        column: self.cell.column,
-                    },
-                    head: craft_editor_egui::CellPoint {
-                        row: self.cell.bottom() - 1,
-                        column: self.cell.right() - 1,
-                    },
-                },
-            )?;
+        } else if let Some(mut cells) = session.cell_selection().cloned() {
+            if matches!(action, TableAction::Split) {
+                cells.anchor = craft_editor_egui::CellPoint {
+                    row: self.cell.row,
+                    column: self.cell.column,
+                };
+                cells.head = craft_editor_egui::CellPoint {
+                    row: self.cell.bottom() - 1,
+                    column: self.cell.right() - 1,
+                };
+            } else if matches!(action, TableAction::Merge) {
+                cells.anchor = craft_editor_egui::CellPoint {
+                    row: selected.top,
+                    column: selected.left,
+                };
+                cells.head = cells.anchor;
+            }
+            // The guarded table builder replaces its table node. The host knows the exact
+            // post-selection; do not let an intentionally conservative path map discard it.
+            session.apply_commands_with_cell_selection(commands, cells)?;
         } else {
             session.apply_commands(commands)?;
         }
@@ -1937,6 +1920,34 @@ mod tests {
             session.redo()?;
             assert_eq!(session.document().to_json()?, exact);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_text_range_is_not_promoted_to_a_rectangular_table_command_target() -> AppResult<()> {
+        let mut session = rectangular_table_session()?;
+        session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "r2c2".into(),
+                offset: ScalarOffset(3),
+            },
+            head: DocPoint {
+                block_id: "r0c0".into(),
+                offset: ScalarOffset(2),
+            },
+        })?;
+        let context = TableContext::current(&session).ok_or("Missing current cell")?;
+        assert!(context.selected.is_none());
+        assert!(!context.allows(TableAction::Merge));
+        let before = session.document().to_json()?;
+        context.apply(&mut session, TableAction::AddRow)?;
+        assert_eq!(
+            session.document().to_json()?["content"][1]["content"][2],
+            before["content"][1]["content"][1]
+        );
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert!(session.cell_selection().is_none());
         Ok(())
     }
 }

@@ -566,6 +566,22 @@ fn format_icon(action: Format) -> Icon {
     }
 }
 
+fn block_style_label(session: &EditorSession, language: Language) -> AppResult<&'static str> {
+    use craft_editor_egui::TextBlockState;
+    Ok(language.text(match session.text_block_state()? {
+        TextBlockState::Heading { level: 1 } => "Heading 1",
+        TextBlockState::Heading { level: 2 } => "Heading 2",
+        TextBlockState::Heading { level: 3 } => "Heading 3",
+        TextBlockState::Heading { level: 4 } => "Heading 4",
+        TextBlockState::Heading { level: 5 } => "Heading 5",
+        TextBlockState::Heading { level: 6 } => "Heading 6",
+        TextBlockState::Heading { .. } => "Heading",
+        TextBlockState::Code => "Code block",
+        TextBlockState::Mixed => "Mixed formatting",
+        TextBlockState::Paragraph | TextBlockState::Unavailable => "Paragraph",
+    }))
+}
+
 pub(super) fn toolbar(
     ui: &mut egui::Ui,
     rich: &mut RichState,
@@ -574,6 +590,7 @@ pub(super) fn toolbar(
     mode: crate::editor_preferences::ToolbarMode,
 ) -> AppResult<()> {
     let mut error = None;
+    let label = block_style_label(&rich.session, l)?;
     // Expanded remains bounded by physical space; all hidden actions stay in More.
     let expanded =
         mode != crate::editor_preferences::ToolbarMode::Compact && ui.available_width() >= 790.0;
@@ -586,46 +603,43 @@ pub(super) fn toolbar(
         !rich.read_only && !rich.session.is_composing() && rich.dialog.is_none(),
         |ui| {
             ui.horizontal_centered(|ui| {
-                let label = current_block(&rich.session).map_or(l.text("Paragraph"), |node| {
-                    if node.node_type == "heading" {
-                        match node
-                            .attrs
-                            .as_ref()
-                            .and_then(|a| a.get("level"))
-                            .and_then(serde_json::Value::as_u64)
-                        {
-                            Some(1) => l.text("Heading 1"),
-                            Some(2) => l.text("Heading 2"),
-                            Some(3) => l.text("Heading 3"),
-                            Some(4) => l.text("Heading 4"),
-                            Some(5) => l.text("Heading 5"),
-                            Some(6) => l.text("Heading 6"),
-                            _ => l.text("Heading"),
-                        }
-                    } else {
-                        l.text("Paragraph")
-                    }
-                });
                 ui.add_enabled_ui(
                     rich.session.selection().is_some() || rich.session.cell_selection().is_some(),
                     |ui| {
-                        ui.menu_button(label, |ui| {
-                            for (msgid, level) in [
-                                ("Paragraph", 0),
-                                ("Heading 1", 1),
-                                ("Heading 2", 2),
-                                ("Heading 3", 3),
-                                ("Heading 4", 4),
-                                ("Heading 5", 5),
-                                ("Heading 6", 6),
-                            ] {
-                                if ui.button(l.text(msgid)).clicked() {
-                                    capture(set_block_kind(&mut rich.session, level), &mut error);
-                                    rich.session.request_canvas_focus(ui.ctx());
-                                    ui.close();
-                                }
-                            }
-                        });
+                        let width = if minimal { 128.0 } else { 164.0 };
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(width, 32.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_max_width(width);
+                                let (button, _) = egui::menu::MenuButton::from_button(
+                                    egui::Button::new(label)
+                                        .truncate()
+                                        .min_size(egui::vec2(width, 32.0)),
+                                )
+                                .ui(ui, |ui| {
+                                    for (msgid, level) in [
+                                        ("Paragraph", 0),
+                                        ("Heading 1", 1),
+                                        ("Heading 2", 2),
+                                        ("Heading 3", 3),
+                                        ("Heading 4", 4),
+                                        ("Heading 5", 5),
+                                        ("Heading 6", 6),
+                                    ] {
+                                        if ui.button(l.text(msgid)).clicked() {
+                                            capture(
+                                                set_block_kind(&mut rich.session, level),
+                                                &mut error,
+                                            );
+                                            rich.session.request_canvas_focus(ui.ctx());
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                                button.on_hover_text(label);
+                            },
+                        );
                     },
                 );
                 ui.separator();
