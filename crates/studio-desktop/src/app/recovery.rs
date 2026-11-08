@@ -268,34 +268,33 @@ impl StudioApp {
                 });
             },
         );
-        if export {
-            if let Some(path) = rfd::FileDialog::new()
+        if export
+            && let Some(path) = rfd::FileDialog::new()
                 .set_file_name("writercraft-document-recovery.json")
                 .add_filter(l.text("WriterCraft recovery JSON"), &["json"])
                 .save_file()
-            {
-                match protected_export_path(&path, &self.database) {
-                    Ok(true) => dialog.status = Some(Status::ProtectedPath),
-                    Err(_) => dialog.status = Some(Status::ExportFailed),
-                    Ok(false) => {
-                        if self
-                            .workspace
-                            .verify_rich_recovery_snapshot(&dialog.snapshot)
-                            .is_err()
-                        {
-                            dialog.status = Some(Status::Changed);
+        {
+            match protected_export_path(&path, &self.database) {
+                Ok(true) => dialog.status = Some(Status::ProtectedPath),
+                Err(_) => dialog.status = Some(Status::ExportFailed),
+                Ok(false) => {
+                    if self
+                        .workspace
+                        .verify_rich_recovery_snapshot(&dialog.snapshot)
+                        .is_err()
+                    {
+                        dialog.status = Some(Status::Changed);
+                    } else {
+                        let result = recovery_json(&dialog.snapshot)
+                            .map_err(|error| -> Box<dyn std::error::Error + Send + Sync> {
+                                Box::new(error)
+                            })
+                            .and_then(|bytes| atomic_write(&path, &bytes));
+                        dialog.status = Some(if result.is_ok() {
+                            Status::Exported
                         } else {
-                            let result = recovery_json(&dialog.snapshot)
-                                .map_err(|error| -> Box<dyn std::error::Error + Send + Sync> {
-                                    Box::new(error)
-                                })
-                                .and_then(|bytes| atomic_write(&path, &bytes));
-                            dialog.status = Some(if result.is_ok() {
-                                Status::Exported
-                            } else {
-                                Status::ExportFailed
-                            });
-                        }
+                            Status::ExportFailed
+                        });
                     }
                 }
             }

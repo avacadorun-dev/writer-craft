@@ -667,7 +667,7 @@ mod tests {
         let context = egui::Context::default();
         let tokens = theme::resolve(&app.settings, false);
         app.open_document_find();
-        let _ = run_test_frame(&context, egui::RawInput::default(), |ctx| {
+        run_test_frame(&context, egui::RawInput::default(), |ctx| {
             app.daily_control_dialogs(ctx.ctx(), tokens)
         });
         let mut input = egui::RawInput::default();
@@ -678,7 +678,7 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         });
-        let _ = run_test_frame(&context, input, |ctx| {
+        run_test_frame(&context, input, |ctx| {
             app.daily_control_dialogs(ctx.ctx(), tokens)
         });
         assert!(!app.daily_controls.modal_open());
@@ -702,7 +702,7 @@ mod tests {
             )),
             ..Default::default()
         };
-        let _ = run_test_frame(&context, input.clone(), |ctx| {
+        run_test_frame(&context, input.clone(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
@@ -715,7 +715,7 @@ mod tests {
             .ok_or("missing title field")?;
         let mut typed = input.clone();
         typed.events.push(egui::Event::Text("Changed title".into()));
-        let _ = run_test_frame(&context, typed, |ctx| {
+        run_test_frame(&context, typed, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
@@ -733,7 +733,7 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         });
-        let _ = run_test_frame(&context, escape, |ctx| {
+        run_test_frame(&context, escape, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
