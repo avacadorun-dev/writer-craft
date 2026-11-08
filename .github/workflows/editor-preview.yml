@@ -10,6 +10,7 @@ on:
       - 'assets/**'
       - 'scripts/package-macos.sh'
       - 'scripts/generate-notices.py'
+      - 'scripts/native-startup-smoke.py'
       - '.github/workflows/editor-preview.yml'
   workflow_dispatch:
 
@@ -134,6 +135,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Verify notice collection
         run: python3 scripts/generate-notices.py --self-test
+      - name: Check bounded startup smoke tooling
+        run: python3 scripts/native-startup-smoke.py --self-test
       - name: Package the isolated native editor preview
         env:
           WRITERCRAFT_EDITOR_PREVIEW: '1'
@@ -180,4 +183,16 @@ jobs:
             artifacts/PREVIEW.txt
           if-no-files-found: error
           compression-level: 0
+          retention-days: 14
+      - name: Capture two synthetic native startup states (informational)
+        id: startup-smoke
+        continue-on-error: true
+        run: python3 scripts/native-startup-smoke.py --bundle 'artifacts/WriterCraft Editor Preview.app'
+      - name: Retain native startup captures and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-preview-startup-smoke-${{ github.sha }}
+          path: ${{ runner.temp }}/writercraft-native-startup-smoke/
+          if-no-files-found: warn
           retention-days: 14
