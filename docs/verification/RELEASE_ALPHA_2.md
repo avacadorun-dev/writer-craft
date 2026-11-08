@@ -38,3 +38,18 @@ The tag workflow must verify the current independent gate and exact existing pre
 ## Final checkpoint disposition
 
 All final-source hosted source/native/installer checks named above completed successfully. The independent review and authoritative UX gate record the accepted engineering scope separately from future full-parity acceptance. The tag run will rebuild the same runtime fingerprint from its final documentation/gate commit, verify installed-package identity and prepare new draft assets. README screenshot provenance binds to the final 8af4233 normal-app executable; subsequent repository documentation and gate commits do not change that runtime fingerprint. Product issues remain open for owner checks or alpha.3 completion.
+
+
+## Published release receipt
+
+Published prerelease: [WriterCraft0.1.0-alpha.2](https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.2), 2026-11-08 at15:52:50UTC. Immutable tag commit: `52770caaceb9c9e06b60130024fa230cf7e93ead`. [Tagged run42494556276](https://github.com/avacadorun-dev/writer-craft/actions/runs/42494556276) completed successfully through source/default/native checks, all platform installers, Ubuntu verification, exact-source aggregation and draft staging. Independent scope remains `native-rich-editor-alpha`.
+
+All12 uploaded assets were inspected before publication. The three GitHub asset digests, byte sizes, combined SHA256SUMS and scoped distribution/release manifests agree. Anonymous public installer HEAD requests returned HTTP200 and matching lengths. Final tagged normal-app capture artifact13622838164 passed20/20cases, executable SHA-256 `daccbbea2375c617de08426a7466c82d1e254fe141977de25bee94c55c966707`, evidence SHA-256 `e530ee26ececa39016af9d05c746f6e1499f4fa04c7659ccdd73ec497c669a22`.
+
+| Published installer | Bytes | SHA-256 |
+|---|---:|---|
+| `WriterCraft-0.1.0-alpha.2-linux-amd64.deb` | 46544788 | `5fbf0908319ff0d618583946bec498aa972f9c99b806c7cfa8a2b95898aea9d2` |
+| `WriterCraft-0.1.0-alpha.2-macos-arm64.dmg` | 61723094 | `d322bc5f0ae715a0d374e93b358072abb0667fabf94f452d5e3114d21a83c792` |
+| `WriterCraft-0.1.0-alpha.2-windows-x64-setup.exe` | 58545743 | `312abeed8bff3e1b36d1fd8a4f695da47c5739b8e40246b4593f55fc3262274f` |
+
+Issues#3 and#12 retain published evidence and verified checkboxes, remaining open for owner acceptance. The eight incomplete broader workstreams stay in the alpha.3 milestone. No published alpha.1/alpha.2 tag or asset was replaced. This documentation receipt does not change the accepted runtime fingerprint.
