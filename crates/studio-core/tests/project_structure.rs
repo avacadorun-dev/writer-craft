@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
-use serde_json::{Value, json};
+use serde_json::json;
 use studio_core::{
     ImportAssetSource, PortableObjectReference, PortableObjectSource, PortableProjectHeader,
     PreparedPortableProject, ProjectAttachment, ProjectImportWorker, ProjectPortableExportWorker,
@@ -251,6 +251,10 @@ fn first_content_should_reuse_reserved_identity_and_refuse_repeated_or_stale_ini
 }
 struct Objects(BTreeMap<String, Vec<u8>>);
 impl PortableObjectSource for Objects {
+    fn verify_transport(&mut self) -> std::io::Result<()> {
+        // This adapter owns only already captured in-memory fixture objects; it has no paths/container.
+        Ok(())
+    }
     fn visit_objects(
         &mut self,
         visitor: &mut dyn FnMut(PortableObjectReference) -> studio_core::Result<()>,
