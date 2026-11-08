@@ -37,6 +37,8 @@ impl Default for CaptureReadiness {
 
 #[derive(Default)]
 pub(super) struct CaptureProbe {
+    #[cfg(feature = "editor-preview")]
+    pub(super) connected: Option<super::capture_connected_writing::ConnectedCapture>,
     started: Option<Instant>,
     target: Option<String>,
     initial_document: Option<Value>,
@@ -139,14 +141,31 @@ fn write_new_json(path: &Path, value: &Value) -> AppResult<()> {
     Ok(())
 }
 impl StudioApp {
-    pub(super) fn initialize_capture(&mut self, demo: bool) -> AppResult<()> {
+    pub(super) fn initialize_capture(&mut self, demo: bool, ctx: &egui::Context) -> AppResult<()> {
         let path = self.capture.as_ref().ok_or("capture_path_missing")?;
         validate_output(path, &self.database)?;
         validate_output(&state_path(path), &self.database)?;
         self.capture_probe.started = Some(Instant::now());
+        #[cfg(feature = "editor-preview")]
+        {
+            self.capture_probe.connected =
+                super::capture_connected_writing::ConnectedCapture::initialize(self, demo, ctx)?;
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            let _ = ctx;
+            if std::env::var("WRITERCRAFT_CAPTURE_SCENARIO").is_ok_and(|value| !value.is_empty()) {
+                return Err("connected_capture_requires_native_editor_feature".into());
+            }
+        }
         let target = std::env::var("WRITERCRAFT_CAPTURE_BLOCK")
             .ok()
             .filter(|id| !id.is_empty());
+        if target.is_some()
+            && std::env::var("WRITERCRAFT_CAPTURE_SCENARIO").is_ok_and(|value| !value.is_empty())
+        {
+            return Err("capture_block_and_connected_scenario_are_exclusive".into());
+        }
         if target.is_some() && !demo {
             return Err("capture_target_requires_explicit_synthetic_demo".into());
         }
@@ -193,12 +212,17 @@ impl StudioApp {
         }
         self.frames = self.frames.saturating_add(1);
         #[cfg(feature = "editor-preview")]
-        let readiness = self
-            .rich
-            .as_ref()
-            .map_or_else(CaptureReadiness::default, |rich| {
-                rich.capture_readiness(self.capture_probe.target.as_deref())
-            });
+        let readiness = if let Some(mut connected) = self.capture_probe.connected.take() {
+            let readiness = connected.readiness(self, ctx);
+            self.capture_probe.connected = Some(connected);
+            readiness
+        } else {
+            self.rich
+                .as_ref()
+                .map_or_else(CaptureReadiness::default, |rich| {
+                    rich.capture_readiness(self.capture_probe.target.as_deref())
+                })
+        };
         #[cfg(not(feature = "editor-preview"))]
         let readiness = CaptureReadiness::default();
         let ready = self.capture_probe.observe(readiness) && self.frames >= 8;
@@ -252,6 +276,14 @@ impl StudioApp {
             validate_output(&path, &self.database)?;
             validate_output(&state_path(&path), &self.database)?;
             #[cfg(feature = "editor-preview")]
+            let connected_capture = self
+                .capture_probe
+                .connected
+                .as_ref()
+                .map(|probe| probe.evidence());
+            #[cfg(not(feature = "editor-preview"))]
+            let connected_capture: Option<Value> = None;
+            #[cfg(feature = "editor-preview")]
             let canonical_unchanged = self
                 .rich
                 .as_ref()
@@ -281,7 +313,9 @@ impl StudioApp {
                 "error": error, "target_block": self.capture_probe.target,
                 "frame": self.frames, "stable_frames": self.capture_probe.stable_frames,
                 "readback_requests": self.capture_probe.readback_requests,
-                "render_readiness": self.capture_probe.last, "canonical_unchanged": canonical_unchanged,
+                "render_readiness": self.capture_probe.last,
+                "canonical_unchanged": if connected_capture.is_some() { None } else { Some(canonical_unchanged) },
+                "connected_capture": connected_capture,
                 "observed_inner_size_points": viewport, "pixels_per_point": ctx.pixels_per_point(),
                 "image_size_pixels": image.map(|image| [image.width(), image.height()]),
                 "language": self.language.code(), "font_size": self.font_size,
@@ -290,7 +324,13 @@ impl StudioApp {
                 "editor_acceptance": false, "native_interaction_acceptance": false,
             });
             write_new_json(&state_path(&path), &evidence)?;
-            if !canonical_unchanged {
+            if connected_capture
+                .as_ref()
+                .is_some_and(|probe| probe["content_contract_satisfied"] != true)
+            {
+                return Err("connected_capture_content_contract_failed".into());
+            }
+            if connected_capture.is_none() && !canonical_unchanged {
                 return Err("capture_navigation_changed_canonical_document".into());
             }
             Ok(())

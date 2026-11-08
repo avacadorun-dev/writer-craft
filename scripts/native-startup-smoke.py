@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture synthetic native review states; never certify editor/interaction acceptance."""
+"""Capture synthetic native states and bounded RawInput probes; never certify parity or OS input."""
 from __future__ import annotations
 
 import argparse
@@ -91,22 +91,73 @@ def run_child(command: list[str], env: dict[str, str], stdout: Path, stderr: Pat
     return {"returncode": returncode, "timed_out": timed_out, "elapsed_seconds": round(time.monotonic() - start, 3)}
 
 
-def validate_capture_state(state: dict, target: str | None) -> None:
+def validate_capture_state(state: dict, target: str | None, scenario: str | None = None) -> None:
     """Reject vacuous readiness, target misses, failed renderers and mutated synthetic content."""
     ready = state.get("render_readiness") or {}
     if state.get("schema_version") != 1 or state.get("status") != "captured":
         raise ValueError("Native capture did not acknowledge a completed readback: " + str(state.get("error")))
-    if state.get("target_block") != target or state.get("canonical_unchanged") is not True:
-        raise ValueError("Capture target or canonical preservation did not match")
+    if state.get("target_block") != target:
+        raise ValueError("Capture target did not match")
+    if scenario:
+        validate_connected_state(state, scenario)
+    elif state.get("canonical_unchanged") is not True or state.get("connected_capture") is not None:
+        raise ValueError("Read-only capture canonical preservation did not match")
     if state.get("stable_frames", 0) < 3 or not ready.get("settled") or not ready.get("target_visible"):
         raise ValueError("Visible native render/scroll state did not settle")
     if ready.get("pending_atoms") != 0 or ready.get("failed_atoms") != 0:
         raise ValueError("Valid synthetic native atoms remain pending or failed")
-    if target and ready.get("visible_atoms", 0) <= 0:
+    if (target or scenario) and ready.get("visible_atoms", 0) <= 0:
         raise ValueError("Opaque target was not present in the observed native viewport")
     size = state.get("observed_inner_size_points")
     if not isinstance(size, list) or len(size) != 2 or not all(isinstance(v, (int, float)) and v > 0 for v in size):
         raise ValueError("Observed native viewport dimensions are missing")
+
+
+def validate_connected_state(state: dict, scenario: str) -> None:
+    """Connected probes must name actual semantic targets; rich-editor defaults cannot pass."""
+    probe = state.get("connected_capture") or {}
+    if probe.get("scenario") != scenario or probe.get("terminal") is not True or probe.get("content_contract_satisfied") is not True or probe.get("failure") is not None:
+        raise ValueError("Connected native probe did not satisfy its exact content contract")
+    if state.get("canonical_unchanged") is not None or probe.get("os_input_acceptance") is not False or probe.get("full_journey_acceptance") is not False:
+        raise ValueError("Scripted native-widget evidence must not claim unchanged content or OS/full-journey acceptance")
+    steps = probe.get("steps") or []
+    required = 7 if scenario == "hierarchy-search" else 4
+    if len(steps) < required or any(len(step.get("observed_state_sha256", "")) != 64 for step in steps):
+        raise ValueError("Connected native action record is missing or incomplete")
+    durability = probe.get("durability_evidence") or {}
+    expected_history = {"canvas-inline": 4, "canvas-cancel": 2, "hierarchy-search": 1}.get(scenario)
+    if durability.get("independent_workspace_reread") is not True or durability.get("process_restart_verified") is not False or len(durability.get("history") or []) != expected_history:
+        raise ValueError("Connected native probe has no exact independent durability/history record")
+    final = probe.get("final_state") or {}
+    if final.get("project_id") != probe.get("expected_project_id"):
+        raise ValueError("Connected probe observed a different project")
+    if scenario.startswith("canvas-"):
+        card = probe.get("expected_card_id")
+        nodes = (final.get("canonical") or {}).get("nodes") or []
+        chosen = [node for node in nodes if node.get("id") == card]
+        visible = [node for node in final.get("visible_nodes", []) if node.get("node_id") == card]
+        if not card or len(nodes) != 2 or len(chosen) != 1 or not visible:
+            raise ValueError("Connected card target was absent from content or actual frame geometry")
+        clip = visible[0].get("body_clip") or []
+        if len(clip) != 4 or clip[2] <= clip[0] or clip[3] <= clip[1]:
+            raise ValueError("Connected card target has no visible painted body allocation")
+        if any(final.get(key) is not False for key in ("pending", "failed", "recovery", "navigation_blocked")) or final.get("status") != "All changes saved":
+            raise ValueError("Connected card capture was not durably acknowledged")
+        if scenario == "canvas-cancel":
+            if final.get("editor") is not None or chosen[0].get("text") != "":
+                raise ValueError("Cancel changed the new card's saved empty content")
+        else:
+            editor = final.get("editor") or {}
+            expected = "Synthetic card: Привет 😀 e\u0301 — later draft 日本語"
+            if editor.get("node_id") != card or editor.get("text") != expected or chosen[0].get("text") != expected or any(editor.get(key) is not False for key in ("dirty", "submitted", "composing")):
+                raise ValueError("Native card input, later draft and durable content disagree")
+    elif scenario == "hierarchy-search":
+        selected = probe.get("expected_document_id")
+        rows = final.get("visible") or []
+        if not selected or final.get("query") != "echo" or final.get("selected_document") != selected or not any(row.get("document_id") == selected and row.get("depth", 0) >= 2 for row in rows) or len([row for row in rows if row.get("title") == "Echo"]) != 2:
+            raise ValueError("Nested duplicate-name navigation did not reach the exact expected document")
+    else:
+        raise ValueError("Unknown connected native scenario")
 
 
 def validate_bundle_identity(info: dict, commit: str, normal_app: bool) -> None:
@@ -175,6 +226,11 @@ def main(bundle: Path, normal_app: bool = False) -> int:
             "compact-dark-en-large-serif-image-bottom": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
             "wide-light-en-small-inter-flowchart": {"font_family": "inter", "font_size": 17.0, "line_height": 1.5, "paragraph_spacing": 0.65, "list_item_spacing": 0.0, "manuscript_width": 80},
         }
+        scenarios = {
+            "compact-light-en-canvas-inline": "canvas-inline",
+            "compact-dark-en-canvas-cancel": "canvas-cancel",
+            "compact-light-en-hierarchy-search": "hierarchy-search",
+        }
         for name, language, section, compact, flags in (
             ("compact-dark-en-manuscript", "en", None, True, []),
             ("compact-light-de-settings", "de", None, True, ["--light", "--settings"]),
@@ -196,9 +252,13 @@ def main(bundle: Path, normal_app: bool = False) -> int:
             ("compact-dark-en-large-serif-image", "en", None, True, []),
             ("compact-dark-en-large-serif-image-bottom", "en", None, True, []),
             ("wide-light-en-small-inter-flowchart", "en", None, False, ["--light"]),
+            ("compact-light-en-canvas-inline", "en", None, True, ["--light"]),
+            ("compact-dark-en-canvas-cancel", "en", None, True, []),
+            ("compact-light-en-hierarchy-search", "en", None, True, ["--light"]),
         ):
             target = targets.get(name)
-            case = {"target_block": target, "name": name, "language": language, "requested_inner_size_points": [1000, 680] if compact else [1440, 940], "flags": flags, "section": section, "status": "starting"}
+            scenario = scenarios.get(name)
+            case = {"scenario": scenario, "target_block": target, "name": name, "language": language, "requested_inner_size_points": [1000, 680] if compact else [1440, 940], "flags": flags, "section": section, "status": "starting"}
             evidence["cases"].append(case)
             save()
             try:
@@ -214,7 +274,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
                     env.pop("WRITERCRAFT_EDITOR_PREVIEW", None)
                     if not normal_app:
                         env["WRITERCRAFT_EDITOR_PREVIEW"] = "1"
-                    env.update(WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "")
+                    env.update(WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "", WRITERCRAFT_CAPTURE_SCENARIO=scenario or "")
                     command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", *([] if normal_app else ["--editor-preview"]), *(["--compact"] if compact else []), "--capture", str(capture), *flags]
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
@@ -223,7 +283,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
                         raise ValueError("Missing or oversized native capture state")
                     state = json.loads(capture_state.read_text())
                     case["native_state"] = state
-                    validate_capture_state(state, target)
+                    validate_capture_state(state, target, scenario)
                     case["capture_size_pixels"] = png_dimensions(capture)
                     case["capture_sha256"] = sha256(capture)
                     if state.get("image_size_pixels") != list(case["capture_size_pixels"]):
@@ -283,6 +343,12 @@ def self_test() -> None:
                 with self.assertRaises(ValueError): validate_capture_state(bad, "image")
             for field, value in (("canonical_unchanged", False), ("stable_frames", 2), ("target_block", "different"), ("observed_inner_size_points", None)):
                 with self.assertRaises(ValueError): validate_capture_state(dict(good, **{field: value}), "image")
+        def test_connected_capture_refuses_default_readiness_and_invented_acceptance(self):
+            good = {"schema_version": 1, "status": "captured", "target_block": None, "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "pending_atoms": 0, "failed_atoms": 0}}
+            for scenario in ("canvas-inline", "canvas-cancel", "hierarchy-search"):
+                with self.assertRaises(ValueError): validate_capture_state(good, None, scenario)
+            probe = {"scenario": "canvas-inline", "terminal": True, "content_contract_satisfied": True, "failure": None, "os_input_acceptance": True, "full_journey_acceptance": False}
+            with self.assertRaises(ValueError): validate_connected_state(dict(good, canonical_unchanged=None, connected_capture=probe), "canvas-inline")
         def test_child_exit_and_timeout_are_recorded(self):
             with tempfile.TemporaryDirectory(prefix="writercraft-smoke-test-") as directory:
                 output = Path(directory)

@@ -2,6 +2,8 @@
 #[cfg(feature = "editor-preview")]
 mod canvas;
 #[cfg(feature = "editor-preview")]
+mod capture_connected_writing;
+#[cfg(feature = "editor-preview")]
 mod clipboard_host;
 #[cfg(feature = "editor-preview")]
 mod clipboard_jobs;
@@ -363,7 +365,7 @@ impl StudioApp {
             app.stage()?;
         }
         if app.capture.is_some() {
-            app.initialize_capture(demo)?;
+            app.initialize_capture(demo, &cc.egui_ctx)?;
         }
         Ok(app)
     }
@@ -730,6 +732,13 @@ impl StudioApp {
 }
 
 impl eframe::App for StudioApp {
+    #[cfg(feature = "editor-preview")]
+    fn raw_input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
+        if let Some(probe) = &mut self.capture_probe.connected {
+            probe.raw_input(ctx, input);
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let t = theme::tokens(&ctx);
