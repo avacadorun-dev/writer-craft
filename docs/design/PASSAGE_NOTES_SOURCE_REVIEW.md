@@ -97,3 +97,23 @@ The 22 directly referenced note message IDs have catalog rows in all eight langu
 Before acceptance, verify create → move caret → visible persistent mark → reopen → edit note → resolve/reopen → detach → explicit reattach → delete/cancel, including repeated/Unicode quotes, tables/lists/blockquote passages, live edits and Undo. Include failed saves, metadata conflicts, lost preview authority, dirty navigation, keyboard-only access, long lists and overlapping marks. Parent hook/source fixes and test passes must be recorded against exact commits; a source review cannot turn the native UX gate green.
 
 This review covers author passage notes only. Dictionary-link journeys, the remaining full-editor inventory and general viewport anchoring keep their separate parity/acceptance requirements.
+
+## Source re-review after corrections
+
+Application checkpoints `637cb81` and `8ea381b` address the original blocking source findings. This follow-up preserves the initial review above as historical evidence. It does not grant native or release acceptance; parent application hooks were still being integrated in the working tree during this re-review.
+
+| Finding | Source result | Remaining evidence |
+| --- | --- | --- |
+| NSR-01 | Dirty per-note drafts and captured composers are retained under their owning identities. Explicit close Save/Discard/Cancel and focused Save controller APIs exist. | Qualify parent close/shortcut/status integration; failed saves, parked drafts and composer return on a compiled native app. |
+| NSR-02 | Note fields use stable note IDs; composers have unique instance IDs. Explicit discard/reload resets the field's editor history. | Hosted focused Undo isolation fixture; native IME/caret and conflict-banner transitions. |
+| NSR-03 | The native field preserves complete input and presents localized length validation before a valid save. | Hosted real TextEdit Unicode over-limit paste fixture; native IME and visible validation. |
+| NSR-04 | Invalid previews gate activation/mutations. New-document preparation hides old visible context before acquisition; repeated failed acquisition retains no previous document's rows or selection. Dirty work remains separately parked. | Hosted identical-template A → failed B → retry regression; compiled failure/recovery interaction. |
+| NSR-05 | The composer has a bounded scrolling body with its actions outside that body. | Native 1000×680 long-quote/long-draft reachability, keyboard focus and Escape checks. |
+| NSR-06 | Reveal offset now uses the same 44-point row plus spacing pitch as virtualization. | Large-list keyboard, reveal, resize and status-reordering interaction. |
+| NSR-07 | Passive repeated activation of the selected mark leaves the existing caret/selection alone. | Keyboard context-menu anchoring still uses the full canvas origin and needs a visible caret/viewport geometry contract; verify double/triple click and drag on the compiled surface. |
+| NSR-08 | Explicit discard/reload names the destructive action; delete confirmation identifies its quote/body. Canonical-save rebase logic remains guarded. | Qualify two dirty drafts plus canonical autosave and one metadata mutation through actual parent hooks. |
+| NSR-09 | Compact rows again show the quote, note body and attention/resolved icon state. | Native readability, minimum-width/localization, focus and screen-reader evidence. |
+
+Seven focused application note fixtures are present at these checkpoints: pure live proof projection, metadata-refresh conflict preservation, document-switch draft retention, authored quote projection without native atom scalars, complete Unicode over-limit paste, Undo isolation between note fields, and failed-new-document context isolation on retry. They had not yet been observed running on the hosted editor-enabled graph during this source re-review. Earlier `4dfe35d` build results must not be attributed to these newer note fixtures.
+
+The integrated inspector also needs a minimum-width/all-language navigation check: Notes, Review, History and close are currently a single horizontal row in a pane with 40 points of inner margins. Long German/French labels require measured fit or an explicit adaptive presentation. The official Lucide path comparison is useful geometry evidence; final-size native controls, keyboard focus and accessible states remain part of the compiled gate.
