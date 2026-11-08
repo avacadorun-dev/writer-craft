@@ -27,3 +27,19 @@ The native editor SHALL expose every source table command through the one rich s
 #### Scenario: Native table capacity would be exceeded
 - **WHEN** any insertion, widening, paste or other guarded command would exceed 63 logical columns
 - **THEN** it fails before mutation without truncating preserved wider canonical data
+
+### Requirement: Bounded wide-table authoring
+
+A table wider than its writing column SHALL remain fully reachable through local horizontal scrolling while surrounding prose keeps its original bounded measure. The same exact path-aware projection SHALL govern native pixels, pointer hits, selections/decorations, caret/IME and resize handles. Scrolling SHALL NOT modify canonical content, revisions, history, annotations or clipboard data.
+
+#### Scenario: The final logical column is edited after scrolling
+- **WHEN** a table has 63 logical columns and the author scrolls or moves the caret to its final cell
+- **THEN** the visible text, exact hit, caret/IME and resize edge refer to that cell, and Copy/Cut/Paste/Undo retain the same canonical selection semantics
+
+#### Scenario: A wide table is nested inside another table
+- **WHEN** either table is scrolled within a narrow writing panel
+- **THEN** the independent table offsets compose with ancestor clips, hidden content cannot intercept a visible sibling's input, and neither table's controls overlap following content
+
+#### Scenario: Typography or width changes with a visible table caret
+- **WHEN** the native component is remeasured after a width, typography, media or document revision change
+- **THEN** presentation offsets clamp to real tracks, the previously visible semantic caret remains reachable, and ordinary prose and persisted table widths remain unchanged by scrolling
