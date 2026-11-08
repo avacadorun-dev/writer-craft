@@ -1841,4 +1841,102 @@ mod tests {
         assert!(!session.can_undo());
         Ok(())
     }
+
+    #[test]
+    fn table_commands_match_the_actual_frozen_source_corpus() -> AppResult<()> {
+        fn shape(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Array(values) => values.iter_mut().for_each(shape),
+                serde_json::Value::Object(object) => {
+                    if let Some(attrs) = object
+                        .get_mut("attrs")
+                        .and_then(serde_json::Value::as_object_mut)
+                    {
+                        attrs.remove("blockId");
+                        for key in ["colwidth", "align"] {
+                            if attrs.get(key).is_some_and(serde_json::Value::is_null) {
+                                attrs.remove(key);
+                            }
+                        }
+                        for key in ["colspan", "rowspan"] {
+                            if attrs.get(key) == Some(&json!(1)) {
+                                attrs.remove(key);
+                            }
+                        }
+                        if attrs.get("sourceRefs") == Some(&json!([])) {
+                            attrs.remove("sourceRefs");
+                        }
+                    }
+                    if object
+                        .get("attrs")
+                        .and_then(serde_json::Value::as_object)
+                        .is_some_and(serde_json::Map::is_empty)
+                    {
+                        object.remove("attrs");
+                    }
+                    if object
+                        .get("content")
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(Vec::is_empty)
+                    {
+                        object.remove("content");
+                    }
+                    object.values_mut().for_each(shape);
+                }
+                _ => {}
+            }
+        }
+        let corpus: serde_json::Value =
+            serde_json::from_str(include_str!("table_commands_source.json"))?;
+        let original = RichDocument::from_json(corpus["input"].clone())?;
+        for case in corpus["cases"].as_array().ok_or("Missing table cases")? {
+            let mut session = EditorSession::new(original.clone(), Revision(0));
+            session.set_table_column_limit(Some(63))?;
+            let endpoint = |key: &str| -> AppResult<craft_editor_egui::CellPoint> {
+                let id = case[key].as_str().ok_or("Missing source endpoint")?;
+                let path = find_path(original.root(), id, NodePath::root())
+                    .ok_or("Missing source cell")?;
+                let row = *path.0.get(1).ok_or("Missing row")?;
+                let column = *path.0.get(2).ok_or("Missing column")?;
+                Ok(craft_editor_egui::CellPoint { row, column })
+            };
+            let selected = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: endpoint("anchor")?,
+                head: endpoint("head")?,
+            };
+            session.set_cell_selection(selected.clone())?;
+            let action = match case["action"].as_str().ok_or("Missing source action")? {
+                "addRow" => TableAction::AddRow,
+                "addColumn" => TableAction::AddColumn,
+                "deleteRow" => TableAction::DeleteRow,
+                "deleteColumn" => TableAction::DeleteColumn,
+                "deleteTable" => TableAction::DeleteTable,
+                _ => return Err("Unknown source action".into()),
+            };
+            let context = TableContext::current(&session).ok_or("Missing source table")?;
+            if case["handled"] == false {
+                assert!(!context.allows(action));
+                assert!(context.apply(&mut session, action).is_err());
+                assert_eq!(session.document(), &original);
+                assert!(!session.can_undo());
+                continue;
+            }
+            context.apply(&mut session, action)?;
+            let exact = session.document().to_json()?;
+            let mut actual = exact.clone();
+            let mut expected = case["output"].clone();
+            shape(&mut actual);
+            shape(&mut expected);
+            assert_eq!(actual, expected, "{} / {}", case["name"], case["action"]);
+            assert_eq!(session.revision(), Revision(1));
+            session.undo()?;
+            assert_eq!(session.document(), &original);
+            assert_eq!(session.cell_selection(), Some(&selected));
+            assert!(!session.can_undo());
+            session.redo()?;
+            assert_eq!(session.document().to_json()?, exact);
+        }
+        Ok(())
+    }
 }

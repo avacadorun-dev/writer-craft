@@ -970,7 +970,7 @@ pub(super) fn show_dialog(
                         ui.add_space(12.0);
                     }
                     if dialog.kind == Kind::Image {
-                        if ui.button(l.text("Choose image…")).clicked()
+                        if components::action(ui, l.text("Choose image…"), true, None).clicked()
                             && let Some(path) = rfd::FileDialog::new()
                                 .add_filter(l.text("Image"), &["png", "jpg", "jpeg", "gif", "webp"])
                                 .pick_file()
