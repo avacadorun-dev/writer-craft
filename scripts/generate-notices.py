@@ -66,18 +66,22 @@ def git_source_root(package, directory):
 
 def package_notices(package):
     """Return package-relative names and verbatim decoded texts, plus availability notes."""
-    directory = Path(package["manifest_path"]).parent
-    if not directory.is_dir():
+    manifest_directory = Path(package["manifest_path"]).parent
+    if not manifest_directory.is_dir():
         return [], ["Package source is unavailable; license/notice text could not be collected."]
     paths, warnings = set(), []
-    source_root = git_source_root(package, directory)
+    # Check the supplied checkout path before resolving aliases: resolution must not
+    # hide a symlink at the checkout boundary or its .git marker.
+    verified_root = git_source_root(package, manifest_directory)
+    directory = manifest_directory.resolve()
+    source_root = verified_root.resolve() if verified_root is not None else None
     declared = package.get("license_file")
     if declared:
         candidate = Path(declared)
         if not candidate.is_absolute():
             candidate = directory / candidate
         try:
-            candidate.resolve().relative_to((source_root or directory).resolve())
+            candidate.resolve().relative_to(source_root or directory)
         except ValueError:
             warnings.append("Declared license file is outside the package source/verified Git checkout; not collected.")
         else:
@@ -359,6 +363,53 @@ class NoticeTests(unittest.TestCase):
             self.assertEqual(notices, [("@source-root/TERMS.txt", "UTF-8", "Exact declared workspace terms\n")])
             (root / "PRIVATE.txt").write_bytes(b"Never collect outside checkout\n")
             package["license_file"] = "../../../PRIVATE.txt"
+            notices, warnings = package_notices(package)
+            self.assertEqual(notices, [])
+            self.assertTrue(any("outside" in warning for warning in warnings))
+
+    def test_filesystem_aliases_use_the_same_package_and_verified_checkout_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            actual = root / "actual"
+            actual.mkdir()
+            checkout, member, package = self.git_member_fixture(actual)
+            alias = root / "alias"
+            try:
+                alias.symlink_to(actual, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symbolic link creation unavailable")
+            (checkout / "TERMS.txt").write_bytes(b"Declared root terms\r\n")
+            (member / "LICENSE").write_bytes(b"Member terms\n")
+            (member / "legal").mkdir()
+            (member / "legal/terms.txt").write_bytes(b"Declared member terms\n")
+            alias_package = dict(package, manifest_path=str(alias / "checkout/crates/member/Cargo.toml"))
+            for declared in ("../../TERMS.txt", "legal/terms.txt"):
+                with self.subTest(declared=declared):
+                    package["license_file"] = declared
+                    alias_package["license_file"] = declared
+                    notices, warnings = package_notices(alias_package)
+                    self.assertEqual((notices, warnings), package_notices(package))
+                    self.assertEqual(warnings, [])
+                    self.assertNotIn(str(root), str(notices))
+            self.assertIn(("legal/terms.txt", "UTF-8", "Declared member terms\n"), notices)
+            (actual / "PRIVATE.txt").write_bytes(b"Never collect outside checkout\n")
+            alias_package["license_file"] = "../../../PRIVATE.txt"
+            notices, warnings = package_notices(alias_package)
+            self.assertTrue(any("outside" in warning for warning in warnings))
+            self.assertNotIn("Never collect outside checkout", str(notices))
+
+    def test_canonicalization_does_not_hide_an_unverified_symlink_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, _member, package = self.git_member_fixture(root)
+            (checkout / "TERMS.txt").write_bytes(b"Unverified ancestor terms\n")
+            linked_checkout = root / "linked-checkout"
+            try:
+                linked_checkout.symlink_to(checkout, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symbolic link creation unavailable")
+            package["manifest_path"] = str(linked_checkout / "crates/member/Cargo.toml")
+            package["license_file"] = "../../TERMS.txt"
             notices, warnings = package_notices(package)
             self.assertEqual(notices, [])
             self.assertTrue(any("outside" in warning for warning in warnings))
