@@ -52,9 +52,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Test the complete workspace
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: Test the native editor and integration controllers
-        run: cargo test --workspace --all-features --locked
+        run: cargo test --workspace --all-features --locked --no-fail-fast
       - name: Check all workspace targets
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Qualify the isolated editor-model hypothesis
@@ -90,7 +90,7 @@ jobs:
           rustup toolchain install stable --profile minimal --component clippy
           rustup default stable
       - name: Test portable core, transfer and CLI
-        run: cargo test -p studio-core -p studio-transfer -p studio-cli --locked
+        run: cargo test -p studio-core -p studio-transfer -p studio-cli --locked --no-fail-fast
       - name: Check portable core targets
         run: cargo clippy -p studio-core -p studio-transfer -p studio-cli --all-targets --all-features --locked -- -D warnings
       - name: State platform scope

@@ -14,6 +14,7 @@ pub(super) struct RichReviewState {
     next_cursor: Option<i64>,
     selected: Option<std::sync::Arc<RichProposal>>,
     preview: Option<RichPreview>,
+    excerpts: Option<(String, String)>,
     pub(super) full_open: bool,
     focus: bool,
 }
@@ -38,15 +39,15 @@ impl RichPreview {
             after_media: rendering::RenderState::default(),
         })
     }
-    fn show(
-        &mut self,
-        ui: &mut egui::Ui,
-        workspace: &Workspace,
-        project: &str,
-        language: Language,
-        tokens: Tokens,
-        font_size: f32,
-    ) -> AppResult<()> {
+    fn show(&mut self, ui: &mut egui::Ui, host: rendering::RenderHost<'_>) -> AppResult<()> {
+        let rendering::RenderHost {
+            language,
+            tokens,
+            font_size,
+            workspace,
+            project_id: project,
+            ..
+        } = host;
         ui.columns(2, |columns| -> AppResult<()> {
             for (column, (label, session, media)) in columns.iter_mut().zip([
                 ("Original text", &mut self.before, &mut self.before_media),
@@ -181,6 +182,10 @@ impl StudioApp {
         let project = self.project.as_ref().ok_or("Open a project for review.")?;
         let proposal = self.workspace.rich_proposal(&project.id, id)?;
         let preview = RichPreview::new(&proposal)?;
+        self.rich_review.excerpts = Some((
+            excerpt(&preview.before.document().plain_text(), 340),
+            excerpt(&preview.after.document().plain_text(), 340),
+        ));
         self.rich_review.selected = Some(std::sync::Arc::new(proposal));
         self.rich_review.preview = Some(preview);
         Ok(())
@@ -304,7 +309,7 @@ impl StudioApp {
                         "Revision {revision}",
                         &[("revision", attachment.base_revision.to_string())],
                     ));
-                    ui.label(RichText::new(&attachment.quote).size(13.0));
+                    ui.label(RichText::new(excerpt(&attachment.quote, 340)).size(13.0));
                     if stale {
                         ui.colored_label(
                             t.warning,
@@ -399,50 +404,36 @@ impl StudioApp {
                 self.record_error(result);
             }
         }
-        if let Some(cursor) = self.rich_review.next_cursor {
-            if ui.button(l.text("Load more proposals")).clicked() {
-                let result = (|| -> AppResult<()> {
-                    let document = self
-                        .document
-                        .as_ref()
-                        .ok_or("Open a document for review.")?;
-                    let rows = self.workspace.rich_proposals(
-                        &document.project_id,
-                        &document.id,
-                        Some(cursor),
-                        16,
-                    )?;
-                    self.rich_review.next_cursor = if rows.len() == 16 {
-                        rows.last().map(|row| row.cursor)
-                    } else {
-                        None
-                    };
-                    self.rich_review.records.extend(rows);
-                    Ok(())
-                })();
-                self.record_error(result);
-            }
+        if let Some(cursor) = self.rich_review.next_cursor
+            && ui.button(l.text("Load more proposals")).clicked()
+        {
+            let result = (|| -> AppResult<()> {
+                let document = self
+                    .document
+                    .as_ref()
+                    .ok_or("Open a document for review.")?;
+                let rows = self.workspace.rich_proposals(
+                    &document.project_id,
+                    &document.id,
+                    Some(cursor),
+                    16,
+                )?;
+                self.rich_review.next_cursor = if rows.len() == 16 {
+                    rows.last().map(|row| row.cursor)
+                } else {
+                    None
+                };
+                self.rich_review.records.extend(rows);
+                Ok(())
+            })();
+            self.record_error(result);
         }
         if let Some(proposal) = self.rich_review.selected.clone() {
             ui.add_space(12.0);
-            let before = RichTree::from_json(proposal.before.clone()).map(|tree| tree.plain_text());
-            let after = RichTree::from_json(proposal.after.clone()).map(|tree| tree.plain_text());
-            if let (Ok(before), Ok(after)) = (before, after) {
-                diff_block(
-                    ui,
-                    l.text("Original text"),
-                    &excerpt(&before, 340),
-                    t.surface,
-                    t,
-                );
+            if let Some((before, after)) = &self.rich_review.excerpts {
+                diff_block(ui, l.text("Original text"), before, t.surface, t);
                 ui.add_space(8.0);
-                diff_block(
-                    ui,
-                    l.text("Proposal"),
-                    &excerpt(&after, 340),
-                    t.accent_soft,
-                    t,
-                );
+                diff_block(ui, l.text("Proposal"), after, t.accent_soft, t);
             }
             ui.add_space(10.0);
             if components::action(ui, l.text("Review all changes"), true, None).clicked() {
@@ -524,13 +515,17 @@ impl StudioApp {
                 if let Some(preview) = &mut preview {
                     let result = preview.show(
                         ui,
-                        &self.workspace,
-                        self.project
-                            .as_ref()
-                            .map_or("", |project| project.id.as_str()),
-                        self.language,
-                        t,
-                        self.font_size,
+                        rendering::RenderHost {
+                            workspace: &self.workspace,
+                            project_id: self
+                                .project
+                                .as_ref()
+                                .map_or("", |project| project.id.as_str()),
+                            language: self.language,
+                            tokens: t,
+                            font_size: self.font_size,
+                            pixel_scale: ui.ctx().pixels_per_point(),
+                        },
                     );
                     self.record_error(result);
                 }
