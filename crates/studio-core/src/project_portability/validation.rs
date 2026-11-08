@@ -466,7 +466,11 @@ fn validate_inner(manifest: &Value, allow_empty: bool) -> Result<Vec<ProjectAtta
             .map_err(|e| StudioError::Validation(format!("Invalid annotation source tree: {e}")))?;
         super::super::AnnotationAnchor::adapt_legacy(&tree, anchor, None)?;
         if annotation["kind"].as_str() == Some("note") {
-            name(annotation, "note", 24_000)?;
+            name(
+                annotation,
+                "note",
+                super::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS,
+            )?;
         }
         if annotation["kind"].as_str() == Some("dictionary_link")
             && annotation["dictionaryTermId"].is_null()

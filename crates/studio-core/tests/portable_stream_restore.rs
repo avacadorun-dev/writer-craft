@@ -10,6 +10,7 @@ use craft_editor_model::{
     Command, Document as RichTree, Revision, ScalarOffset, TextRange, Transaction,
 };
 use serde_json::{Value, json};
+use sha2::Digest;
 use studio_core::{
     AnchorStatus, AnnotationStatus, PortableObjectReference, PortableObjectSource,
     PreparedPortableProject, ProjectImportWorker, ProjectPortableExportWorker,
@@ -402,4 +403,182 @@ fn cancelled_or_semantically_foreign_records_should_never_publish_partial_projec
             .is_err()
     );
     assert_eq!(importer.workspace().list_projects().unwrap().len(), 1);
+}
+struct NoAssets;
+impl studio_core::ImportAssetSource for NoAssets {
+    fn open<'a>(
+        &'a mut self,
+        _: &studio_core::ProjectAttachment,
+    ) -> std::io::Result<Box<dyn Read + 'a>> {
+        Err(std::io::Error::other("This source fixture has no assets"))
+    }
+}
+fn legacy_source(note: &str) -> String {
+    let content = rich("echo");
+    let schema = content["attrs"]["schemaVersion"].as_u64().unwrap_or(1);
+    let manifest = json!({"format":"writers-studio-project","formatVersion":8,
+        "project":{"id":"legacy-project","title":"Legacy source","kind":"custom","language":"en","structureRevision":1,"structure":{"schemaVersion":1,"template":"custom","rootLabel":"Writing","nodeTypes":[{"key":"folder","label":"Folder","canBeRoot":true,"contentBearing":false,"allowedChildren":["document"]},{"key":"document","label":"Chapter","canBeRoot":false,"contentBearing":true,"allowedChildren":[]}]}},
+        "nodes":[{"id":"folder","kind":"folder","title":"Part","status":"draft","position":0,"currentRevision":0},{"id":"doc","parentId":"folder","kind":"document","title":"Chapter","status":"editing","position":1,"currentRevision":1}],
+        "documentRevisions":[{"id":"revision","nodeId":"doc","revision":1,"baseRevision":0,"schemaVersion":schema,"content":content,"plainText":"echo","source":"manual"}],
+        "documentAnnotations":[{"id":"source-note","nodeId":"doc","kind":"note","status":"open","anchorStatus":"attached","anchor":{"blockId":"p","start":0,"end":4,"exactText":"echo","prefix":"","suffix":""},"note":note,"baseRevision":1,"revision":1}],
+        "namedVersions":[],"dictionaryTerms":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[],"vendorNumber":"HUGE"});
+    format!(
+        " \n{}\r\n",
+        serde_json::to_string_pretty(&manifest)
+            .unwrap()
+            .replace("\"HUGE\"", "1.2345678901234567890123456789e+100")
+    )
+}
+#[test]
+fn source_original_tree_precision_and_newer_note_baseline_should_survive_native_restore() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("legacy.sqlite");
+    let raw = legacy_source("Old source note");
+    let source = studio_core::ValidatedProjectImport::parse(raw.as_bytes()).unwrap();
+    let mut importer = ProjectImportWorker::open(&database).unwrap();
+    let original = importer
+        .import(
+            &source,
+            &mut NoAssets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let original_document = importer
+        .workspace()
+        .resolve_project_resource(&original.project_id, "document", "doc")
+        .unwrap();
+    let note = importer
+        .workspace()
+        .annotations(&original_document)
+        .unwrap()
+        .remove(0);
+    importer
+        .workspace()
+        .update_annotation(
+            &note.id,
+            1,
+            1,
+            studio_core::AnnotationPatch {
+                note: Some("New native note".into()),
+                status: None,
+            },
+        )
+        .unwrap();
+    let mut exporter = ProjectPortableExportWorker::open(&database).unwrap();
+    let prepared = exporter
+        .prepare(
+            &original.project_id,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let stream = preflight(&prepared, None);
+    let restored = importer
+        .restore_stream(&stream, &ProjectTransferCancellation::default())
+        .unwrap();
+    let document = importer
+        .workspace()
+        .resolve_project_resource(&restored.project_id, "document", "doc")
+        .unwrap();
+    assert_ne!(document, original_document);
+    let tree = importer
+        .workspace()
+        .project_tree(&restored.project_id)
+        .unwrap();
+    assert_eq!(tree.len(), 2);
+    assert_eq!(tree[1].metadata["parentId"], "folder");
+    assert_eq!(tree[1].metadata["kind"], "document");
+    assert_eq!(
+        importer.workspace().annotations(&document).unwrap()[0].note,
+        "New native note"
+    );
+    let snapshot = importer
+        .workspace()
+        .project_export_snapshot(&restored.project_id)
+        .unwrap();
+    assert_eq!(snapshot.manifest_bytes(), raw.as_bytes());
+    assert!(
+        snapshot.requires_canonical_companion(),
+        "New note state must not qualify for an old source-only export"
+    );
+    assert!(!snapshot.has_retained_evidence());
+}
+#[test]
+fn format2_should_preserve_source_24000_character_notes_and_roll_back_24001() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("long.sqlite");
+    let raw = legacy_source(&"Я".repeat(studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS));
+    let parsed = studio_core::ValidatedProjectImport::parse(raw.as_bytes()).unwrap();
+    let mut importer = ProjectImportWorker::open(&database).unwrap();
+    let source = importer
+        .import(
+            &parsed,
+            &mut NoAssets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let mut exporter = ProjectPortableExportWorker::open(&database).unwrap();
+    let prepared = exporter
+        .prepare(&source.project_id, &ProjectTransferCancellation::default())
+        .unwrap();
+    let stream = preflight(&prepared, None);
+    let restored = importer
+        .restore_stream(&stream, &ProjectTransferCancellation::default())
+        .unwrap();
+    let document = importer
+        .workspace()
+        .resolve_project_resource(&restored.project_id, "document", "doc")
+        .unwrap();
+    assert_eq!(
+        importer.workspace().annotations(&document).unwrap()[0].note,
+        "Я".repeat(24_000)
+    );
+    let mut objects = BTreeMap::new();
+    prepared
+        .visit_objects(&mut |reference| {
+            let mut bytes = Vec::new();
+            prepared.copy_object(
+                reference,
+                &mut bytes,
+                &ProjectTransferCancellation::default(),
+            )?;
+            objects.insert(reference.sha256().to_owned(), bytes);
+            Ok(())
+        })
+        .unwrap();
+    let mut root: Value = serde_json::from_slice(prepared.root_bytes()).unwrap();
+    let component = root["components"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|component| component["domain"] == "nativeAnnotations")
+        .unwrap();
+    let old = component["sha256"].as_str().unwrap().to_owned();
+    let mut record: Value = serde_json::from_slice(&objects[&old]).unwrap();
+    let state_sha = record["state"]["sha256"].as_str().unwrap();
+    let mut state: Value = serde_json::from_slice(&objects[state_sha]).unwrap();
+    state["note"] = json!("Я".repeat(studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS + 1));
+    let state = serde_json::to_vec(&state).unwrap();
+    let state_sha = format!("{:x}", sha2::Sha256::digest(&state));
+    record["state"] = json!({"sha256":state_sha,"byteSize":state.len()});
+    objects.insert(state_sha, state);
+    let mut shard = serde_json::to_vec(&record).unwrap();
+    shard.push(b'\n');
+    let sha = format!("{:x}", sha2::Sha256::digest(&shard));
+    component["sha256"] = json!(sha);
+    component["byteSize"] = json!(shard.len());
+    objects.remove(&old);
+    objects.insert(sha, shard);
+    let invalid = VerifiedPortableProjectStream::preflight(
+        &serde_json::to_vec(&root).unwrap(),
+        &mut Objects(objects),
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let before = importer.workspace().list_projects().unwrap().len();
+    assert!(
+        importer
+            .restore_stream(&invalid, &ProjectTransferCancellation::default())
+            .is_err()
+    );
+    assert_eq!(importer.workspace().list_projects().unwrap().len(), before);
 }

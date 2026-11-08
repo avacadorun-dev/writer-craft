@@ -348,3 +348,34 @@ fn cancellation_duplicate_keys_or_corrupt_raw_hash_should_leave_existing_project
         .is_err()
     );
 }
+#[test]
+fn imported_note_should_preserve_the_source_24000_character_bound_and_refuse_24001() {
+    let (_, _, _, _, bytes) = fixture();
+    let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+    value["nativeState"]["annotationHistory"] = json!([]);
+    value["nativeState"]["annotations"][0]["state"]["note"] =
+        json!("Я".repeat(studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS));
+    let parsed = parse(&value).unwrap();
+    let mut worker = ProjectImportWorker::memory().unwrap();
+    let imported = worker
+        .restore_portable(
+            &parsed,
+            &mut NoAssets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let document = worker
+        .workspace()
+        .list_documents(&imported.project_id)
+        .unwrap()
+        .remove(0);
+    let note = worker
+        .workspace()
+        .annotations(&document.id)
+        .unwrap()
+        .remove(0);
+    assert_eq!(note.note, "Я".repeat(24_000));
+    value["nativeState"]["annotations"][0]["state"]["note"] =
+        json!("Я".repeat(studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS + 1));
+    assert!(parse(&value).is_err());
+}

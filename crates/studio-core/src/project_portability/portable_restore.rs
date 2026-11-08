@@ -317,7 +317,7 @@ fn validate_state(
         || state.anchor.exact_text.len() > 16 * 1024 * 1024
         || state.anchor.prefix.chars().count() > 32
         || state.anchor.suffix.chars().count() > 32
-        || state.note.chars().count() > 10_000
+        || state.note.chars().count() > super::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
     {
         return invalid("Native note has invalid identity, revisions, text or anchor bounds");
     }

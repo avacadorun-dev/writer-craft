@@ -54,6 +54,9 @@ use json::invalid;
 pub const MAX_PROJECT_TRANSFER_BYTES: u64 = 512 * 1024 * 1024;
 /// Maximum original JSON manifest bytes before any parsing or allocation.
 pub const MAX_PROJECT_MANIFEST_BYTES: usize = 64 * 1024 * 1024;
+/// Existing source-project author-note bound; imported backend-valid notes must not be clamped
+/// to the original frontend typing limit or a smaller native creation convenience limit.
+pub const MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS: usize = 24_000;
 
 /// Caller-owned cancellation shared with an import/export worker.
 #[derive(Clone, Default)]
