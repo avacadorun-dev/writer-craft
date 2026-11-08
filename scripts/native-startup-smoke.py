@@ -154,10 +154,12 @@ def main(bundle: Path) -> int:
             "compact-light-en-formula": "showcase-quadratic",
             "compact-dark-en-inline-formula": "showcase-inline-equation",
             "compact-dark-en-large-serif-image": "showcase-image",
+            "compact-dark-en-large-serif-image-bottom": "showcase-diagrams",
             "wide-light-en-small-inter-flowchart": "showcase-flowchart",
         }
         profiles = {
             "compact-dark-en-large-serif-image": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
+            "compact-dark-en-large-serif-image-bottom": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
             "wide-light-en-small-inter-flowchart": {"font_family": "inter", "font_size": 17.0, "line_height": 1.5, "paragraph_spacing": 0.65, "list_item_spacing": 0.0, "manuscript_width": 80},
         }
         for name, language, section, compact, flags in (
@@ -178,6 +180,7 @@ def main(bundle: Path) -> int:
             ("compact-light-en-formula", "en", None, True, ["--light"]),
             ("compact-dark-en-inline-formula", "en", None, True, []),
             ("compact-dark-en-large-serif-image", "en", None, True, []),
+            ("compact-dark-en-large-serif-image-bottom", "en", None, True, []),
             ("wide-light-en-small-inter-flowchart", "en", None, False, ["--light"]),
         ):
             target = targets.get(name)

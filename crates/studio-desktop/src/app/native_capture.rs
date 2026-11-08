@@ -8,6 +8,8 @@ use std::path::Path;
 
 const STABLE_FRAMES: u8 = 3;
 const DEADLINE: Duration = Duration::from_secs(38);
+const READBACK_RETRY: Duration = Duration::from_millis(500);
+const MAX_READBACK_REQUESTS: u8 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub(super) struct CaptureReadiness {
@@ -41,6 +43,8 @@ pub(super) struct CaptureProbe {
     last: Option<CaptureReadiness>,
     stable_frames: u8,
     requested: bool,
+    requested_at: Option<Instant>,
+    readback_requests: u8,
     #[cfg(any(feature = "editor-preview", test))]
     navigated_generation: Option<u64>,
 }
@@ -53,12 +57,26 @@ impl CaptureProbe {
         self.navigated_generation = Some(generation);
         true
     }
+    fn readback_due(&self, now: Instant) -> bool {
+        self.readback_requests < MAX_READBACK_REQUESTS
+            && (!self.requested
+                || self
+                    .requested_at
+                    .is_some_and(|sent| now.saturating_duration_since(sent) >= READBACK_RETRY))
+    }
+    fn acknowledge_readback_request(&mut self, now: Instant) {
+        self.requested = true;
+        self.requested_at = Some(now);
+        self.readback_requests = self.readback_requests.saturating_add(1);
+    }
     fn observe(&mut self, readiness: CaptureReadiness) -> bool {
         if readiness.settled && readiness.target_visible && self.last == Some(readiness) {
             self.stable_frames = self.stable_frames.saturating_add(1);
         } else {
             self.stable_frames = u8::from(readiness.settled && readiness.target_visible);
             self.requested = false;
+            self.requested_at = None;
+            self.readback_requests = 0;
         }
         self.last = Some(readiness);
         self.stable_frames >= STABLE_FRAMES
@@ -167,11 +185,16 @@ impl StudioApp {
             self.finish_capture(
                 ctx,
                 None,
-                Some("native_media_or_target_did_not_settle_before_deadline"),
+                Some(if ready {
+                    "native_readback_did_not_arrive_before_deadline"
+                } else {
+                    "native_media_or_target_did_not_settle_before_deadline"
+                }),
             );
-        } else if ready && !self.capture_probe.requested {
+        } else if ready && self.capture_probe.readback_due(Instant::now()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
-            self.capture_probe.requested = true;
+            self.capture_probe
+                .acknowledge_readback_request(Instant::now());
         }
         if self.capture.is_some() {
             ctx.request_repaint_after(Duration::from_millis(16));
@@ -218,6 +241,7 @@ impl StudioApp {
                 "schema_version": 1, "status": if error.is_none() && image.is_some() { "captured" } else { "failed" },
                 "error": error, "target_block": self.capture_probe.target,
                 "frame": self.frames, "stable_frames": self.capture_probe.stable_frames,
+                "readback_requests": self.capture_probe.readback_requests,
                 "render_readiness": self.capture_probe.last, "canonical_unchanged": canonical_unchanged,
                 "observed_inner_size_points": viewport, "pixels_per_point": ctx.pixels_per_point(),
                 "image_size_pixels": image.map(|image| [image.width(), image.height()]),
@@ -265,6 +289,27 @@ mod tests {
         assert!(!probe.observe(ready));
         assert!(!probe.observe(ready));
         assert!(probe.observe(ready));
+    }
+    #[test]
+    fn missing_gpu_readback_retries_are_bounded_and_invalidated_by_new_geometry() {
+        let mut probe = CaptureProbe::default();
+        let ready = CaptureReadiness::default();
+        probe.observe(ready);
+        let start = Instant::now();
+        for index in 0..MAX_READBACK_REQUESTS {
+            let now = start + READBACK_RETRY * u32::from(index);
+            assert!(probe.readback_due(now));
+            probe.acknowledge_readback_request(now);
+            assert!(!probe.readback_due(now + Duration::from_millis(1)));
+        }
+        assert!(!probe.readback_due(start + Duration::from_secs(30)));
+        probe.observe(CaptureReadiness {
+            generation: 1,
+            ..ready
+        });
+        assert!(!probe.requested);
+        assert_eq!(probe.readback_requests, 0);
+        assert!(probe.readback_due(start + Duration::from_secs(31)));
     }
     #[test]
     fn an_oversized_target_is_not_repeatedly_scrolled_without_new_metrics() {
