@@ -114,6 +114,21 @@ impl NotesState {
             .snapshot
             .as_ref()
             .map(|snapshot| snapshot.document_id().to_owned());
+        if prior_id.as_deref().is_some_and(|id| id != document.id)
+            || self
+                .preview
+                .iter()
+                .any(|note| note.document_id != document.id)
+        {
+            self.selected = None;
+            self.preview.clear();
+            self.preview_key = None;
+            if let Some(composer) = self.composer.take() {
+                self.paused_composers
+                    .insert(composer.document_id.clone(), composer);
+            }
+            self.delete_confirmation = None;
+        }
         let snapshot = match workspace.annotation_preview_snapshot(&document.id, document.revision)
         {
             Ok(snapshot) => snapshot,
@@ -124,14 +139,6 @@ impl NotesState {
                 return Err(error.into());
             }
         };
-        if prior_id.as_deref().is_some_and(|id| id != document.id) {
-            self.selected = None;
-            if let Some(composer) = self.composer.take() {
-                self.paused_composers
-                    .insert(composer.document_id.clone(), composer);
-            }
-            self.delete_confirmation = None;
-        }
         if self.composer.is_none() {
             self.composer = self.paused_composers.remove(&document.id);
         }
@@ -1312,5 +1319,28 @@ mod tests {
         );
         assert_eq!(second, "Beta");
         assert!(first.contains('X'));
+    }
+    #[test]
+    fn failed_new_document_snapshot_never_exposes_previous_documents_notes_on_retry() -> TestResult
+    {
+        let (workspace, document, note, _) = fixture()?;
+        let mut state = NotesState::default();
+        state.prepare(&workspace, &document)?;
+        state.activate(&note.id);
+        let mut other = workspace.create_rich_document(
+            &document.project_id,
+            "Identical template",
+            document.rich_json.clone().ok_or("missing tree")?,
+        )?;
+        other.revision += 1; // Simulate a stale captured document revision during an external update.
+        assert!(state.prepare(&workspace, &other).is_err());
+        assert!(state.preview.is_empty());
+        assert!(state.selected.is_none());
+        assert!(state.invalid);
+        state.prepare(&workspace, &other)?;
+        assert!(state.preview.is_empty());
+        assert!(state.selected.is_none());
+        assert!(state.invalid);
+        Ok(())
     }
 }
