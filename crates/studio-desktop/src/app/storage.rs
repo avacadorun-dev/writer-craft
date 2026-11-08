@@ -312,6 +312,7 @@ impl StudioApp {
     #[cfg(feature = "editor-preview")]
     pub(super) fn cancel_workspace_backup_preflight(&mut self) {
         self.storage.preflight = None;
+        self.storage.board_preflight = None;
         self.storage.attempt = Some(BackupAttempt::Cancelled);
     }
 
@@ -407,10 +408,12 @@ impl StudioApp {
                     );
                 }
                 ui.add_space(12.0);
-                ui.label(l.text(if same {
-                    "Waiting for the board to finish saving."
-                } else {
+                ui.label(l.text(if !same {
                     "The board changed. Review it before backing up."
+                } else if ready {
+                    "Choose a backup file."
+                } else {
+                    "Waiting for the board to finish saving."
                 }));
                 ui.label(RichText::new(l.text(status)).color(if ready { t.good } else { t.muted }));
                 components::footer(ui, |ui| {
