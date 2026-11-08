@@ -595,7 +595,8 @@ def validate_candidates(downloads):
         raise ValueError("All three installer platforms are required")
     identities = {(item["version"], item["commit"], item["source_fingerprint"]) for _, item in candidates.values()}
     if len(identities) != 1:
-        raise ValueError("Installers must have the same exact source and version")
+        details = {name: {key: metadata[key] for key in ["version", "commit", "source_fingerprint"]} for name, (_, metadata) in candidates.items()}
+        raise ValueError("Installers must have the same exact source and version: " + json.dumps(details, sort_keys=True))
     version, commit, fingerprint = identities.pop()
     windows_version(version)
     if not re.fullmatch(r"[a-f0-9]{40}", commit) or not re.fullmatch(r"[a-f0-9]{64}", fingerprint):

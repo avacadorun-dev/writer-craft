@@ -61,6 +61,8 @@ def workspace_metadata(root: Path = ROOT):
 
 
 def source_fingerprint(root: Path = ROOT) -> str:
+    # Hash actual build bytes; .gitattributes makes tracked text LF on every host.
+    # Never hide a different compiled input by normalizing only its evidence hash.
     files = [root / "Cargo.toml", root / "Cargo.lock"]
     for name in ["DESKTOP_UX.md", "UX_ACCEPTANCE.md", "USER_FEEDBACK.md", "WORKFLOW_MAP.md"]:
         contract = root / "docs/design" / name
@@ -334,6 +336,20 @@ class ReleaseChecks(unittest.TestCase):
             self.assertEqual(before, source_fingerprint(root))
             source.write_text("changed")
             self.assertNotEqual(before, source_fingerprint(root))
+
+    def test_git_checkout_filters_preserve_exact_source_and_binary_bytes_on_windows(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True, capture_output=True)
+            (root / ".gitattributes").write_bytes((ROOT / ".gitattributes").read_bytes())
+            fixtures = {"Cargo.lock": b"version = 4\n\n[[package]]\nname = \"fixture\"\n", "crates/core.rs": b"// Native input\nfn main() {}\n", "assets/icon.png": b"binary\r\npreserve\0exact\n"}
+            for name, expected in fixtures.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(expected)
+                identity = subprocess.run(["git", "-C", str(root), "hash-object", "-w", "--no-filters", str(path)], check=True, capture_output=True, text=True).stdout.strip()
+                actual = subprocess.run(["git", "-C", str(root), "-c", "core.autocrlf=true", "cat-file", "--filters", "--path=" + name, identity], check=True, capture_output=True).stdout
+                self.assertEqual(actual, expected, name)
 
     def test_evidence_cannot_escape_repository(self):
         with tempfile.TemporaryDirectory() as folder:

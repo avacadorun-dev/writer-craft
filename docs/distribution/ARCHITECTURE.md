@@ -15,3 +15,22 @@ The macOS bundle uses the normal application identity, contains generated featur
 Every package has an executable hash and package hash, full source fingerprint, target, feature list, source commit and version. The collection step rejects missing/duplicate platforms, mismatched versions/commits/fingerprints, modified packages/checksum files, missing installation checks and unsupported release/UX claims. No private source workspace, archive, manuscript or personal file is an input. Fixture tests exercise these refusal paths and the uninstall ownership boundary without builds or installation. Native compilation/installation results must come from the actual hosted run; source tests cannot substitute for them.
 
 Primary packaging references: [Apple disk-image packaging](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution), [NSIS license](https://nsis.sourceforge.io/License), [NSIS System plugin](https://nsis.sourceforge.io/Docs/System/System.html), [Debian dependency policy](https://www.debian.org/doc/debian-policy/ch-sharedlibs.html#generating-dependencies-on-shared-libraries), and [dpkg-shlibdeps](https://manpages.debian.org/bookworm/dpkg-dev/dpkg-shlibdeps.1.en.html). Tool versions and action commits are explicit; update them deliberately and repeat qualification.
+
+## Byte-identical cross-platform source checkout
+
+Installer qualification `42483551524` at `f9c5b75` successfully built and exercised macOS ARM64 DMG,
+per-user Windows x64 NSIS and Linux amd64 Debian packages, including Debian12 and Ubuntu24.04 install/remove
+checks. Its aggregate correctly rejected different runtime/source fingerprints. Investigation verified
+the Windows artifact ZIP digest and read only its evidence in bounded memory, storing no installer binary.
+The same commit's Git blob fingerprint is `87f573558e8678229e1c5702981c120f9c09cd02830e3559023ae3d4abe5bf96`;
+Git's actual Windows checkout filters reproduce the artifact's
+`fe79f016f7e4889231621dc6231bb2eb55f5a1fc3507c40a6ff088136050da91` exactly.
+The difference is text newline conversion, not a different version or commit.
+
+The repository now enforces LF for tracked text through `.gitattributes`, with explicit binary assets.
+A synthetic Git filter regression exercises Windows autocrlf against Rust, lock and binary inputs.
+Fingerprints continue hashing the actual build bytes; the collector never normalizes or accepts a
+mismatch merely because commit labels match. Future mismatches report each platform's identity to make
+qualification failures concrete. Same-source installers must be rebuilt and requalified under the new
+checkout policy. Earlier successful package exercises do not qualify a later source or grant platform
+UX, signing/notarization, release publication or owner acceptance.

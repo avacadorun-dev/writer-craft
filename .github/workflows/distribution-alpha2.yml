@@ -4,6 +4,7 @@ on:
   push:
     branches: [feature/full-editor-parity]
     paths:
+      - '.gitattributes'
       - '.github/workflows/distribution-alpha2.yml'
       - 'scripts/package-installers.py'
       - 'scripts/test-package-installers.py'
