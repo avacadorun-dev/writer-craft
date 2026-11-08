@@ -4,6 +4,8 @@ mod dialogs;
 mod library;
 mod manuscript;
 mod navigator;
+#[cfg(feature = "editor-preview")]
+mod rendering;
 mod review;
 #[cfg(feature = "editor-preview")]
 mod rich_editor;
@@ -199,7 +201,17 @@ impl StudioApp {
                 app.create_example()?;
             }
             if let Some(project) = app.projects.first().cloned() {
+                #[cfg(feature = "editor-preview")]
+                let showcase = if crate::editor_preview_requested() {
+                    Some(app.ensure_editor_showcase(&project)?)
+                } else {
+                    None
+                };
                 app.open_project(project)?;
+                #[cfg(feature = "editor-preview")]
+                if let Some(showcase) = showcase {
+                    app.open_document(showcase)?;
+                }
             }
         }
         if app.capture.is_some() && std::env::args().any(|argument| argument == "--capture-review")
@@ -422,7 +434,7 @@ impl StudioApp {
 
     fn navigator_width(&self, ctx: &egui::Context) -> f32 {
         egui::containers::panel::PanelState::load(ctx, egui::Id::new("navigator"))
-            .map_or(280.0, |state| state.outer_rect.width().clamp(210.0, 340.0))
+            .map_or(264.0, |state| state.outer_rect.width().clamp(210.0, 340.0))
     }
     fn effective_panes(&self, ctx: &egui::Context) -> (bool, bool) {
         let nav = self.navigator_width(ctx);
@@ -569,6 +581,7 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
             }
+            StudioError::AnnotationConflict { .. } => "The note changed. Reload it before editing.",
             StudioError::DraftChanged => {
                 "The working draft changed. Preserve your changes before retrying."
             }

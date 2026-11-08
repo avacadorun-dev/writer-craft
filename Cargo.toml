@@ -22,8 +22,9 @@ eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "a
 egui = "=0.36.2"
 rfd = "=0.18.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
-craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "418cc687e2d80a26753b2ca76c52a6c272ad7255" }
-craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "418cc687e2d80a26753b2ca76c52a6c272ad7255", features = ["wordcraft-canvas"] }
+craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "5d2b78abb2961675ac65df037ebce4b1d47ea73a" }
+craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "5d2b78abb2961675ac65df037ebce4b1d47ea73a", features = ["wordcraft-canvas"] }
+craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "5d2b78abb2961675ac65df037ebce4b1d47ea73a" }
 studio-core = { path = "crates/studio-core" }
 studio-transfer = { path = "crates/studio-transfer" }
 

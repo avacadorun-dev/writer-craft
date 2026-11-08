@@ -14,7 +14,7 @@ workspace = true
 
 [features]
 default = []
-editor-preview = ["dep:craft-editor-egui", "dep:craft-editor-model", "dep:uuid"]
+editor-preview = ["dep:craft-editor-egui", "dep:craft-editor-model", "dep:craft-editor-render", "dep:uuid"]
 
 [dependencies]
 eframe.workspace = true
@@ -30,3 +30,5 @@ image.workspace = true
 craft-editor-egui = { workspace = true, optional = true }
 craft-editor-model = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
+
+craft-editor-render = { workspace = true, optional = true }

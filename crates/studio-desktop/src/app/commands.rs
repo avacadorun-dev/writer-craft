@@ -157,9 +157,13 @@ impl StudioApp {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
-                        RichText::new(env!("CARGO_PKG_VERSION"))
-                            .size(11.0)
-                            .color(t.muted),
+                        RichText::new(if crate::editor_preview_requested() {
+                            l.text("Editor Preview")
+                        } else {
+                            env!("CARGO_PKG_VERSION")
+                        })
+                        .size(11.0)
+                        .color(t.muted),
                     );
                     ui.separator();
                     icons::icon(ui, Icon::Shield, 13.0, t.good);

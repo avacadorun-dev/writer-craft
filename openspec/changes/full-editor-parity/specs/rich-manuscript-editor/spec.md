@@ -51,3 +51,15 @@ The native alpha.2 editor MAY limit editing to 63 logical table columns, as expl
 #### Scenario: A command would exceed table capacity
 - **WHEN** a UI or MCP operation would create or widen a table beyond 63 logical columns
 - **THEN** it returns a capacity error without partially changing document, history or annotations
+
+### Requirement: Owner-selected Balanced workspace
+
+The editor SHALL follow the owner-approved Balanced concept in `docs/design/WORKSPACE_EDITOR_REDESIGN.md`: a 48-point global bar, 56-point document identity row and 40-point flat formatting row, with a 28-point initial manuscript gutter. The implementation SHALL preserve comfortable prose measure, readable controls and distinct semantic groups rather than compressing all available commands into a narrow row. Shared pane boundaries and reachable overflow SHALL remain coherent across supported viewport sizes and languages.
+
+#### Scenario: A constrained desktop pane displays the editor
+- **WHEN** the author opens the editor at the minimum supported viewport or requests an inspector
+- **THEN** document identity and actions remain independently reachable, secondary formatting commands use labelled overflow as needed, the toolbar does not wrap or require horizontal scrolling, and the manuscript retains its minimum useful width
+
+#### Scenario: A design concept is reviewed
+- **WHEN** an illustration shows notes, diagrams, formulas or other rich content
+- **THEN** it is identified as a design concept and cannot substitute for the actual compiled 21-node/six-mark demonstration or native acceptance

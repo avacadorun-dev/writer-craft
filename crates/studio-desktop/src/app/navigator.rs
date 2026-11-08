@@ -5,7 +5,7 @@ impl StudioApp {
     pub(super) fn navigation(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
         egui::Panel::left("navigator")
-            .default_size(280.0)
+            .default_size(264.0)
             .min_size(210.0)
             .max_size(340.0)
             .frame(

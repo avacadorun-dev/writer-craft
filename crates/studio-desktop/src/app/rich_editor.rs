@@ -5,7 +5,7 @@ use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::C
 use craft_editor_model as tables;
 use craft_editor_model::{
     CellRect, CellSelection, Command, Document as RichDocument, Mark, Node, NodePath, NodeRef,
-    Revision, ScalarOffset, TableGrid,
+    ReplayProof, Revision, ScalarOffset, TableGrid,
 };
 use serde_json::{Map, json};
 
@@ -13,6 +13,8 @@ pub(super) struct RichState {
     pub session: EditorSession,
     draft_version: Option<String>,
     pub recovered: bool,
+    media: rendering::RenderState,
+    pending_proofs: Vec<ReplayProof>,
     read_only: bool,
     last_diagnostic: Option<String>,
 }
@@ -50,6 +52,8 @@ impl RichState {
             draft_version: draft.map(|draft| draft.version),
             recovered,
             read_only,
+            media: rendering::RenderState::default(),
+            pending_proofs: vec![],
             last_diagnostic: None,
         }))
     }
@@ -83,16 +87,52 @@ impl StudioApp {
         Ok(())
     }
 
+    pub(super) fn ensure_editor_showcase(&mut self, project: &Project) -> AppResult<Document> {
+        if let Some(document) = self
+            .workspace
+            .list_documents(&project.id)?
+            .into_iter()
+            .find(|document| {
+                document
+                    .rich_json
+                    .as_ref()
+                    .and_then(|value| value.get("writerCraftShowcase"))
+                    .and_then(serde_json::Value::as_u64)
+                    == Some(1)
+            })
+        {
+            return Ok(document);
+        }
+        Ok(self.workspace.create_rich_document(
+            &project.id,
+            "00. All editor blocks",
+            serde_json::from_str(include_str!("editor_showcase.json"))?,
+        )?)
+    }
+
     pub(super) fn save_rich_editor(&mut self) -> AppResult<()> {
         let document = self.document.as_ref().ok_or("No active document")?;
         let rich = self.rich.as_mut().ok_or("No active rich editor")?;
         // A pending native preedit belongs to the input method, not canonical storage.
+        for change in rich.session.take_pending_changes() {
+            rich.pending_proofs.push(change.replay_proof());
+        }
         rich.write_draft(&self.workspace, document)?;
-        let saved = self.workspace.save_rich_document(
-            &document.id,
-            document.revision,
-            rich.session.document().to_json()?,
-        )?;
+        let content = rich.session.document().to_json()?;
+        let saved = if !rich.pending_proofs.is_empty() && !rich.recovered {
+            self.workspace.save_rich_editor_changes(
+                &document.id,
+                document.revision,
+                &rich.pending_proofs,
+                content,
+            )?
+        } else {
+            // Recovered drafts have canonical snapshots but no in-process replay receipts.
+            // The core preserves notes conservatively rather than inventing a transform.
+            self.workspace
+                .save_rich_document(&document.id, document.revision, content)?
+        };
+        rich.pending_proofs.clear();
         rich.draft_version = None;
         rich.recovered = false;
         self.body.clone_from(&saved.body);
@@ -113,15 +153,20 @@ impl StudioApp {
         let before = rich.session.revision();
         let mut operation_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
         egui::Panel::top("rich-formatting")
-            .exact_size(44.0)
+            .exact_size(40.0)
             .resizable(false)
             .frame(
                 egui::Frame::new()
                     .fill(t.editor)
-                    .inner_margin(egui::Margin::symmetric(24, 5))
-                    .stroke(Stroke::new(1.0, t.border)),
+                    .inner_margin(egui::Margin::symmetric(16, 4)),
             )
             .show(ui, |ui| {
+                let boundary = ui.max_rect();
+                ui.painter().hline(
+                    boundary.x_range(),
+                    boundary.bottom() + 4.0,
+                    Stroke::new(1.0, t.border),
+                );
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
                     ui.add_enabled_ui(!rich.read_only && !rich.session.is_composing(), |ui| {
@@ -278,29 +323,41 @@ impl StudioApp {
                             }
                         });
                     });
-                    if ui.available_width() > 180.0 {
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.label(
-                                RichText::new(l.text("Editor Preview"))
-                                    .small()
-                                    .color(t.muted),
-                            );
-                        });
-                    }
                 });
             });
+        let media_ready = match rich.media.update(
+            rich.session.document(),
+            rich.session.revision(),
+            l,
+            t,
+            self.font_size,
+            ui.ctx().pixels_per_point(),
+        ) {
+            Ok(ready) => ready,
+            Err(error) => {
+                let diagnostic = error.to_string();
+                if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
+                    rich.last_diagnostic = Some(diagnostic);
+                    operation_error = Some(error);
+                }
+                false
+            }
+        };
+        if !media_ready {
+            ui.ctx().request_repaint_after(Duration::from_millis(50));
+        }
         let mut changed = false;
         egui::ScrollArea::vertical()
             .id_salt(("rich-scroll", rich.session.options.id))
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let available = ui.available_width();
-                let width = (available - 48.0).clamp(160.0, 820.0);
+                let width = (available - 56.0).clamp(160.0, 760.0);
                 ui.horizontal(|ui| {
                     ui.add_space(((available - width) * 0.5).max(0.0));
                     ui.vertical(|ui| {
                         ui.set_width(width);
-                        ui.add_space(24.0);
+                        ui.add_space(28.0);
                         if rich.read_only {
                             ui.label(
                                 RichText::new(l.text("Original format · read only"))
@@ -321,12 +378,26 @@ impl StudioApp {
                             min_height: 500.0,
                             read_only: rich.read_only,
                         };
-                        let output = rich.session.show_canvas(ui, &style);
+                        if !media_ready {
+                            if rich.media.failed() {
+                                ui.label(l.text("Document blocks could not be prepared. Your text is preserved."));
+                                if ui.button(l.text("Retry rendering")).clicked() { rich.media.retry(); }
+                            } else {
+                                ui.horizontal(|ui| { ui.spinner(); ui.label(l.text("Rendering document blocks…")); });
+                            }
+                            return;
+                        }
+                        let output = if let Some(catalog) = rich.media.catalog() {
+                            rich.session.show_canvas_with_resolver(ui, &style, catalog)
+                        } else {
+                            rich.session.show_canvas(ui, &style)
+                        };
                         if self.focus_manuscript {
                             output.response.request_focus();
                             self.focus_manuscript = false;
                         }
                         changed = !output.changes.is_empty();
+                        for change in output.changes { rich.pending_proofs.push(change.replay_proof()); }
                         if let Some(error) = output.errors.into_iter().next() {
                             let diagnostic = error.to_string();
                             if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
@@ -878,6 +949,167 @@ mod tests {
         assert_eq!(session.selection(), before.as_ref());
         session.redo()?;
         assert_eq!(session.selection(), after.as_ref());
+        Ok(())
+    }
+
+    #[test]
+    fn showcase_is_lossless_and_covers_all_original_nodes_and_marks() -> AppResult<()> {
+        fn collect(
+            node: &Node,
+            nodes: &mut std::collections::BTreeSet<String>,
+            marks: &mut std::collections::BTreeSet<String>,
+        ) {
+            nodes.insert(node.node_type.clone());
+            for mark in node.marks.as_deref().unwrap_or_default() {
+                marks.insert(mark.mark_type.clone());
+            }
+            for child in node.children() {
+                collect(child, nodes, marks);
+            }
+        }
+        let source: serde_json::Value = serde_json::from_str(include_str!("editor_showcase.json"))?;
+        let document = RichDocument::from_json(source.clone())?;
+        assert_eq!(document.to_json()?, source);
+        let mut nodes = std::collections::BTreeSet::new();
+        let mut marks = std::collections::BTreeSet::new();
+        collect(document.root(), &mut nodes, &mut marks);
+        assert_eq!(
+            nodes,
+            [
+                "doc",
+                "paragraph",
+                "heading",
+                "blockquote",
+                "bulletList",
+                "orderedList",
+                "listItem",
+                "hardBreak",
+                "horizontalRule",
+                "sceneBreak",
+                "text",
+                "codeBlock",
+                "table",
+                "tableRow",
+                "tableHeader",
+                "tableCell",
+                "imageBlock",
+                "mermaidBlock",
+                "callout",
+                "inlineMath",
+                "mathBlock"
+            ]
+            .map(str::to_owned)
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(
+            marks,
+            ["bold", "italic", "underline", "strike", "link", "code"]
+                .map(str::to_owned)
+                .into_iter()
+                .collect()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn complete_showcase_uses_real_renderers_without_source_fallbacks() -> AppResult<()> {
+        let source: serde_json::Value = serde_json::from_str(include_str!("editor_showcase.json"))?;
+        let document = RichDocument::from_json(source.clone())?;
+        let mut assets = craft_editor_render::AssetMap::default();
+        assets.insert(
+            "showcase-lighthouse",
+            std::sync::Arc::new(include_bytes!("../../../../assets/demo/lighthouse.svg").to_vec()),
+        );
+        let renderer =
+            craft_editor_render::Renderer::new(craft_editor_render::RenderOptions::default())?;
+        let catalog = renderer.prepare_document(&document, &assets, 1)?;
+        assert_eq!(catalog.len(), 6);
+        assert!(
+            catalog.failures().is_empty(),
+            "Valid showcase source must produce real media: {:?}",
+            catalog.failures()
+        );
+        let geometry = craft_editor_egui::layout::FlowGeometry::with_resolver(
+            &document,
+            760.0,
+            &craft_editor_egui::layout::GeometryStyle::default(),
+            &catalog,
+        )?;
+        assert!(geometry.extent().is_some());
+        assert_eq!(document.to_json()?, source);
+        Ok(())
+    }
+
+    #[test]
+    fn showcase_creation_is_idempotent_and_preserves_owner_edits() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let project = app.project.clone().ok_or("Missing project")?;
+        let first = app.ensure_editor_showcase(&project)?;
+        let mut content = first.rich_json.clone().ok_or("Missing showcase source")?;
+        content["content"][1]["content"][0]["text"] =
+            serde_json::json!("The owner edited this demonstration.");
+        let edited = app
+            .workspace
+            .save_rich_document(&first.id, first.revision, content)?;
+        let again = app.ensure_editor_showcase(&project)?;
+        assert_eq!(first.id, again.id);
+        assert_eq!(edited.rich_json, again.rich_json);
+        assert_eq!(app.workspace.list_documents(&project.id)?.len(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn autosave_replays_pending_native_edits_and_undo_restores_note_attachment() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let document = app.document.as_ref().ok_or("Missing document")?.clone();
+        let anchor = app.workspace.capture_annotation_anchor(
+            &document.id,
+            document.revision,
+            "intro",
+            ScalarOffset(7),
+            ScalarOffset(13),
+            "native",
+        )?;
+        let note = app.workspace.create_annotation(
+            &document.id,
+            document.revision,
+            anchor,
+            "Keep this word.",
+        )?;
+        app.rich
+            .as_mut()
+            .ok_or("Missing session")?
+            .session
+            .apply_commands(vec![Command::ReplaceText {
+                range: craft_editor_model::TextRange {
+                    block_id: "intro".into(),
+                    start: ScalarOffset(0),
+                    end: ScalarOffset(0),
+                },
+                expected: String::new(),
+                replacement: "New ".into(),
+            }])?;
+        app.dirty = Some(Instant::now());
+        // Save runs before paint and must drain the native queue itself.
+        app.save()?;
+        let shifted = app.workspace.annotation(&note.id)?;
+        assert_eq!(shifted.anchor.start, ScalarOffset(11));
+        assert_eq!(shifted.anchor_status, studio_core::AnchorStatus::Attached);
+        assert!(
+            app.rich
+                .as_ref()
+                .ok_or("Missing session")?
+                .pending_proofs
+                .is_empty()
+        );
+        app.rich.as_mut().ok_or("Missing session")?.session.undo()?;
+        app.dirty = Some(Instant::now());
+        app.save()?;
+        let restored = app.workspace.annotation(&note.id)?;
+        assert_eq!(restored.anchor.start, ScalarOffset(7));
+        assert_eq!(restored.note, "Keep this word.");
+        assert_eq!(restored.anchor_status, studio_core::AnchorStatus::Attached);
         Ok(())
     }
 

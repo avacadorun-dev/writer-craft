@@ -181,6 +181,97 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "The note changed. Reload it before editing.",
+        [
+            "Заметка изменилась. Обновите её перед редактированием.",
+            "The note changed. Reload it before editing.",
+            "Die Notiz wurde geändert. Laden Sie sie vor dem Bearbeiten neu.",
+            "La note a changé. Rechargez-la avant de la modifier.",
+            "La nota ha cambiado. Vuelva a cargarla antes de editar.",
+            "A nota foi alterada. Recarregue-a antes de editar.",
+            "笔记已更改。请重新加载后再编辑。",
+            "メモが変更されました。編集前に再読み込みしてください。",
+        ],
+    ),
+    (
+        "Rendering document blocks…",
+        [
+            "Подготавливаем блоки документа…",
+            "Rendering document blocks…",
+            "Dokumentblöcke werden vorbereitet…",
+            "Préparation des blocs du document…",
+            "Preparando los bloques del documento…",
+            "Preparando os blocos do documento…",
+            "正在准备文档块…",
+            "文書ブロックを準備中…",
+        ],
+    ),
+    (
+        "Diagram could not be rendered",
+        [
+            "Не удалось отобразить диаграмму",
+            "Diagram could not be rendered",
+            "Diagramm konnte nicht dargestellt werden",
+            "Impossible d’afficher le diagramme",
+            "No se pudo mostrar el diagrama",
+            "Não foi possível exibir o diagrama",
+            "无法显示图表",
+            "図を表示できませんでした",
+        ],
+    ),
+    (
+        "Formula could not be rendered",
+        [
+            "Не удалось отобразить формулу",
+            "Formula could not be rendered",
+            "Formel konnte nicht dargestellt werden",
+            "Impossible d’afficher la formule",
+            "No se pudo mostrar la fórmula",
+            "Não foi possível exibir a fórmula",
+            "无法显示公式",
+            "数式を表示できませんでした",
+        ],
+    ),
+    (
+        "Image could not be loaded",
+        [
+            "Не удалось загрузить изображение",
+            "Image could not be loaded",
+            "Bild konnte nicht geladen werden",
+            "Impossible de charger l’image",
+            "No se pudo cargar la imagen",
+            "Não foi possível carregar a imagem",
+            "无法加载图片",
+            "画像を読み込めませんでした",
+        ],
+    ),
+    (
+        "Document blocks could not be prepared. Your text is preserved.",
+        [
+            "Не удалось подготовить блоки документа. Текст документа остаётся на месте.",
+            "Document blocks could not be prepared. Your text is preserved.",
+            "Die Dokumentblöcke konnten nicht vorbereitet werden. Ihr Text bleibt erhalten.",
+            "Les blocs du document n’ont pas pu être préparés. Votre texte est conservé.",
+            "No se pudieron preparar los bloques. Su texto se conserva.",
+            "Não foi possível preparar os blocos. Seu texto foi preservado.",
+            "无法准备文档块。您的文本已保留。",
+            "文書ブロックを準備できませんでした。テキストは保持されています。",
+        ],
+    ),
+    (
+        "Retry rendering",
+        [
+            "Повторить подготовку",
+            "Retry rendering",
+            "Darstellung erneut versuchen",
+            "Réessayer la préparation",
+            "Reintentar preparación",
+            "Tentar preparar novamente",
+            "重试渲染",
+            "再度準備する",
+        ],
+    ),
+    (
         "Rich-text proposals are not available in this preview. Your document remains unchanged.",
         [
             "Работа с предложениями правок ещё не подключена к новому редактору в этой тестовой сборке. Документ остаётся без изменений.",

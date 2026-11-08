@@ -1,0 +1,731 @@
+{
+  "type": "doc",
+  "attrs": {
+    "schemaVersion": 4
+  },
+  "writerCraftShowcase": 1,
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-title",
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A workshop for your next story"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-intro"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A complete native editor showcase: prose, structure, tables, visual ideas and mathematics."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-typography",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Text that carries your voice"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-marks"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A strong opening",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", a quieter aside",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", a passage to revisit",
+          "marks": [
+            {
+              "type": "underline"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", an abandoned phrase",
+          "marks": [
+            {
+              "type": "strike"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " and a literal "
+        },
+        {
+          "type": "text",
+          "text": "character.name",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Follow the "
+        },
+        {
+          "type": "text",
+          "text": "research trail",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://getartcraft.com/",
+                "target": "_blank",
+                "rel": "noopener noreferrer nofollow",
+                "class": null
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " when you need more context."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-hardbreak"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A short line can hold a pause."
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "The next line belongs to the same paragraph."
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "attrs": {
+        "blockId": "showcase-quote",
+        "sourceRefs": []
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-quote-inner"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "The lighthouse did not answer the sea. It simply kept its light on."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-structure",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Give the story a shape"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-bullet-1"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Find the central image."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-bullet-2"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Listen for the character’s intention."
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "showcase-nested-1"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "What does she want?"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "showcase-nested-2"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "What is she afraid to lose?"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-bullet-3"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Leave a useful question for tomorrow."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": {
+        "start": 3,
+        "type": null
+      },
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-ordered-1"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Return to the scene after a break."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-ordered-2"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Check its turning point."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "showcase-ordered-3"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Read the final paragraph aloud."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-callouts",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Keep useful thoughts close"
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "blockId": "showcase-callout-info",
+        "kind": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-callout-text-info"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Research note: the old harbour used a mechanical fog bell."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "blockId": "showcase-callout-idea",
+        "kind": "idea"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-callout-text-idea"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Try telling the arrival from the keeper’s point of view."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "blockId": "showcase-callout-warning",
+        "kind": "warning"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-callout-text-warning"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "The timeline must account for the storm on the previous night."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "blockId": "showcase-callout-todo",
+        "kind": "todo"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-callout-text-todo"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Verify the distance between the station and the lighthouse."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-code-title",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A small technical detail"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "blockId": "showcase-code",
+        "language": "rust"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "fn next_chapter(title: &str) -> String {\n    format!(\"A new beginning: {title}\")\n}"
+        }
+      ]
+    },
+    {
+      "type": "sceneBreak"
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-table-title",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Plan the scene together"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "blockId": "showcase-table-grid",
+        "vendor": {
+          "preserve": true
+        }
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 2,
+                "rowspan": 2
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-table-merged"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Я😀 merged across two columns and two rows. Click here and write; the grid is retained.",
+                      "marks": [
+                        {
+                          "type": "italic"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-table-right"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Right header"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-table-bottom"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "This cell wraps naturally inside its own column."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 2,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-table-wide"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Select from this cell back into the first paragraph, then apply bold."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-table-corner"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Final cell"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-image-title",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "An image worth returning to"
+        }
+      ]
+    },
+    {
+      "type": "imageBlock",
+      "attrs": {
+        "blockId": "showcase-image",
+        "src": "asset://showcase-lighthouse",
+        "assetId": "showcase-lighthouse",
+        "alt": "A lighthouse on a rocky shore beneath a quiet blue sky.",
+        "caption": "A visual reference for the opening scene. Original vector artwork bundled with WriterCraft.",
+        "width": 720,
+        "height": 400
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-diagrams",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "See the connections"
+        }
+      ]
+    },
+    {
+      "type": "mermaidBlock",
+      "attrs": {
+        "blockId": "showcase-flowchart",
+        "code": "flowchart LR\n    A[An unexpected letter] --> B{Return home?}\n    B -->|Yes| C[The silent lighthouse]\n    B -->|Not yet| D[A second letter]\n    D --> C\n    C --> E[A difficult choice]",
+        "caption": "A story path, rendered from editable Mermaid source."
+      }
+    },
+    {
+      "type": "mermaidBlock",
+      "attrs": {
+        "blockId": "showcase-sequence",
+        "code": "sequenceDiagram\n    participant A as Asya\n    participant K as Keeper\n    A->>K: Who sent the letter?\n    K-->>A: Look at the date.\n    A->>A: The storm was nineteen years ago.",
+        "caption": "A conversation as a sequence diagram."
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-math-title",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Keep the exact expression"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-inline-equation"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "The signal decays as "
+        },
+        {
+          "type": "inlineMath",
+          "attrs": {
+            "latex": "I(t)=I_0 e^{-\\lambda t}",
+            "description": "Intensity decreases exponentially over time."
+          }
+        },
+        {
+          "type": "text",
+          "text": ", while the surrounding sentence remains editable prose."
+        }
+      ]
+    },
+    {
+      "type": "mathBlock",
+      "attrs": {
+        "blockId": "showcase-quadratic",
+        "latex": "x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}",
+        "description": "The quadratic formula."
+      }
+    },
+    {
+      "type": "mathBlock",
+      "attrs": {
+        "blockId": "showcase-sum",
+        "latex": "\\sum_{n=1}^{\\infty}\\frac{1}{n^2}=\\frac{\\pi^2}{6}",
+        "description": "The sum of reciprocal squares equals pi squared divided by six."
+      }
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-closing"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "The next sentence is yours. Every example above retains its original structured source."
+        }
+      ]
+    }
+  ]
+}

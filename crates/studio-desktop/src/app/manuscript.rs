@@ -16,31 +16,68 @@ impl StudioApp {
                     return;
                 };
                 egui::Panel::top("document-heading")
-                    .exact_size(110.0)
+                    .exact_size(56.0)
                     .resizable(false)
                     .frame(
                         egui::Frame::new()
                             .fill(t.editor)
-                            .inner_margin(egui::Margin::symmetric(34, 22)),
+                            .inner_margin(egui::Margin::symmetric(24, 10)),
                     )
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(l.text("MANUSCRIPT"))
-                                    .size(10.5)
-                                    .strong()
-                                    .color(t.muted),
+                        ui.horizontal_centered(|ui| {
+                            let focus_label = l.text(if self.focus_mode {
+                                "Exit focus"
+                            } else {
+                                "Focus"
+                            });
+                            let focus_width = ui
+                                .painter()
+                                .layout_no_wrap(
+                                    focus_label.into(),
+                                    FontId::proportional(14.0),
+                                    t.text,
+                                )
+                                .size()
+                                .x
+                                + 24.0;
+                            let title_width = (ui.available_width() - focus_width - 48.0).max(60.0);
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(title_width, 34.0),
+                                Layout::left_to_right(Align::Center),
+                                |ui| {
+                                    let read_only = document.read_only
+                                        || (document.rich_json.is_some()
+                                            && !cfg!(feature = "editor-preview"));
+                                    if read_only {
+                                        ui.vertical(|ui| {
+                                            ui.add(
+                                                egui::Label::new(
+                                                    RichText::new(&document.title)
+                                                        .size(18.0)
+                                                        .strong(),
+                                                )
+                                                .truncate(),
+                                            )
+                                            .on_hover_text(&document.title);
+                                            ui.label(
+                                                RichText::new(
+                                                    l.text("Original format · read only"),
+                                                )
+                                                .size(11.0)
+                                                .color(t.warning),
+                                            );
+                                        });
+                                    } else {
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(&document.title).size(18.0).strong(),
+                                            )
+                                            .truncate(),
+                                        )
+                                        .on_hover_text(&document.title);
+                                    }
+                                },
                             );
-                            if document.read_only
-                                || (document.rich_json.is_some()
-                                    && !cfg!(feature = "editor-preview"))
-                            {
-                                ui.label(
-                                    RichText::new(l.text("Original format · read only"))
-                                        .size(11.0)
-                                        .color(t.warning),
-                                );
-                            }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if icons::icon_button(ui, Icon::Export, l.text("Export text"))
                                     .clicked()
@@ -48,11 +85,7 @@ impl StudioApp {
                                     self.export_text();
                                 }
                                 if ui
-                                    .button(l.text(if self.focus_mode {
-                                        "Exit focus"
-                                    } else {
-                                        "Focus"
-                                    }))
+                                    .button(focus_label)
                                     .on_hover_text(l.text(if self.focus_mode {
                                         "Exit focus"
                                     } else {
@@ -64,12 +97,6 @@ impl StudioApp {
                                 }
                             });
                         });
-                        ui.add_space(10.0);
-                        ui.add(
-                            egui::Label::new(RichText::new(&document.title).size(28.0).strong())
-                                .truncate(),
-                        )
-                        .on_hover_text(&document.title);
                     });
                 #[cfg(feature = "editor-preview")]
                 if self.rich.is_some() {
@@ -88,7 +115,7 @@ impl StudioApp {
                             ui.add_space(offset);
                             ui.vertical(|ui| {
                                 ui.set_width(width);
-                                ui.add_space(24.0);
+                                ui.add_space(28.0);
                                 let editor_id = egui::Id::new(("manuscript-body", &document.id));
                                 let keyboard_menu_requested = ui
                                     .memory(|memory| memory.has_focus(editor_id))
