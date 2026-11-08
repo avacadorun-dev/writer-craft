@@ -108,7 +108,16 @@ fn apply_and_compensating_undo_should_preserve_second_occurrence_notes_and_curre
         (2, "Я😀 echo changed\n\nOther writing")
     );
     let after = workspace.annotation(&note.id).unwrap();
-    assert_eq!(after.anchor_status, AnchorStatus::Detached);
+    // A sealed exact whole-passage replacement maps the attachment to its replacement.
+    assert_eq!(after.anchor_status, AnchorStatus::Attached);
+    assert_eq!(
+        (
+            after.anchor.start.0,
+            after.anchor.end.0,
+            after.anchor.exact_text.as_str()
+        ),
+        (8, 15, "changed")
+    );
     let modified = workspace
         .update_annotation(
             &note.id,
