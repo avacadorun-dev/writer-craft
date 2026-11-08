@@ -560,3 +560,48 @@ fn explicit_deletion_keeps_audit_and_is_not_reversed_by_document_restore() {
     assert!(history[0].after.deleted);
     assert_eq!(history.len(), 3);
 }
+
+#[test]
+fn read_only_document_refuses_every_annotation_metadata_mutation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("notes.sqlite");
+    let workspace = Workspace::open(&path).unwrap();
+    let project = workspace.create_project("Readonly").unwrap();
+    let document = workspace
+        .create_rich_document(&project.id, "Notes", content("echo"))
+        .unwrap();
+    let annotation = note(&workspace, &document, 0, 4, "echo");
+    let external = rusqlite::Connection::open(&path).unwrap();
+    external
+        .execute(
+            "UPDATE documents SET read_only=1 WHERE id=?1",
+            [&document.id],
+        )
+        .unwrap();
+    assert!(matches!(
+        workspace.update_annotation(
+            &annotation.id,
+            document.revision,
+            annotation.revision,
+            AnnotationPatch {
+                note: Some("Changed".into()),
+                status: None
+            }
+        ),
+        Err(StudioError::ReadOnly { .. })
+    ));
+    assert!(matches!(
+        workspace.delete_annotation(&annotation.id, document.revision, annotation.revision),
+        Err(StudioError::ReadOnly { .. })
+    ));
+    assert!(matches!(
+        workspace.reattach_annotation(
+            &annotation.id,
+            document.revision,
+            annotation.revision,
+            annotation.anchor.clone()
+        ),
+        Err(StudioError::ReadOnly { .. })
+    ));
+    assert_eq!(workspace.annotation(&annotation.id).unwrap(), annotation);
+}

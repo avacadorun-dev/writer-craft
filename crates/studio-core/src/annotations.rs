@@ -526,6 +526,11 @@ impl Workspace {
         let before = read_annotation(&transaction, id, false)?;
         let document = read_document(&transaction, &before.document_id)?;
         require_revision(&document, expected_document_revision)?;
+        if document.read_only {
+            return Err(StudioError::ReadOnly {
+                document_id: document.id,
+            });
+        }
         if before.revision != expected_annotation_revision {
             return Err(StudioError::AnnotationConflict {
                 expected: expected_annotation_revision,
