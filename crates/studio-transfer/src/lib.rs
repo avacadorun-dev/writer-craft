@@ -5,7 +5,17 @@
 //! flattening the original rich documents, histories or owned artifacts.
 #![deny(missing_docs)]
 
+mod markdown_render;
+mod portable_file;
+mod portable_markdown;
+mod portable_paths;
+mod portable_selection;
 mod project_archive;
+pub use portable_file::{PortableFileReceipt, export_project_archive_file};
+pub use portable_markdown::{
+    MarkdownConversion, MarkdownExportProgress, MarkdownExportReceipt, MarkdownExportSelection,
+    PortableExportFile, export_markdown_folder, export_markdown_folder_with_progress,
+};
 pub use project_archive::{ProjectArchive, write_project_archive};
 
 use std::collections::{HashMap, HashSet};
