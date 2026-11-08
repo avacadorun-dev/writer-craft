@@ -1416,8 +1416,38 @@ mod tests {
             &mut state,
             &database,
             &ctx,
-            vec![key(egui::Key::Enter, egui::Modifiers::COMMAND)],
+            vec![key(egui::Key::Z, egui::Modifiers::COMMAND)],
             2.,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("direct input")?.text(),
+            "Old 😀 text"
+        );
+        assert!(state.blocks_navigation());
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![key(
+                egui::Key::Z,
+                egui::Modifiers {
+                    shift: true,
+                    ..egui::Modifiers::COMMAND
+                },
+            )],
+            3.,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("direct input")?.text(),
+            "Native in-card 日本語 🪶"
+        );
+        assert!(!state.blocks_navigation());
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![key(egui::Key::Enter, egui::Modifiers::COMMAND)],
+            4.,
         );
         assert!(state.text_editor.is_none());
         assert!(!state.modal_open());
@@ -1428,6 +1458,55 @@ mod tests {
                 .content["nodes"][0]["text"],
             "Native in-card 日本語 🪶"
         );
+        Ok(())
+    }
+    #[test]
+    fn global_app_save_should_flush_the_open_card_without_saving_an_unrelated_document()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("global-save.sqlite");
+        let ctx = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(ctx.clone());
+        let mut app = StudioApp::new(&creation, database.clone(), false, None)?;
+        let project = app.workspace.create_project("Synthetic global card save")?;
+        let document = app.workspace.create_document(
+            &project.id,
+            "Unrelated document",
+            "Immutable sentinel",
+        )?;
+        let board = app
+            .workspace
+            .create_project_canvas(&project.id, "Board", graph())?;
+        app.open_project(project.clone())?;
+        app.open_canvas(&board.canvas.id)?;
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        state.intent(
+            &database,
+            CanvasIntent::EditText {
+                base: state.session.identity(),
+                node_id: "card".into(),
+            },
+        )?;
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
+            "Global Save routes to this card".into();
+        app.save_explicit()?;
+        assert!(app.canvas.as_ref().ok_or("canvas")?.pending.is_some());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.canvas.as_ref().ok_or("canvas")?.pending.is_some() && Instant::now() < deadline {
+            app.canvas.as_mut().ok_or("canvas")?.poll(&ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let state = app.canvas.as_ref().ok_or("canvas")?;
+        assert!(state.pending.is_none());
+        assert!(state.text_editor.is_some());
+        assert_eq!(
+            app.workspace
+                .project_canvas(&project.id, &board.canvas.id)?
+                .revision
+                .content["nodes"][0]["text"],
+            "Global Save routes to this card"
+        );
+        assert_eq!(app.workspace.document(&document.id)?, document);
         Ok(())
     }
     fn graph() -> serde_json::Value {
