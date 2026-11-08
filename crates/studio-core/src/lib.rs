@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 5;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -303,7 +303,6 @@ impl Workspace {
             transaction.execute_batch(include_str!("rich.sql"))?;
             transaction.execute_batch(include_str!("annotations.sql"))?;
             transaction.execute_batch(include_str!("assets.sql"))?;
-            transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -318,12 +317,7 @@ impl Workspace {
             if version < 4 {
                 transaction.execute_batch(include_str!("annotations.sql"))?;
             }
-            if version < 5 {
-                transaction.execute_batch(include_str!("assets.sql"))?;
-            }
-            if version < 6 {
-                transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
-            }
+            transaction.execute_batch(include_str!("assets.sql"))?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         transaction.commit()?;
