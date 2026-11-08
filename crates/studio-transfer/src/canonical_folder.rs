@@ -165,7 +165,7 @@ impl FolderOutput {
         cancel: &ProjectTransferCancellation,
     ) -> Result<Self> {
         check_cancel(cancel)?;
-        if is_workspace_data_path(destination, source_database).map_err(core_error)? {
+        if is_workspace_data_path(destination, source_database)? {
             return invalid(
                 "Choose a new export folder away from workspace databases, journals and preferences",
             );
