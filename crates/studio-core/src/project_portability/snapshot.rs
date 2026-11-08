@@ -344,7 +344,8 @@ impl Workspace {
         drop(drafts);
         let rich=rich.into_iter().map(|(document,base,version,content,evidence)|->Result<Value>{Ok(json!({"documentId":document,"baseRevision":base,"version":version,"content":serde_json::from_str::<Value>(&content)?,"checkpointEvidence":evidence.map(|raw|serde_json::from_str::<Value>(&raw)).transpose()?}))}).collect::<Result<Vec<_>>>()?;
         let recovery = json!({"format":"writercraft-recovery-evidence","formatVersion":1,"authority":"untrusted-on-import","proseDrafts":&prose,"richDrafts":&rich,"unknownRevisionTimes":unknown_revision_times});
-        let (native_state, native_changed) = capture_native_state(&transaction, project)?;
+        let (mut native_state, native_changed) = capture_native_state(&transaction, project)?;
+        native_state["documentAliases"] = serde_json::to_value(&node_map)?;
         let requires_companion = native_changed || !prose.is_empty() || !rich.is_empty();
         let manifest_bytes = match original {
             Some(raw) => super::json::encode_preserving_source(

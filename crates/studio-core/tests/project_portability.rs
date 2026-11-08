@@ -422,6 +422,14 @@ fn changed_native_note_and_tombstone_should_require_and_survive_the_canonical_co
         canonical["nativeState"]["annotations"][0]["state"]["note"],
         "New native note"
     );
+    let native_document = worker
+        .workspace()
+        .resolve_project_resource(&imported.project_id, "node", "doc")
+        .unwrap();
+    assert_eq!(
+        canonical["nativeState"]["documentAliases"][&native_document],
+        "doc"
+    );
     assert_eq!(
         canonical["nativeState"]["annotationHistory"]
             .as_array()
