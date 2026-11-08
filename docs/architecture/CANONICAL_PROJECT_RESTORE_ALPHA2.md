@@ -121,7 +121,7 @@ Format 2 stores data once and uses SHA-256 references:
 | Item | Encoding and bound |
 | --- | --- |
 | Root project descriptor | At most 1 MiB JSON; scope, version and descriptors for component shards |
-| Component shard | At most 1 MiB JSON Lines; at most 256 KiB per metadata record |
+| Component shard | At most 1 MiB JSON Lines; at most 256 KiB per record and 4,096 records per shard |
 | Inline content | Fits the metadata record; larger content uses an object reference |
 | Original source manifest | Exact original UTF-8 object, at most 64 MiB, stored once |
 | Saved native rich content / rich recovery candidate | One object at a time, at most 16 MiB; model validation before activation |
@@ -129,9 +129,14 @@ Format 2 stores data once and uses SHA-256 references:
 | Large anchor quote | At most 16 MiB object, referenced by current/history/snapshot metadata |
 | Opaque original / unknown evidence object | At most 64 MiB; streamed as bytes and kept read-only |
 | Original encoded media | Existing type-specific limits and at most 512 MiB aggregate logical bytes |
-| Native canonical ZIP | At most 1 GiB compressed and expanded, with at most 65,536 members |
+| Native canonical ZIP | At most 1 GiB compressed and expanded, with at most 65,536 members |\n| Materialized destination data | Separately at most 1 GiB logical text/BLOB bytes, counting repeated materialization |
 | Root/shard graph | At most 4,096 shard descriptors and 1,000,000 records |
 | Markdown folder completion | A small completion root referencing bounded file-inventory shards |
+
+Shared transport hashes do not exempt repeated destination rows. Preflight counts actual projected\ntext/BLOB encodings separately, rather than trusting a declared expansion number or a source-size\nmultiplier. The private disk index may cache bounded object/anchor profiles to avoid repeated\nvalidation of identical ranges; imported fields never create a sealed proof.\n\nTransfer also counts every actual authorized member/path and expanded byte, including same-content
+reading views or aliases. A unique-object counter does not establish those physical limits. Native
+ZIP checks use the actual pinned/staged file length, including headers and directory bytes, and
+repeat the length check before commit/publication.
 
 These are finite transport/resource guards, not authoring limits and not a guarantee that every
 native database fits. Whole-workspace SQLite backup remains available for larger state. Validate
@@ -156,6 +161,20 @@ media under safe Unicode reading filenames. Its object index maps hashes to thos
 the reader does not guess names. File-inventory shards cover payloads. The final completion root
 hashes those shards and the canonical root; neither a file inventory nor a manifest hashes itself.
 An existing .incomplete marker always takes precedence over a completion root.
+
+## Selected opaque-data boundary
+
+Selected export reconstructs roots/shards from validated scoped records. It does not blindly clone
+retained root, shard, source or whole-native-envelope extensions. Unknown opaque data whose scope
+cannot be proved is omitted or refused with an explicit conversion; the report contains no private
+payload or raw extension name. Keep outside references opaque rather than expanding another
+manuscript, guide, memory or source session. Synthetic tests must put private sentinels inside nested
+unknown extensions at each boundary.
+
+Canonical rich content actually owned by a selected document remains that document's data, including
+unknown node/mark attributes. Scoping follows validated ownership rather than substring searches or
+guesses about whether a phrase also appears elsewhere. A stable report distinguishes excluded
+unscoped project evidence from retained selected-document canonical content.
 
 ## Streaming API and transaction lifecycle
 
