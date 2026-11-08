@@ -114,8 +114,8 @@ impl StudioApp {
         let target = std::env::var("WRITERCRAFT_CAPTURE_BLOCK")
             .ok()
             .filter(|id| !id.is_empty());
-        if target.is_some() && (!demo || !crate::editor_preview_requested()) {
-            return Err("capture_target_requires_explicit_synthetic_preview".into());
+        if target.is_some() && !demo {
+            return Err("capture_target_requires_explicit_synthetic_demo".into());
         }
         #[cfg(feature = "editor-preview")]
         if target.is_some() && self.rich.is_none() {
