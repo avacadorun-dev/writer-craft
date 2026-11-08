@@ -18,6 +18,9 @@ pub(super) fn selected_companion(
     snapshot: &ProjectExportSnapshot,
     selected: &HashSet<String>,
 ) -> Result<SelectedCompanion> {
+    if snapshot.has_retained_evidence() {
+        return Err(TransferError::Invalid("This project retains imported native evidence; use the native canonical export instead of the old selected companion".into()));
+    }
     let original = snapshot.manifest();
     let nodes = array(original, "nodes")
         .iter()

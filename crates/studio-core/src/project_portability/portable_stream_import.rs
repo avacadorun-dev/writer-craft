@@ -38,10 +38,10 @@ pub trait PortableObjectSource {
 /// its own temporary SQLite index before this value is returned. A later semantic transaction may
 /// use only these pinned bytes; mutating the original archive cannot change them.
 pub struct VerifiedPortableProjectStream {
-    index: Connection,
+    pub(super) index: Connection,
     _directory: TempDir,
-    header: PortableProjectHeader,
-    root: Vec<u8>,
+    pub(super) header: PortableProjectHeader,
+    pub(super) root: Vec<u8>,
     record_count: u64,
 }
 impl VerifiedPortableProjectStream {

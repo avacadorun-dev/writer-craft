@@ -539,7 +539,11 @@ fn resource_rows(connection: &Connection, project: &str, query: &str) -> Result<
         .map(|row| row.map(|id| json!({"id":id})))
         .collect::<std::result::Result<Vec<_>, _>>()?)
 }
-fn validate_scoped_content(connection: &Connection, project: &str, content: &Value) -> Result<()> {
+pub(super) fn validate_scoped_content(
+    connection: &Connection,
+    project: &str,
+    content: &Value,
+) -> Result<()> {
     canvas_schema(content)?;
     let documents = resource_rows(
         connection,

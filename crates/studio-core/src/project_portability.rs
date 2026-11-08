@@ -10,6 +10,7 @@ mod portable_format;
 mod portable_restore;
 mod portable_stream;
 mod portable_stream_import;
+mod portable_stream_restore;
 mod snapshot;
 mod validation;
 

@@ -619,7 +619,7 @@ fn restore_note(
         transaction.execute("INSERT INTO document_annotations(id,document_id,revision,deleted,annotation_json) VALUES(?1,?2,?3,?4,?5)",params![native,document,state.revision,state.deleted,serde_json::to_string(&state)?])?;
     }
     if let Some(logical) = &note.logical_id {
-        transaction.execute("UPDATE project_annotation_projections SET native_annotation_id=?1,native_anchor_json=?2,native_projection_json=?3,anchor_status=?4 WHERE project_id=?5 AND logical_id=?6 AND document_id=?7", params![native,serde_json::to_string(&state.anchor)?,serde_json::to_string(&state)?,if state.anchor_status==AnchorStatus::Attached {"attached"} else {"detached"},project,logical,document])?;
+        transaction.execute("UPDATE project_annotation_projections SET native_annotation_id=?1,native_anchor_json=?2,anchor_status=?3 WHERE project_id=?4 AND logical_id=?5 AND document_id=?6", params![native,serde_json::to_string(&state.anchor)?,if state.anchor_status==AnchorStatus::Attached {"attached"} else {"detached"},project,logical,document])?;
         transaction.execute("UPDATE project_resource_aliases SET native_id=?1 WHERE project_id=?2 AND resource_kind='annotation' AND logical_id=?3",params![native,project,logical])?;
     } else {
         insert_alias(

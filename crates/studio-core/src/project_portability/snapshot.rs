@@ -125,6 +125,7 @@ pub struct ProjectExportSnapshot {
     recovery: Value,
     native_state: Value,
     requires_companion: bool,
+    retained_evidence: bool,
     attachments: Vec<ProjectAttachment>,
     assets: ProjectAssetSource,
 }
@@ -154,8 +155,17 @@ impl ProjectExportSnapshot {
     pub fn requires_canonical_companion(&self) -> bool {
         self.requires_companion
     }
-    /// Complete saved source plus native state/evidence; importing it grants no replay authority.
+    /// Whether flat imported native/unknown evidence requires the format-2 streaming export.
+    pub fn has_retained_evidence(&self) -> bool {
+        self.retained_evidence
+    }
+    /// Historical format-1 companion compatibility; imported flat evidence requires format 2.
     pub fn canonical_manifest_bytes(&self) -> Result<Vec<u8>> {
+        if self.retained_evidence {
+            return invalid(
+                "This project contains retained native evidence; use native canonical format-2 export or a whole-workspace backup",
+            );
+        }
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Canonical<'a> {
@@ -435,7 +445,13 @@ impl Workspace {
         capture_saved_canvases(&transaction, project, &mut manifest)?;
         let (mut native_state, native_changed) = capture_native_state(&transaction, project)?;
         native_state["documentAliases"] = serde_json::to_value(&node_map)?;
-        let requires_companion = native_changed || !prose.is_empty() || !rich.is_empty();
+        let retained_evidence: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM project_evidence_references WHERE project_id=?1)",
+            [project],
+            |row| row.get(0),
+        )?;
+        let requires_companion =
+            native_changed || !prose.is_empty() || !rich.is_empty() || retained_evidence;
         let manifest_bytes = match original {
             Some(raw) => super::json::encode_preserving_manifest(&raw, &manifest)?,
             None => serde_json::to_vec_pretty(&manifest)?,
@@ -448,6 +464,7 @@ impl Workspace {
             recovery,
             native_state,
             requires_companion,
+            retained_evidence,
             attachments,
             assets: ProjectAssetSource {
                 connection: Arc::clone(&self.connection),
