@@ -95,7 +95,7 @@ def validate_capture_state(state: dict, target: str | None) -> None:
     """Reject vacuous readiness, target misses, failed renderers and mutated synthetic content."""
     ready = state.get("render_readiness") or {}
     if state.get("schema_version") != 1 or state.get("status") != "captured":
-        raise ValueError("Native capture did not acknowledge a completed readback")
+        raise ValueError("Native capture did not acknowledge a completed readback: " + str(state.get("error")))
     if state.get("target_block") != target or state.get("canonical_unchanged") is not True:
         raise ValueError("Capture target or canonical preservation did not match")
     if state.get("stable_frames", 0) < 3 or not ready.get("settled") or not ready.get("target_visible"):
@@ -199,12 +199,13 @@ def main(bundle: Path) -> int:
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
                         raise ValueError("Native startup timed out" if case["timed_out"] else "Native startup exited unsuccessfully")
-                    case["capture_size_pixels"] = png_dimensions(capture)
-                    case["capture_sha256"] = sha256(capture)
                     if not 0 < capture_state.stat().st_size <= 64 * 1024:
                         raise ValueError("Missing or oversized native capture state")
                     state = json.loads(capture_state.read_text())
+                    case["native_state"] = state
                     validate_capture_state(state, target)
+                    case["capture_size_pixels"] = png_dimensions(capture)
+                    case["capture_sha256"] = sha256(capture)
                     if state.get("image_size_pixels") != list(case["capture_size_pixels"]):
                         raise ValueError("Native state/readback pixel dimensions disagree")
                     case["native_state"] = state

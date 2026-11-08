@@ -41,8 +41,16 @@ pub(super) struct CaptureProbe {
     last: Option<CaptureReadiness>,
     stable_frames: u8,
     requested: bool,
+    navigated_generation: Option<u64>,
 }
 impl CaptureProbe {
+    fn needs_navigation(&mut self, generation: u64) -> bool {
+        if self.navigated_generation == Some(generation) {
+            return false;
+        }
+        self.navigated_generation = Some(generation);
+        true
+    }
     fn observe(&mut self, readiness: CaptureReadiness) -> bool {
         if readiness.settled && readiness.target_visible && self.last == Some(readiness) {
             self.stable_frames = self.stable_frames.saturating_add(1);
@@ -109,9 +117,15 @@ impl StudioApp {
         }
         #[cfg(feature = "editor-preview")]
         if let Some(rich) = &mut self.rich {
-            // Native scrolling follows the same semantic target again after asynchronous
-            // object metrics change. This does not allocate space or modify the document.
-            rich.session.request_scroll_to_caret();
+            let generation = rich
+                .capture_readiness(self.capture_probe.target.as_deref())
+                .generation;
+            if self.capture_probe.needs_navigation(generation) {
+                // Scroll once per actual metric generation, then let native animation finish.
+                // Repeating nearest-edge scrolling for an object taller than the viewport
+                // would artificially alternate its top/bottom edge forever.
+                rich.session.request_scroll_to_caret();
+            }
         }
     }
     pub(super) fn advance_capture(&mut self, ctx: &egui::Context) {
@@ -249,6 +263,19 @@ mod tests {
         assert!(!probe.observe(ready));
         assert!(!probe.observe(ready));
         assert!(probe.observe(ready));
+    }
+    #[test]
+    fn an_oversized_target_is_not_repeatedly_scrolled_without_new_metrics() {
+        let mut probe = CaptureProbe::default();
+        assert!(probe.needs_navigation(0));
+        for _ in 0..120 {
+            assert!(!probe.needs_navigation(0));
+        }
+        assert!(probe.needs_navigation(1));
+        for _ in 0..120 {
+            assert!(!probe.needs_navigation(1));
+        }
+        assert!(probe.needs_navigation(2));
     }
     #[test]
     fn capture_refuses_live_data_and_does_not_replace_existing_outputs() -> AppResult<()> {
