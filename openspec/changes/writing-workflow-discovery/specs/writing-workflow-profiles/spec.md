@@ -31,3 +31,28 @@ Selected image, rich-block and table sizing SHALL use actual native geometry and
 #### Scenario: Resizing is cancelled or the target changes
 - **WHEN** a size gesture is cancelled or its captured document/object becomes stale before commit
 - **THEN** the original dimensions, content, history and attachments remain unchanged and the author receives a clear current state
+
+
+### Requirement: Coherent board and document relationships
+
+Selected connected-writing workflows SHALL define how boards, manuscripts, character profiles, lore and relevant dictionary/memory records complement each other. Research SHALL compare shared canonical views, live references, revision-pinned snapshots and independent notes before selecting editing or synchronization semantics. Existing Studio document references and promotion data SHALL remain compatible.
+
+#### Scenario: Return from a scene to its planning context
+
+- **WHEN** PT-LINK-01 opens an associated scene or exact passage from a board and the author returns
+- **THEN** the selected workflow restores the same relevant board and manuscript context, makes the editing authority clear and does not silently copy or reorder manuscript content
+
+#### Scenario: Inspect linked character and lore information
+
+- **WHEN** PT-CHAR-01 or PT-LORE-01 follows a relationship between a card, profile, passage and knowledge record
+- **THEN** the interface makes the canonical source or snapshot revision and the effect of editing clear, with reachable return navigation and explicit unavailable/stale states
+
+#### Scenario: A linked record changes or is restored
+
+- **WHEN** PT-LINK-02 renames, moves, edits, deletes or restores a referenced entity and reopens or exports/restores the project
+- **THEN** stable relationships follow the selected documented lifecycle without guessed targets, silent copy divergence or loss of independent notes, unknown Studio data or original media
+
+#### Scenario: Reorganize a board visually
+
+- **WHEN** the author moves or resizes cards without requesting a semantic manuscript edit
+- **THEN** only the board layout changes and the manuscript order, text, selections and note attachments remain unchanged

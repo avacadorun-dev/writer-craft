@@ -90,3 +90,53 @@ The source application working tree is not pristine. These hashes identify the e
 | `src/entities/assistant/model/types.ts` | `ed65db65bc9066ca946e977301207f189aafc202cb72ff296f2ecad26e505cff` |
 | `src/pages/assistant-context/model/memory.ts` | `2368c30b6aca35ebf0f0554af83c7e7637fdc0bd0dc4f2a4861a34464ba9be28` |
 | `internal/store/dictionary.go` | `d1676948720c368fa0d8a35e6d07c93c5c09173d41dbbaf5b7420cef884caf45` |
+
+
+## Connected boards, manuscripts and narrative knowledge — 2026-11-09
+
+This requested extension is tracked in #14/F-43. Status: initial primary-source and read-only source audit; hypotheses and scenario drafts remain unvalidated. No competitor application was operated and no new automatic synchronization behavior is selected here.
+
+### Existing Studio baseline
+
+Read-only source shows `CanvasResourceRef` supports document/media/canvas IDs; cards can contain typed document/media/canvas fields and `promotedDocumentId`. `CanvasDocumentCard` displays the current document title/status/plain-text excerpt and document cards carry `writers-studio://documents/<id>` plus the typed resource ID. The board exposes `onOpenDocument` and guarded promotion of a saved card into a document; `internal/store/canvas_promotions.go` checks the base revision and writes document and Canvas revisions transactionally. These facts establish an existing link/promotion baseline, not a complete character/lore synchronization contract or observed native parity.
+
+Source hashes in the original working tree (read-only, 2026-11-09):
+
+| Source path | SHA-256 |
+|---|---|
+| `src/widgets/canvas-board/ui/canvas-board.tsx` | `be67e4c9d97a490df4053844e1cc317ce77d7098c8383299f5a3940300940d87` |
+| `src/entities/canvas/model/types.ts` | `af9c5181b6eb459d13c78e4832974476f3a9a8cabeb451668a189b7eade30e93` |
+
+### Primary comparison evidence
+
+Checked 2026-11-09; documentation describes vendor behavior, not observed WriterCraft demand or acceptance.
+
+| Product/source | Documented behavior | Hypothesis and boundary |
+|---|---|---|
+| [Final Draft Outline Editor](https://kb.finaldraft.com/hc/en-us/articles/27613546469652-How-do-I-use-the-Outline-Editor) | Beats appear on both board and outline; editing a beat updates those representations. A separate script lane exposes written scenes; scene navigation and explicit Send to Script are described. | Distinguish shared planning records from copying an outline into prose. Do not infer universal bidirectional manuscript synchronization. |
+| [Celtx Storyboard](https://support.celtx.com/hc/en-us/articles/216076228-Storyboard) | Explicit Sync Script adds scene-linked sequences and updates their headings; linked sequences navigate to the corresponding script scene. Independent sequences are also supported. | Evaluate author-controlled refresh and clear live/independent states. This does not establish that a visual reorder edits script order. |
+| [STARC character relationship map](https://old.starc.app/help/characters-relations) | The map exposes character profile and relationship panels, per-character viewpoints, grouping and focus. | Evaluate profile identity, directional relationship meaning and contextual editing; do not mistake map geometry for story events. |
+| [Obsidian Canvas](https://help.obsidian.md/plugins/canvas) | Distinguishes independent text cards from existing note-file cards and supports narrowing a note to a heading/block. Text cards can be converted to files; their backlink behavior differs. | Test canonical references versus independent writing and explicit conversion; filenames/labels alone are not sufficient persistent identity. |
+
+### Relationship models to test
+
+| Hypothesis | User benefit to test | Failure or contrary case | Decision still needed |
+|---|---|---|---|
+| H-LINK-1: one canonical record, several views | A character/profile or beat edited from either surface is consistent everywhere. | An author expects a private planning variant or historical state; shared mutation surprises them. | Which entities are shared and where editing is allowed; exact refresh and Undo authority. |
+| H-LINK-2: live stable reference | A card follows a scene/character/lore record without duplicating its text. | Target is deleted, access scope changes or a passage anchor detaches. | Target granularity, backlinks, missing-target state and exact return context. |
+| H-LINK-3: revision-pinned snapshot/excerpt | A writer preserves a review state or research quotation while the source evolves. | It appears current after the original changed. | Visible provenance/revision, explicit refresh/replace and conflict behavior. |
+| H-LINK-4: independent note | Free planning remains independent of the current draft. | The author assumes a matching name means automatic synchronization. | Clear conversion/link commands and what remains independently editable. |
+
+These are candidate models, not four mandatory card types. Evaluate the smallest understandable design against real tasks. A plain Open document action establishes navigation only; it cannot by itself satisfy the requested connected-writing outcome.
+
+### Proposed relationship scenario records
+
+All four are draft research scenarios, with no native pass recorded. Public fixtures use synthetic scenes, characters and rules. Trace each selected path to #14 → this OpenSpec change → implementation → semantic tests → exact compiled independent review.
+
+**PT-LINK-01 — plan a beat, write its scene and return.** Role/job: screenwriter connects visual planning to daily scene drafting. Start: a saved project has a board, a beat card, a manuscript scene and two identical passage quotes. Trigger: associate/open the intended scene or exact passage. Main: make the relationship explicit, open the intended target, revise/save, reveal its board context, return with the original board pan/zoom/selection and manuscript caret/scroll. Outcome: stable intended identity, understandable edit effect, no divergent copy, no change to scene order from layout alone. Alternatives: create a scene from a free note or link an existing one under the chosen model. Cancel leaves both canonical records unchanged; stale target or failed save preserves local work and gives an actionable state. Old Studio document cards/promotion, rename/move and export/restore must preserve meaning. Proposed evidence: exact second-quote navigation, semantic layout-only no-mutation test, save/reopen and independent pointer/keyboard return journey.
+
+**PT-CHAR-01 — inspect a character and relevant scenes.** Role/job: writer checks a character's profile and behavior while revising dialogue. Start: one identified character record, two scene references and a board card with an independent planning note. Main: open the profile from the card, inspect scene/behavior references, edit the selected canonical field or explicitly independent note, return to the same scene/passage. Outcome: the author knows which record changed and sees consistent selected views without losing the independent note. Alternatives: a revision snapshot is deliberately retained instead of refreshed. Cancel/stale edits preserve the saved profile and draft; deleted or out-of-project targets are not guessed from names. Migration/export retain existing dictionary/card metadata and original media. Proposed evidence: shared-versus-independent update assertions, duplicate-name target test, actual contextual native editing and return navigation. Profile field set and behavior-note semantics remain unselected.
+
+**PT-LORE-01 — verify a world rule while writing.** Role/job: writer checks consistency without abandoning a passage. Start: a manuscript has an explicit reference to one world rule and a related planning board; the same term appears elsewhere. Main: follow the exact reference, inspect its source/provenance and related knowledge/card, choose the selected allowed edit/refresh action, then return to the original passage. Outcome: known canonical/snapshot authority, retained writing context and no inference that inactive memory is an instruction. Alternatives: a standalone note stays standalone; an unknown imported reference remains visible as preserved evidence. Missing/stale target, provider proposal, cancel and failed save never overwrite prose or silently retarget by quote/title. Proposed evidence: exact scope/identity tests, annotation-preserving updates, export/restore reference checks and native keyboard/accessible navigation. Any automatic relevance or consistency suggestion needs separately selected scope.
+
+**PT-LINK-02 — maintain relationships through lifecycle and transfer.** Role/job: writer reorganizes a project while keeping connected planning usable. Start: linked scene/profile/rule records, an independent note, a pinned snapshot and an old custom Studio structure. Main: rename/move/edit targets; trash/restore one; save/reopen; canonical export/restore into a fresh project; follow each relationship. Outcome: identities and chosen lifecycle survive, preserved snapshot revision stays explicit, no title/quote guessing or silent divergent text. Alternatives: remove a card without deleting its canonical target, or explicitly unlink while retaining independent text. Cancel/stale/failed operations leave prior canonical state/history intact; unavailable references remain understandable and recoverable. Proposed evidence: transactional lifecycle/Undo tests, old-format and unknown-field/media preservation, repeated transfer stability and independent actual native lifecycle review. Permanent-deletion/reference policy must be decided before implementation.

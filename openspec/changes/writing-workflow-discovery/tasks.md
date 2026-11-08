@@ -6,6 +6,8 @@
 - [x] Track the discovery, scenario and backward-compatible migration criteria in existing issue #14.
 
 ## Research and decisions
+- [ ] Compare board/document/character/lore relationship models and source baselines; document authority, return navigation, refresh/conflict and lifecycle decisions.
+- [ ] Refine PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02 through actual tasks and independent design review before selecting synchronization semantics.
 - [ ] Validate actual screenwriter/editor/writer tasks and contrary evidence; separate observed behavior from assumptions.
 - [ ] Evaluate each original kind and the meaningful type/template/mode/output distinction against those tasks.
 - [ ] Document detailed main/alternative/failure/migration scenarios for every selected profile and agreed formatting capability.

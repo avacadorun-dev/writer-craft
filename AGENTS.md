@@ -76,3 +76,8 @@ The requested formatting discovery and object-sizing extension is tracked in iss
 ## Evidence-based project profiles and user scenarios
 
 Issue #14 also covers project types specifically. Existing seven kinds are a backward-compatibility baseline, not a validated new-project taxonomy. Research STARC, Final Draft, WriterDuet/WriterSolo separately, Fade In, Celtx, Scrivener, Obsidian, FocusWriter and Google Docs as relevant workflow references. Separate project kinds, starting templates, document editing modes and output profiles through explicit hypotheses and evidence. Record stable-ID user scenarios and trace them to specifications, implementation, semantic tests and independent native acceptance. Do not implement a nominal selector as proof that professional project workflows are complete. Read `docs/research/PROJECT_TYPES_AND_FORMATTING.md` before changing creation profiles; preserve import of old kinds and custom schemas throughout.
+
+
+## Connected writing and direct Canvas authoring
+
+Read F-42/F-43 before changing Canvas input or board/document relationships. Issue #15 requires actual in-card writing, not a modal presented as inline editing, with native input ownership, guarded save acknowledgements and exact draft preservation. Issue #14 additionally requires researched board↔document↔character/lore/dictionary/memory workflows. Preserve existing document references and promotion semantics; do not claim the source had no integration. Compare canonical views, live links, snapshots and independent notes before selecting synchronization or deletion behavior. Keep stable scenario IDs and exact-context return navigation, and include these corrections in the independent UX gate. Layout changes cannot silently mutate manuscript order/content.
