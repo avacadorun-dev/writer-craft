@@ -1,5 +1,7 @@
 //! Isolated engineering preview: canonical rich session, durable drafts and native canvas.
 //! This integration does not assert completion of the full-editor-parity release gate.
+#[path = "authoring.rs"]
+mod authoring;
 use super::*;
 use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::CanvasStyle};
 use craft_editor_model as tables;
@@ -17,6 +19,7 @@ pub(super) struct RichState {
     pending_proofs: Vec<ReplayProof>,
     read_only: bool,
     last_diagnostic: Option<String>,
+    dialog: Option<authoring::BlockDialog>,
 }
 
 impl RichState {
@@ -55,7 +58,12 @@ impl RichState {
             media: rendering::RenderState::default(),
             pending_proofs: vec![],
             last_diagnostic: None,
+            dialog: None,
         }))
+    }
+
+    pub(super) fn dialog_open(&self) -> bool {
+        self.dialog.is_some()
     }
 
     fn write_draft(&mut self, workspace: &Workspace, document: &Document) -> AppResult<()> {
@@ -152,13 +160,32 @@ impl StudioApp {
         };
         let before = rich.session.revision();
         let mut operation_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+        let bounds = ui.available_rect_before_wrap();
+        let floating = bounds.width() >= 984.0;
+        let width = if floating { 920.0 } else { bounds.width() };
+        let gutter = if floating { 28.0 } else { 0.0 };
+        let surface_rect = egui::Rect::from_min_size(
+            egui::pos2(bounds.center().x - width * 0.5, bounds.top() + gutter),
+            egui::vec2(width, (bounds.height() - gutter * 2.0).max(0.0)),
+        );
+        ui.painter()
+            .rect_filled(bounds, 0, if floating { t.bg } else { t.editor });
+        let mut changed = false;
+        ui.scope_builder(egui::UiBuilder::new().max_rect(surface_rect), |ui| {
+            egui::Frame::new().fill(t.editor)
+                .corner_radius(if floating { 12 } else { 0 })
+                .stroke(Stroke::new(if floating { 1.0 } else { 0.0 }, t.border))
+                .show(ui, |ui| {
+                    ui.set_min_size(surface_rect.size());
+                    ui.set_max_size(surface_rect.size());
         egui::Panel::top("rich-formatting")
             .exact_size(40.0)
             .resizable(false)
             .frame(
                 egui::Frame::new()
                     .fill(t.editor)
-                    .inner_margin(egui::Margin::symmetric(24, 4)),
+                    .inner_margin(egui::Margin::symmetric(24, 4))
+                    .corner_radius(if floating { egui::CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 } } else { egui::CornerRadius::ZERO }),
             )
             .show(ui, |ui| {
                 let boundary = ui.max_rect();
@@ -167,175 +194,18 @@ impl StudioApp {
                     boundary.bottom() + 4.0,
                     Stroke::new(1.0, t.border),
                 );
-                ui.horizontal_centered(|ui| {
-                    ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
-                    ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-                    ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
-                    ui.spacing_mut().item_spacing.x = 3.0;
-                    ui.add_enabled_ui(!rich.read_only && !rich.session.is_composing(), |ui| {
-                        let kind = current_block(&rich.session)
-                            .map_or("paragraph", |node| node.node_type.as_str());
-                        let label = if kind == "heading" {
-                            "Heading"
-                        } else {
-                            "Paragraph"
-                        };
-                        ui.menu_button(l.text(label), |ui| {
-                            for (msgid, level) in [
-                                ("Paragraph", 0),
-                                ("Heading 1", 1),
-                                ("Heading 2", 2),
-                                ("Heading 3", 3),
-                            ] {
-                                if ui.button(l.text(msgid)).clicked() {
-                                    if let Err(error) = set_block_kind(&mut rich.session, level) {
-                                        operation_error = Some(error);
-                                    }
-                                    rich.session.request_canvas_focus(ui.ctx());
-                                    ui.close();
-                                }
-                            }
-                        });
-                        ui.separator();
-                        let can_format = rich.session.selection().is_some();
-                        for (mark, glyph, msgid) in [
-                            ("bold", "B", "Bold"),
-                            ("italic", "I", "Italic"),
-                            ("underline", "U", "Underline"),
-                        ] {
-                            let (state, valid) = match rich.session.mark_state(mark) {
-                                Ok(state) => (state, true),
-                                Err(error) => {
-                                    operation_error = Some(error.into());
-                                    (MarkState::Off, false)
-                                }
-                            };
-                            let active = state == MarkState::On;
-                            let mut text = RichText::new(glyph).size(16.0);
-                            if mark == "bold" {
-                                text = text.strong();
-                            }
-                            if mark == "italic" {
-                                text = text.italics();
-                            }
-                            if mark == "underline" {
-                                text = text.underline();
-                            }
-                            if ui
-                                .add_enabled(
-                                    can_format && valid,
-                                    egui::Button::new(text)
-                                        .selected(active)
-                                        .stroke(Stroke::new(
-                                            if state == MarkState::Mixed { 1.0 } else { 0.0 },
-                                            t.accent,
-                                        ))
-                                        .frame_when_inactive(active || state == MarkState::Mixed)
-                                        .min_size(egui::vec2(32.0, 32.0)),
-                                )
-                                .on_hover_text(if state == MarkState::Mixed {
-                                    format!("{} · {}", l.text(msgid), l.text("Mixed formatting"))
-                                } else {
-                                    l.text(msgid).into()
-                                })
-                                .clicked()
-                            {
-                                if let Err(error) = rich.session.toggle_mark(Mark::new(mark)) {
-                                    operation_error = Some(error.into());
-                                }
-                                rich.session.request_canvas_focus(ui.ctx());
-                            }
-                        }
-                        ui.separator();
-                        ui.menu_button(l.text("Table"), |ui| {
-                            if ui.button(l.text("Insert table · 3 × 3")).clicked() {
-                                if let Err(error) = insert_table(&mut rich.session) {
-                                    operation_error = Some(error);
-                                }
-                                rich.session.request_canvas_focus(ui.ctx());
-                                ui.close();
-                            }
-                            let context = TableContext::current(&rich.session);
-                            ui.add_enabled_ui(context.is_some(), |ui| {
-                                for (msgid, action) in [
-                                    ("Add row below", TableAction::AddRow),
-                                    ("Add column right", TableAction::AddColumn),
-                                    ("Delete row", TableAction::DeleteRow),
-                                    ("Delete column", TableAction::DeleteColumn),
-                                    ("Merge selected cells", TableAction::Merge),
-                                    ("Split cell", TableAction::Split),
-                                ] {
-                                    let allowed = context
-                                        .as_ref()
-                                        .is_some_and(|context| context.allows(action));
-                                    if ui
-                                        .add_enabled(allowed, egui::Button::new(l.text(msgid)))
-                                        .clicked()
-                                    {
-                                        if let Some(context) = &context
-                                            && let Err(error) =
-                                                context.apply(&mut rich.session, action)
-                                        {
-                                            operation_error = Some(error);
-                                        }
-                                        rich.session.request_canvas_focus(ui.ctx());
-                                        ui.close();
-                                    }
-                                }
-                            });
-                        });
-                        ui.separator();
-                        if ui
-                            .add_enabled_ui(rich.session.can_undo(), |ui| {
-                                icons::icon_button(ui, Icon::Undo, l.text("Undo"))
-                            })
-                            .inner
-                            .clicked()
-                        {
-                            if let Err(error) = rich.session.undo() {
-                                operation_error = Some(error.into());
-                            }
-                            rich.session.request_canvas_focus(ui.ctx());
-                        }
-                        if ui
-                            .add_enabled_ui(rich.session.can_redo(), |ui| {
-                                icons::icon_button(ui, Icon::Redo, l.text("Redo"))
-                            })
-                            .inner
-                            .clicked()
-                        {
-                            if let Err(error) = rich.session.redo() {
-                                operation_error = Some(error.into());
-                            }
-                            rich.session.request_canvas_focus(ui.ctx());
-                        }
-                        let more = icons::icon_button(ui, Icon::More, l.text("More formatting"));
-                        egui::Popup::menu(&more).show(|ui| {
-                            for (mark, msgid) in
-                                [("strike", "Strikethrough"), ("code", "Inline code")]
-                            {
-                                if ui
-                                    .add_enabled(can_format, egui::Button::new(l.text(msgid)))
-                                    .clicked()
-                                {
-                                    if let Err(error) = rich.session.toggle_mark(Mark::new(mark)) {
-                                        operation_error = Some(error.into());
-                                    }
-                                    rich.session.request_canvas_focus(ui.ctx());
-                                    ui.close();
-                                }
-                            }
-                        });
-                    });
-                });
+                if let Err(error) = authoring::toolbar(ui, &mut rich, l, t) {
+                    operation_error = Some(error);
+                }
             });
         let media_ready = match rich.media.update(
             rich.session.document(),
             rich.session.revision(),
-            l,
-            t,
-            self.font_size,
-            ui.ctx().pixels_per_point(),
+            rendering::RenderHost {
+                language: l, tokens: t, font_size: self.font_size,
+                pixel_scale: ui.ctx().pixels_per_point(), workspace: &self.workspace,
+                project_id: self.project.as_ref().map_or("", |project| project.id.as_str()),
+            },
         ) {
             Ok(ready) => ready,
             Err(error) => {
@@ -350,7 +220,6 @@ impl StudioApp {
         if !media_ready {
             ui.ctx().request_repaint_after(Duration::from_millis(50));
         }
-        let mut changed = false;
         egui::ScrollArea::vertical()
             .id_salt(("rich-scroll", rich.session.options.id))
             .auto_shrink([false, false])
@@ -380,7 +249,7 @@ impl StudioApp {
                             line_height: 1.65,
                             paragraph_spacing: 14.0,
                             min_height: 500.0,
-                            read_only: rich.read_only,
+                            read_only: rich.read_only || rich.dialog.is_some(),
                         };
                         if !media_ready {
                             if rich.media.failed() {
@@ -415,6 +284,11 @@ impl StudioApp {
                     });
                 });
             });
+                });
+        });
+        if let Some(project) = &self.project {
+            authoring::show_dialog(ui.ctx(), &mut rich, &self.workspace, &project.id, l, t);
+        }
         if changed || rich.session.revision() != before {
             self.body = rich.session.document().plain_text();
             self.dirty = Some(Instant::now());
@@ -515,17 +389,6 @@ fn fresh_cell(header: bool) -> Node {
 }
 
 fn insert_table(session: &mut EditorSession) -> AppResult<()> {
-    let index = session
-        .selection()
-        .and_then(|selection| {
-            find_path(
-                session.document().root(),
-                &selection.head.block_id,
-                NodePath::root(),
-            )
-        })
-        .and_then(|path| path.0.first().copied())
-        .map_or(session.document().blocks().len(), |index| index + 1);
     let rows = (0..3)
         .map(|row| {
             Node::block(
@@ -547,13 +410,8 @@ fn insert_table(session: &mut EditorSession) -> AppResult<()> {
         block_id: id,
         offset: ScalarOffset(0),
     };
-    let parent = session.document().node_ref(&NodePath::root())?;
-    session.apply_commands_with_selection(
-        vec![Command::InsertChildren {
-            parent,
-            index,
-            children: vec![table],
-        }],
+    session.insert_content_with_selection(
+        craft_editor_egui::ContentSlice::Blocks(vec![table]),
         Selection {
             anchor: point.clone(),
             head: point,

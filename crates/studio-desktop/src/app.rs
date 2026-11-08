@@ -451,6 +451,18 @@ impl StudioApp {
             self.focus_mode,
         )
     }
+    fn rich_modal_open(&self) -> bool {
+        #[cfg(feature = "editor-preview")]
+        {
+            self.rich
+                .as_ref()
+                .is_some_and(rich_editor::RichState::dialog_open)
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            false
+        }
+    }
     fn modal_open(&self) -> bool {
         self.settings_open
             || self.project_dialog
@@ -458,6 +470,7 @@ impl StudioApp {
             || self.import_preview.is_some()
             || self.error.is_some()
             || self.full_review.is_some()
+            || self.rich_modal_open()
     }
 }
 

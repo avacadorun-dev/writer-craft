@@ -850,7 +850,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-egui"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=5d2b78abb2961675ac65df037ebce4b1d47ea73a#5d2b78abb2961675ac65df037ebce4b1d47ea73a"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=414cbeaa9257b1b28f1e6f5dd56b440bf6195adf#414cbeaa9257b1b28f1e6f5dd56b440bf6195adf"
 dependencies = [
  "craft-editor-model",
  "egui",
@@ -865,7 +865,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=5d2b78abb2961675ac65df037ebce4b1d47ea73a#5d2b78abb2961675ac65df037ebce4b1d47ea73a"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=414cbeaa9257b1b28f1e6f5dd56b440bf6195adf#414cbeaa9257b1b28f1e6f5dd56b440bf6195adf"
 dependencies = [
  "prosemirror",
  "serde",
@@ -876,7 +876,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-render"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=5d2b78abb2961675ac65df037ebce4b1d47ea73a#5d2b78abb2961675ac65df037ebce4b1d47ea73a"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=414cbeaa9257b1b28f1e6f5dd56b440bf6195adf#414cbeaa9257b1b28f1e6f5dd56b440bf6195adf"
 dependencies = [
  "craft-editor-egui",
  "craft-editor-model",
@@ -4395,6 +4395,7 @@ name = "studio-core"
 version = "0.1.0-alpha.1"
 dependencies = [
  "craft-editor-model",
+ "image",
  "rusqlite",
  "serde",
  "serde_json",

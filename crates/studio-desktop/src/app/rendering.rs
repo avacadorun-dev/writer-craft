@@ -1,7 +1,7 @@
 //! Background preparation of real native rich-block media, separate from canonical editing.
 use super::*;
 use craft_editor_model::{Document as RichDocument, Node, Revision};
-use craft_editor_render::{AssetMap, FallbackLabels, PreparedCatalog, RenderOptions, Renderer};
+use craft_editor_render::{FallbackLabels, PreparedCatalog, RenderOptions, Renderer};
 use std::sync::{Arc, OnceLock};
 
 #[derive(Clone, PartialEq)]
@@ -16,6 +16,15 @@ struct RenderKey {
 struct RenderJob {
     key: RenderKey,
     receiver: mpsc::Receiver<craft_editor_render::Result<PreparedCatalog>>,
+}
+
+pub(super) struct RenderHost<'a> {
+    pub language: Language,
+    pub tokens: Tokens,
+    pub font_size: f32,
+    pub pixel_scale: f32,
+    pub workspace: &'a Workspace,
+    pub project_id: &'a str,
 }
 
 /// One bounded worker at a time; a late result cannot replace a newer source/theme request.
@@ -49,11 +58,16 @@ impl RenderState {
         &mut self,
         document: &RichDocument,
         revision: Revision,
-        language: Language,
-        t: Tokens,
-        font_size: f32,
-        pixel_scale: f32,
+        host: RenderHost<'_>,
     ) -> AppResult<bool> {
+        let RenderHost {
+            language,
+            tokens: t,
+            font_size,
+            pixel_scale,
+            workspace,
+            project_id,
+        } = host;
         if self.source_revision != Some(revision) {
             let source = atom_source(document)?;
             if self.atom_source.as_ref() != &source {
@@ -124,6 +138,9 @@ impl RenderState {
                 .checked_add(1)
                 .ok_or("Renderer generation exhausted")?;
             let generation = self.generation;
+            let assets = OwnedAssets {
+                snapshot: workspace.image_asset_snapshot(project_id, document)?,
+            };
             let document = document.clone();
             let options = RenderOptions {
                 font_size,
@@ -143,11 +160,6 @@ impl RenderState {
             std::thread::Builder::new()
                 .name("writercraft-native-media".into())
                 .spawn(move || {
-                    let mut assets = AssetMap::default();
-                    assets.insert(
-                        "showcase-lighthouse",
-                        Arc::new(include_bytes!("../../../../assets/demo/lighthouse.svg").to_vec()),
-                    );
                     let result = Renderer::new(options).and_then(|renderer| {
                         renderer.prepare_document(&document, &assets, generation)
                     });
@@ -182,6 +194,25 @@ fn atom_source(document: &RichDocument) -> AppResult<Vec<u8>> {
     let mut atoms = vec![];
     visit(document.root(), &mut atoms);
     Ok(serde_json::to_vec(&atoms)?)
+}
+
+/// Only application-owned bytes and the explicit bundled showcase resource are visible.
+struct OwnedAssets {
+    snapshot: studio_core::ImageAssetSnapshot,
+}
+impl craft_editor_render::AssetSource for OwnedAssets {
+    fn load(&self, node: &Node) -> craft_editor_render::Result<Arc<Vec<u8>>> {
+        if node.string_attr("assetId") == Some("showcase-lighthouse")
+            && node.string_attr("src") == Some("asset://showcase-lighthouse")
+        {
+            return Ok(Arc::new(
+                include_bytes!("../../../../assets/demo/lighthouse.svg").to_vec(),
+            ));
+        }
+        self.snapshot
+            .load(node)
+            .map_err(|_| craft_editor_render::Error::AssetUnavailable)
+    }
 }
 
 #[cfg(test)]
