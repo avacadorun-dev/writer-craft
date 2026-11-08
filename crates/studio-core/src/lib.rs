@@ -47,7 +47,7 @@ pub use project_portability::{
     visit_portable_shard,
 };
 pub use project_structure::ImportedProjectStructure;
-pub use rich::{RichDraft, RichRevision};
+pub use rich::{CreatedProject, InitialManuscript, RichDraft, RichRevision};
 pub use rich_review::{RichProposal, RichProposalSummary};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
 pub use workspace_paths::is_workspace_data_path;

@@ -293,18 +293,6 @@ fn insert_empty_document(
             StudioError::Validation(format!("Cannot initialize structured manuscript: {error}"))
         })?;
     let encoded = serde_json::to_string(&tree)?;
-    connection.execute("INSERT INTO documents(id,project_id,title,body,revision,read_only,source_json) VALUES(?1,?2,?3,'',1,0,NULL)", params![id,project,title])?;
-    connection.execute(
-        "INSERT INTO document_revisions(document_id,revision,body,source) VALUES(?1,1,'','manual')",
-        [id],
-    )?;
-    connection.execute(
-        "INSERT INTO rich_documents(document_id,content_json) VALUES(?1,?2)",
-        params![id, encoded],
-    )?;
-    connection.execute(
-        "INSERT INTO rich_document_revisions(document_id,revision,content_json) VALUES(?1,1,?2)",
-        params![id, encoded],
-    )?;
+    crate::rich::insert_initial_manuscript(connection, project, id, title, "", Some(&encoded))?;
     Ok(())
 }

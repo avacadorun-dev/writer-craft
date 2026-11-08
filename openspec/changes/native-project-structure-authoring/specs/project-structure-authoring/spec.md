@@ -31,3 +31,17 @@ Known structural/head changes SHALL preserve original source bytes, unknown fiel
 
 - **WHEN** the author exports and restores a project after creating a custom child and initializing an old head0 node
 - **THEN** the current hierarchy and saved text heads survive, scoped aliases resolve only in the restored namespace and the old immutable source baseline stays available without nested copies
+
+### Requirement: Creation prerequisites and aggregate acknowledgement
+
+Project and document forms SHALL check current save/navigation prerequisites before inserting any record. Creating a new native project and its first manuscript/history SHALL be atomic. A refusal SHALL retain form input without duplicate records; a completed creation receipt SHALL close the form even if later view navigation fails.
+
+#### Scenario: Create while a card cannot be left
+
+- **WHEN** an author submits either creation form while a card is dirty, composing, pending or failed
+- **THEN** creation refuses before mutation, retains the current card and form fields, and a clean retry creates exactly one intended record
+
+#### Scenario: The first manuscript history cannot be inserted
+
+- **WHEN** a project creation fails after its project row was inserted but before all initial manuscript history is saved
+- **THEN** the transaction rolls back the entire new aggregate and the previous library remains unchanged

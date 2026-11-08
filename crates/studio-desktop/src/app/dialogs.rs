@@ -34,18 +34,27 @@ impl StudioApp {
                     }
                 });
                 if create {
-                    let result = (|| -> AppResult<()> {
-                        let project = self.workspace.create_project(self.project_name.trim())?;
-                        self.create_empty_manuscript(&project.id, l.text("First chapter"))?;
-                        self.projects = self.workspace.list_projects()?;
-                        self.open_project(project)?;
-                        Ok(())
-                    })();
-                    if result.is_ok() {
-                        self.project_dialog = false;
-                        self.project_name.clear();
+                    match self.create_project_from_form() {
+                        Ok(project) => {
+                            // A creation receipt closes the form even if subsequent navigation fails.
+                            self.project_dialog = false;
+                            self.project_name.clear();
+                            match self.create_document_from_form() {
+                                Ok(document) => {
+                                    self.document_dialog = false;
+                                    self.document_name.clear();
+                                    let result = (|| -> AppResult<()> {
+                                        self.documents =
+                                            self.workspace.list_documents(&document.project_id)?;
+                                        self.open_document(document)
+                                    })();
+                                    self.record_error(result);
+                                }
+                                Err(error) => self.record_error(Err(error)),
+                            }
+                        }
+                        Err(error) => self.record_error(Err(error)),
                     }
-                    self.record_error(result);
                 }
             });
             if response.should_close() {
@@ -127,6 +136,39 @@ impl StudioApp {
                 self.error = None;
             }
         }
+    }
+
+    fn prepare_creation(&mut self) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.ensure_canvas_navigation()?;
+        self.commit_title_edit()?;
+        self.save()
+    }
+
+    pub(super) fn create_project_from_form(&mut self) -> AppResult<Project> {
+        self.prepare_creation()?;
+        #[cfg(feature = "editor-preview")]
+        let format = studio_core::InitialManuscript::Structured;
+        #[cfg(not(feature = "editor-preview"))]
+        let format = studio_core::InitialManuscript::Plain;
+        Ok(self
+            .workspace
+            .create_project_with_manuscript(
+                self.project_name.trim(),
+                self.language.text("First chapter"),
+                format,
+            )?
+            .project)
+    }
+
+    pub(super) fn create_document_from_form(&mut self) -> AppResult<Document> {
+        self.prepare_creation()?;
+        let project = self.project.as_ref().ok_or_else(|| {
+            studio_core::StudioError::Validation(
+                "Choose a project before creating a manuscript".into(),
+            )
+        })?;
+        self.create_empty_manuscript(&project.id, self.document_name.trim())
     }
 
     fn create_empty_manuscript(&self, project_id: &str, title: &str) -> AppResult<Document> {

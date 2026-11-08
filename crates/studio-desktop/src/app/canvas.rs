@@ -1740,6 +1740,67 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn creation_should_refuse_before_mutation_for_every_unacknowledged_card_state() -> TestResult {
+        for blocked in ["dirty", "composition", "pending", "failed"] {
+            let (_directory, mut app, project) = backup_fixture()?;
+            app.project_name = "Retained project form".into();
+            app.document_name = "Retained document form".into();
+            let before_projects = app.workspace.list_projects()?;
+            let before_documents = app.workspace.list_documents(&project)?;
+            let state = app.canvas.as_mut().ok_or("canvas")?;
+            let mut editor = TextCardEditor::new(&state.session, "card")?;
+            if blocked == "dirty" {
+                *editor.text_mut() = "Local unsaved source 😀".into();
+            }
+            state.text_editor = Some(editor);
+            let (_sender, receiver) = mpsc::channel();
+            match blocked {
+                "composition" => state.text_composing = true,
+                "pending" => state.pending = Some(receiver),
+                "failed" => {
+                    state.failed = Some(state.session.prepare(
+                        CanvasTransaction::new(
+                            state.session.identity(),
+                            vec![CanvasCommand::EditText {
+                                node_id: "card".into(),
+                                expected: "Old 😀 text".into(),
+                                text: "Unacknowledged source".into(),
+                            }],
+                        ),
+                        &state.dialect,
+                    )?)
+                }
+                _ => {}
+            }
+            assert!(app.create_project_from_form().is_err(), "{blocked}");
+            assert!(app.create_document_from_form().is_err(), "{blocked}");
+            assert_eq!(app.project_name, "Retained project form");
+            assert_eq!(app.document_name, "Retained document form");
+            assert_eq!(app.workspace.list_projects()?, before_projects);
+            assert_eq!(app.workspace.list_documents(&project)?, before_documents);
+            let state = app.canvas.as_mut().ok_or("canvas")?;
+            assert!(state.text_editor.is_some());
+            state.text_editor = None;
+            state.text_composing = false;
+            state.pending = None;
+            state.failed = None;
+            let created = app.create_project_from_form()?;
+            assert_eq!(
+                app.workspace.list_projects()?.len(),
+                before_projects.len() + 1
+            );
+            assert_eq!(app.workspace.list_documents(&created.id)?.len(), 1);
+            let document = app.create_document_from_form()?;
+            assert_eq!(document.project_id, project);
+            assert_eq!(
+                app.workspace.list_documents(&project)?.len(),
+                before_documents.len() + 1
+            );
+        }
+        Ok(())
+    }
+
     fn graph() -> serde_json::Value {
         json!({"nodes":[{"id":"card","type":"text","x":0,"y":0,"width":300,"height":180,"text":"Old 😀 text","x-writers-studio":{"card":{"typeId":"unknown","fields":{"opaque":[1,null]}},"future":{"keep":true}}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"keep":true}}})
     }
