@@ -57,19 +57,21 @@ jobs:
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$(python3 scripts/release-check.py --fingerprint)" >> "$GITHUB_OUTPUT"
       - name: Prepare pinned Rust checks
+        id: rust
         run: |
           test "$(uname -m)" = arm64
           rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-apple-darwin
+          echo "compiler=$(rustc -V | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: editor-preview-${{ runner.os }}-${{ runner.arch }}-rust-1.97.0-${{ hashFiles('Cargo.lock') }}
+          key: editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            editor-preview-${{ runner.os }}-${{ runner.arch }}-rust-1.97.0-
+            editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
       - name: Verify default and native-editor source configurations
         run: |
           cargo fmt --all -- --check
