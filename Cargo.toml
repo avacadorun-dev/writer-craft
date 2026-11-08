@@ -17,6 +17,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 sha2 = "0.10"
 rusqlite = { version = "0.41.1", features = ["bundled", "backup", "blob"] }
 tempfile = "3"
+cap-std = { version = "=4.0.3", default-features = false }
 zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
 eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "accesskit", "default_fonts", "x11", "wayland"] }
 egui = "=0.36.2"
