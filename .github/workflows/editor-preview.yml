@@ -26,8 +26,62 @@ env:
   RUST_TARGET: aarch64-apple-darwin
 
 jobs:
+  resolve-lock:
+    name: Verify committed preview dependency lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      ready: ${{ steps.resolve.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare metadata compiler
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          echo "compiler=$(rustc -V | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: editor-preview-metadata-${{ runner.os }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            editor-preview-metadata-${{ runner.os }}-${{ steps.rust.outputs.compiler }}-
+      - name: Verify or resolve the lockfile on the hosted runner
+        id: resolve
+        run: |
+          mkdir -p artifacts/qualification
+          git rev-parse HEAD > artifacts/qualification/source-commit.txt
+          rustc -vV > artifacts/qualification/compiler.txt
+          ready=true
+          if ! cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-metadata.json" 2> artifacts/qualification/lock-check.log; then
+            cargo generate-lockfile > artifacts/qualification/lock-resolution.log 2>&1
+            ready=false
+          fi
+          cp Cargo.lock artifacts/qualification/Cargo.lock
+          echo "$ready" > artifacts/qualification/committed-lock-ready.txt
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+      - name: Retain the small resolved lock and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-preview-lock-${{ github.sha }}
+          path: artifacts/qualification/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Require the resolved lock to be committed before a macOS build
+        if: steps.resolve.outputs.ready != 'true'
+        run: |
+          echo '::error::The committed Cargo.lock is stale. Download the editor-preview-lock artifact, commit its resolved Cargo.lock, and push again before building the preview.'
+          exit 1
+
   macos-editor:
     name: Native editor preview (macOS ARM64)
+    needs: [resolve-lock]
+    if: needs.resolve-lock.outputs.ready == 'true'
     runs-on: macos-15
     timeout-minutes: 75
     steps:
@@ -56,19 +110,20 @@ jobs:
             editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
             ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-
             ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
-      - name: Resolve the preview lockfile on the hosted runner
+      - name: Verify the committed native dependency graph and retain identity
         run: |
-          mkdir -p artifacts/qualification
-          git rev-parse HEAD > artifacts/qualification/source-commit.txt
-          rustc -vV > artifacts/qualification/compiler.txt
-          cargo generate-lockfile
-          cp Cargo.lock artifacts/qualification/Cargo.lock
-      - name: Retain resolved dependency and source identity
+          mkdir -p artifacts/native-qualification
+          git rev-parse HEAD > artifacts/native-qualification/source-commit.txt
+          rustc -vV > artifacts/native-qualification/compiler.txt
+          cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-native-metadata.json"
+          git diff --exit-code -- Cargo.lock
+          cp Cargo.lock artifacts/native-qualification/Cargo.lock
+      - name: Retain native compiler and committed lock identity
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: editor-preview-lock-${{ github.sha }}
-          path: artifacts/qualification/
+          name: editor-preview-native-${{ github.sha }}
+          path: artifacts/native-qualification/
           if-no-files-found: warn
           retention-days: 14
       - name: Check formatting
