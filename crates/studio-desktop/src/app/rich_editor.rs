@@ -111,7 +111,7 @@ impl RichState {
         }
     }
     /// Last measured native manuscript scroll offset, never an invented initial bookmark.
-    pub(super) fn navigation_scroll_offset(&self) -> Option<f32> {
+    pub(super) fn measured_navigation_scroll_offset(&self) -> Option<f32> {
         self.measured_scroll_offset
     }
     /// Queue presentation restoration after a guarded same-document return.
@@ -195,7 +195,6 @@ impl RichState {
         })
     }
 
-    #[cfg(test)]
     pub(super) fn pending_proof_count(&self) -> usize {
         self.pending_proofs.len()
     }

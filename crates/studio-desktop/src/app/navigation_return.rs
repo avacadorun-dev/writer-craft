@@ -180,7 +180,7 @@ fn document_return(app: &StudioApp) -> AppResult<ReturnContent> {
             Ok(RichReturn {
                 identity: content_identity(rich.session.document().root())?,
                 selection: rich.session.selection_state()?,
-                scroll: rich.navigation_scroll_offset(),
+                scroll: rich.measured_navigation_scroll_offset(),
             })
         })
         .transpose()?;
@@ -257,7 +257,7 @@ mod tests {
             app.rich
                 .as_ref()
                 .ok_or("rich")?
-                .navigation_scroll_offset()
+                .measured_navigation_scroll_offset()
                 .is_none()
         );
         let bookmark = NavigationReturn::capture(&app)?;

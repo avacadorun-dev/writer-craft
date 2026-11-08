@@ -324,17 +324,16 @@ impl ProjectTransferState {
                                 {
                                     action = Some(Action::OpenRestored(id.clone()));
                                 }
-                            } else if matches!(outcome.kind, OutcomeKind::Exported) {
-                                if components::action(
+                            } else if matches!(outcome.kind, OutcomeKind::Exported)
+                                && components::action(
                                     ui,
                                     l.text("Open output folder"),
                                     true,
                                     Some(t),
                                 )
                                 .clicked()
-                                {
-                                    action = Some(Action::Reveal);
-                                }
+                            {
+                                action = Some(Action::Reveal);
                             }
                             if outcome.retry.is_some()
                                 && components::action(ui, l.text("Retry"), true, None).clicked()
@@ -432,10 +431,10 @@ impl StudioApp {
     }
     pub(super) fn project_transfer_dialog(&mut self, ctx: &egui::Context, t: Tokens) {
         let action = self.project_transfer.dialog(ctx, self.language, t);
-        if let Some(action) = action {
-            if let Err(error) = self.transfer_action(action, ctx) {
-                self.project_transfer.auxiliary_error = Some(error.to_string());
-            }
+        if let Some(action) = action
+            && let Err(error) = self.transfer_action(action, ctx)
+        {
+            self.project_transfer.auxiliary_error = Some(error.to_string());
         }
     }
     pub(super) fn poll_project_transfer(&mut self, ctx: &egui::Context) {
