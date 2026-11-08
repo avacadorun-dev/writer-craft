@@ -1,26 +1,48 @@
 {
   "schema_version": 1,
-  "status": "pending",
+  "status": "accepted",
   "independent": true,
-  "reviewer": "independent UI/UX designer (ux_acceptance)",
-  "scope": "full-editor-parity",
+  "reviewer": "independent desktop UI/UX designer (alpha2_scoped_ux)",
+  "scope": "native-rich-editor-alpha",
   "version": "0.1.0-alpha.2",
-  "version_status": "Selected acceptance target only; not a released version or a completed build.",
-  "workspace_version_at_review": "0.1.0-alpha.1",
-  "version_note": "Cargo remains 0.1.0-alpha.1 on the editor feature branch until candidate versioning. This pending record does not change package metadata or approve a release.",
-  "source_fingerprint": "f6b31e3a3f67383149530d48c8b609f089f470970cf6fdba7f5eaf302ec296c8",
-  "blockers": [
-    "The complete current-editor capability matrix and UX journeys are not yet satisfied; an internal vertical slice cannot pass full-editor-parity.",
-    "Model, core/storage and headless native-view checkpoints do not establish compiled macOS editor interaction, clipboard, IME, accessibility or visual parity.",
-    "All required blocks, marks, exact selections, persistent notes/dictionary links, source references, history/recovery and editor integration handoffs need complete semantic and native evidence.",
-    "Fresh versioned compiled captures, native interaction records and an independent final review against the candidate fingerprint are required before acceptance."
+  "source_fingerprint": "627547cc12f80c551c9ae84947d16d370dc9db263c80b1bcaee01864596da0c9",
+  "runtime_source_commit": "8af4233ba5e531b360ee4914e4a5d5996f7bb72e",
+  "blockers": [],
+  "evidence": [
+    {
+      "path": "docs/images/alpha2/workspace-dark.png",
+      "sha256": "3bb7f7c47c9ca5145bb9d1c6edfc3cfbd0e798804250d7cc963f09afb21cf236"
+    },
+    {
+      "path": "docs/images/alpha2/diagram-light.png",
+      "sha256": "0e065476004cae54e326606fc5417f9e8cebb3f22691612bcfaf7905b49e14ea"
+    },
+    {
+      "path": "docs/images/alpha2/image-light.png",
+      "sha256": "90e526a610c54d3bbd318d01ca2232c956481337501ed52bb24fbec237fc3fe8"
+    },
+    {
+      "path": "docs/images/alpha2/formulas-light.png",
+      "sha256": "c0411c6e7bafedbee9340e3a19580a45858c67858357e24bf1dbe2c5edeb3376"
+    },
+    {
+      "path": "docs/images/alpha2/settings-light.png",
+      "sha256": "c75487cdb687358a33dddb1b4f67b682af3af1bf6a4cff5a953bd6fa5033acde"
+    },
+    {
+      "path": "docs/images/alpha2/large-caption-dark.png",
+      "sha256": "b796165c385d15ad7b438338fdfbb96d9d9f9f12b8f56fbf76dca3a78ee8b784"
+    }
   ],
-  "requirements": [
-    "docs/design/EDITOR_UX_PARITY.md",
-    "docs/migration/EDITOR_PARITY_MATRIX.md",
-    "openspec/changes/full-editor-parity/"
-  ],
-  "evidence": [],
-  "interaction_evidence": null,
-  "historical_acceptance": "docs/design/UX_REVIEW_003.md records alpha.1 native-foundation acceptance only; its captures and observations are not alpha.2 editor-parity evidence."
+  "interaction_evidence": "docs/design/UX_REVIEW_ALPHA2_CHECKPOINT.md",
+  "review_date": "2026-11-08",
+  "acceptance_level": "Owner-approved implemented engineering checkpoint; not Author pilot or full parity.",
+  "full_parity_status": "Pending; historical full-editor gate retained in docs/design/UX_GATE_FULL_PARITY_PENDING.json; unfinished work continues in alpha.3.",
+  "limitations": [
+    "No daily-use, complete original editor/product migration, or product-issue closure approval.",
+    "Hosted actual normal-app captures pass20/20; requested-wide cases are constrained, and28px lower tile shows only the last image-caption line.",
+    "Native launch/create/paste/save evidence is carried from unchanged ordinary authoring source c277a3c; title automation anomaly, interrupted insertion/format/reopen and preference error/retry/AX journeys remain unqualified.",
+    "Complete tables/clipboard/IME/accessibility, notes/dictionary, rich assistant, full project/Canvas/media/import/export/canonical restore remain alpha.3.",
+    "macOS ad-hoc signing is not Developer ID/notarization; Windows/Linux installation checks do not qualify all desktop interaction."
+  ]
 }
