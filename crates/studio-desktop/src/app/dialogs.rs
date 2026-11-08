@@ -109,43 +109,8 @@ impl StudioApp {
         if self.settings_open {
             self.settings_dialog(ctx, t);
         }
-        if let Some(preview) = &self.import_preview {
-            let response = modal(
-                ctx,
-                l,
-                "archive-preview",
-                l.text(".wstudio project preview"),
-                540.0,
-                |ui| {
-                    ui.heading(&preview.title);
-                    ui.add_space(10.0);
-                    ui.label(l.format(
-                        "Format version: {version} · Documents: {count}",
-                        &[
-                            ("version", preview.format_version.to_string()),
-                            ("count", preview.documents.len().to_string()),
-                        ],
-                    ));
-                    ui.add_space(12.0);
-                    ui.label(l.text("Archive checked. Text preview is available. Full project import and rich-document editing are not implemented yet."));
-                    ui.add_space(12.0);
-                    egui::ScrollArea::vertical()
-                        .max_height(300.0)
-                        .show(ui, |ui| {
-                            for document in &preview.documents {
-                                egui::CollapsingHeader::new(&document.title)
-                                    .id_salt(&document.id)
-                                    .show(ui, |ui| {
-                                        ui.label(&document.plain_text);
-                                    });
-                            }
-                        });
-                },
-            );
-            if response.should_close() {
-                self.import_preview = None;
-            }
-        }
+        self.project_import
+            .dialog(ctx, &self.database, self.language, t);
         if let Some(message) = self.error.clone() {
             let response = modal(ctx, l, "error", l.text("Attention needed"), 440.0, |ui| {
                 ui.label(l.text(message.msgid));

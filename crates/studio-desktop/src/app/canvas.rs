@@ -331,6 +331,10 @@ impl CanvasState {
             CanvasIntent::OpenNode { base, node_id } => {
                 if base != self.session.identity() { return Err(CanvasError::StaleBase.into()); }
                 let node = self.session.document().node(&node_id).ok_or_else(|| CanvasError::NotFound(node_id.clone()))?;
+                if matches!(node.kind(), NodeKind::Link) {
+                    self.resource=Some(CanvasResource {project:self.project_id.clone(),kind:"url".into(),logical_id:node.body().into()});
+                    return Ok(());
+                }
                 let extension = node.field("x-writers-studio").map(|raw| serde_json::from_str::<serde_json::Value>(raw.get())).transpose()?;
                 let resource = extension.as_ref().and_then(|value| value.get("resource"));
                 let kind = resource.and_then(|value| value["kind"].as_str());
@@ -938,5 +942,157 @@ mod tests {
             GroupBehavior::Frame
         );
         Ok(())
+    }
+}
+
+/// Navigation refusal is distinct from a malformed input or canonical save failure.
+#[derive(Debug)]
+pub(super) struct PendingCanvas;
+impl std::fmt::Display for PendingCanvas {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Finish or preserve the pending board operation before leaving.")
+    }
+}
+impl std::error::Error for PendingCanvas {}
+
+impl StudioApp {
+    pub(super) fn ensure_canvas_navigation(&self) -> AppResult<()> {
+        if self
+            .canvas
+            .as_ref()
+            .is_some_and(CanvasState::blocks_navigation)
+        {
+            return Err(PendingCanvas.into());
+        }
+        Ok(())
+    }
+    pub(super) fn open_canvas(&mut self, id: &str) -> AppResult<()> {
+        self.ensure_canvas_navigation()?;
+        self.commit_title_edit()?;
+        self.cancel_clipboard_work();
+        self.save()?;
+        let project = self.project.as_ref().ok_or_else(|| {
+            studio_core::StudioError::Validation("Choose a project before opening a board".into())
+        })?;
+        let state = CanvasState::open(&self.workspace, &project.id, id)?;
+        self.canvas = Some(state);
+        self.document = None;
+        self.rich = None;
+        self.body.clear();
+        self.notes.clear();
+        self.daily_controls.document_changed();
+        self.inspector_visible = false;
+        self.library = false;
+        Ok(())
+    }
+    fn create_board(&mut self) -> AppResult<()> {
+        self.ensure_canvas_navigation()?;
+        self.commit_title_edit()?;
+        self.save()?;
+        let project = self.project.as_ref().ok_or_else(|| {
+            studio_core::StudioError::Validation("Choose a project before creating a board".into())
+        })?;
+        let snapshot = self.workspace.create_project_canvas(
+            &project.id,
+            self.language.text("New board"),
+            serde_json::json!({"nodes":[],"edges":[],"x-writers-studio":{"schemaVersion":2}}),
+        )?;
+        self.open_canvas(&snapshot.canvas.id)
+    }
+    pub(super) fn canvas_navigation(&mut self, ui: &mut egui::Ui, tokens: Tokens) {
+        let Some(project) = self.project.as_ref() else {
+            return;
+        };
+        let boards = match self.workspace.project_canvases(&project.id) {
+            Ok(boards) => boards,
+            Err(error) => {
+                self.record_error(Err(error.into()));
+                return;
+            }
+        };
+        let l = self.language;
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            icons::icon(ui, Icon::Board, 20.0, tokens.muted);
+            ui.label(RichText::new(l.text("Boards")).size(13.0).strong());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if icons::icon_button(ui, Icon::Plus, l.text("Add board")).clicked() {
+                    let result = self.create_board();
+                    self.record_error(result);
+                }
+            });
+        });
+        let mut selected = None;
+        egui::ScrollArea::vertical()
+            .id_salt("canvas-navigation")
+            .max_height(180.0)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for board in boards {
+                    let active = self
+                        .canvas
+                        .as_ref()
+                        .is_some_and(|state| state.snapshot.canvas.id == board.id);
+                    if nav_row(ui, Icon::Board, &board.title, active, tokens).clicked() {
+                        selected = Some(board.id);
+                    }
+                }
+            });
+        if let Some(id) = selected {
+            let result = self.open_canvas(&id);
+            self.record_error(result);
+        }
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(12.0);
+    }
+    pub(super) fn poll_canvas(&mut self, ctx: &egui::Context) {
+        let Some(state) = &mut self.canvas else {
+            return;
+        };
+        let result = state.poll(ctx);
+        self.status = if state.pending.is_some() {
+            "Saving…"
+        } else if state.failed.is_some() || state.failure.is_some() {
+            "Attention needed"
+        } else {
+            "All changes saved"
+        }
+        .into();
+        let resource = state.take_resource();
+        self.record_error(result);
+        if let Some(resource) = resource {
+            let result = self.open_canvas_resource(resource, ctx);
+            self.record_error(result);
+        }
+    }
+    fn open_canvas_resource(
+        &mut self,
+        resource: CanvasResource,
+        ctx: &egui::Context,
+    ) -> AppResult<()> {
+        if self.project.as_ref().map(|project| project.id.as_str())
+            != Some(resource.project.as_str())
+        {
+            return Err(CanvasError::StaleBase.into());
+        }
+        match resource.kind.as_str() {
+            "document" => {
+                let id=match self.workspace.resolve_project_resource(&resource.project,"node",&resource.logical_id) {
+                    Ok(id)=>id,
+                    Err(studio_core::StudioError::NotFound{..})=>resource.logical_id.clone(),
+                    Err(error)=>return Err(error.into()),
+                };
+                let document = self.workspace.document(&id)?;
+                if document.project_id!=resource.project {return Err(CanvasError::StaleBase.into());}
+                self.open_document(document)
+            }
+            "canvas" => self.open_canvas(&resource.logical_id),
+            "url" if resource.logical_id.starts_with("https://") || resource.logical_id.starts_with("http://") => {
+                ctx.open_url(egui::OpenUrl::new_tab(resource.logical_id));Ok(())
+            }
+            _ => Err(CanvasError::Invalid("This project resource preview is not available in the current integration checkpoint; its original bytes remain preserved".into()).into()),
+        }
     }
 }

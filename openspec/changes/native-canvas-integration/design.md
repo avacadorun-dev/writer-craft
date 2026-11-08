@@ -2,7 +2,7 @@
 
 ## Dependency decision
 
-Pin `craft-canvas-model` and `craft-canvas-egui` to `63845f9471182d8597757ddd6b7d2f8db45e6d3b`. Exact hosted run42491125972 passed locked Rust1.95 tests, rustfmt and strict Clippy on macOS, Windows and Ubuntu. This qualifies model/egui event contracts, not full native application interaction. The crates reuse the host's egui0.36.2/serde/serde_json/thiserror graph and introduce no window or media runtime. Retain their MIT license and upstream connector attribution in generated notices.
+Pin `craft-canvas-model` and `craft-canvas-egui` to `ca8b74aed8df0ab5db38308a3cf0ef235f3443a1`. Exact hosted run42499304520 passed locked Rust1.95 tests, rustfmt and strict Clippy on macOS, Windows and Ubuntu. This includes the original-compatible2048-byte link-URL correction over63845f9 and qualifies model/egui event contracts, not full native application interaction. The crates reuse the host's egui0.36.2/serde/serde_json/thiserror graph and introduce no window or media runtime. Retain their MIT license and upstream connector attribution in generated notices.
 
 ## Authority
 

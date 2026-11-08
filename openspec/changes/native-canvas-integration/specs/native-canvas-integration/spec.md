@@ -31,3 +31,15 @@ Canvas SHALL use the existing app command bar, bounded panes, theme tokens, offi
 #### Scenario: A text edit is cancelled
 - WHEN the author changes a text-card source then cancels its native dialog
 - THEN no canonical content or saved revision is changed and the board returns with the same meaningful selection and camera
+
+### Requirement: Pinned native project import
+
+The desktop SHALL retain one opened validated source archive from its metadata-only confirmation through the complete background import. Confirmation SHALL describe the project scope and artifact verification without eagerly copying every manuscript into the dialog. Import SHALL create an independent local project only after complete transactional success. Cancellation or failure SHALL preserve the original, existing projects and the captured source for deliberate retry.
+
+#### Scenario: The source path changes after confirmation
+- WHEN another process replaces the archive path after the native confirmation is prepared
+- THEN import consumes only the originally opened archive and never reopens or modifies its replacement
+
+#### Scenario: Import is cancelled before publication
+- WHEN the author cancels the background import before its transaction commits
+- THEN no partial project appears, the source remains available for retry, and the interface does not report success

@@ -1,5 +1,7 @@
 //! Bounded native writer workspace: state and command orchestration.
 #[cfg(feature = "editor-preview")]
+mod canvas;
+#[cfg(feature = "editor-preview")]
 mod clipboard_host;
 #[cfg(feature = "editor-preview")]
 mod clipboard_jobs;
@@ -17,6 +19,7 @@ mod navigator;
 mod notes;
 #[cfg(feature = "editor-preview")]
 mod project_clipboard;
+mod project_import;
 #[cfg(feature = "editor-preview")]
 mod proofing;
 #[cfg(feature = "editor-preview")]
@@ -80,6 +83,8 @@ pub struct StudioApp {
     #[cfg(feature = "editor-preview")]
     rich: Option<rich_editor::RichState>,
     #[cfg(feature = "editor-preview")]
+    canvas: Option<canvas::CanvasState>,
+    #[cfg(feature = "editor-preview")]
     notes: notes::NotesState,
     #[cfg(feature = "editor-preview")]
     rich_review: rich_review::RichReviewState,
@@ -125,10 +130,7 @@ pub struct StudioApp {
     focus_replacement: bool,
     reason: String,
     proposals: Vec<Proposal>,
-    import_job: Option<
-        mpsc::Receiver<Result<studio_transfer::ImportPreview, studio_transfer::TransferError>>,
-    >,
-    import_preview: Option<studio_transfer::ImportPreview>,
+    project_import: project_import::ProjectImportState,
     capture: Option<PathBuf>,
     capture_probe: native_capture::CaptureProbe,
     frames: u32,
@@ -219,6 +221,8 @@ impl StudioApp {
             #[cfg(feature = "editor-preview")]
             rich: None,
             #[cfg(feature = "editor-preview")]
+            canvas: None,
+            #[cfg(feature = "editor-preview")]
             notes: notes::NotesState::default(),
             #[cfg(feature = "editor-preview")]
             rich_review: rich_review::RichReviewState::default(),
@@ -269,8 +273,7 @@ impl StudioApp {
             focus_replacement: false,
             reason: String::new(),
             proposals: vec![],
-            import_job: None,
-            import_preview: None,
+            project_import: project_import::ProjectImportState::default(),
             capture,
             capture_probe: native_capture::CaptureProbe::default(),
             frames: 0,
@@ -371,6 +374,8 @@ impl StudioApp {
     }
 
     fn open_project(&mut self, project: Project) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.ensure_canvas_navigation()?;
         self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
@@ -394,6 +399,10 @@ impl StudioApp {
             }
             self.daily_controls.document_changed();
         }
+        #[cfg(feature = "editor-preview")]
+        {
+            self.canvas = None;
+        }
         self.documents = documents;
         self.project = Some(project);
         self.library = false;
@@ -401,6 +410,8 @@ impl StudioApp {
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.ensure_canvas_navigation()?;
         self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
@@ -475,6 +486,7 @@ impl StudioApp {
                 self.body = state.session.document().plain_text();
             }
             self.rich = rich;
+            self.canvas = None;
         }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
@@ -595,22 +607,7 @@ impl StudioApp {
     }
 
     fn choose_archive(&mut self) {
-        let l = self.language;
-        if self.import_job.is_some() {
-            return;
-        }
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter(l.text("Writers Studio project"), &["wstudio"])
-            .pick_file()
-        {
-            let (sender, receiver) = mpsc::channel();
-            std::thread::spawn(move || {
-                let result = studio_transfer::inspect_archive(path);
-                let _ = sender.send(result);
-            });
-            self.import_job = Some(receiver);
-            self.status = "Checking project archive…".into();
-        }
+        self.choose_project_archive();
     }
     fn export_text(&mut self) {
         let l = self.language;
@@ -689,6 +686,10 @@ impl StudioApp {
         #[cfg(feature = "editor-preview")]
         {
             self.rich_review.full_open
+                || self
+                    .canvas
+                    .as_ref()
+                    .is_some_and(canvas::CanvasState::modal_open)
                 || self.notes.modal_open()
                 || self.recovery.is_some()
                 || self
@@ -705,7 +706,7 @@ impl StudioApp {
         self.settings_open
             || self.project_dialog
             || self.document_dialog
-            || self.import_preview.is_some()
+            || self.project_import.modal_open()
             || self.error.is_some()
             || self.full_review.is_some()
             || self.rich_modal_open()
@@ -721,6 +722,9 @@ impl eframe::App for StudioApp {
         #[cfg(feature = "editor-preview")]
         self.clipboard_frame_start(&ctx);
         self.poll_storage(&ctx);
+        #[cfg(feature = "editor-preview")]
+        self.poll_canvas(&ctx);
+        self.poll_project_import(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
         }
@@ -732,10 +736,19 @@ impl eframe::App for StudioApp {
             let result = self.save();
             self.record_error(result);
         }
-        if (self.dirty.is_some() && !self.autosave_paused) || self.import_job.is_some() {
+        if (self.dirty.is_some() && !self.autosave_paused) || self.project_import.busy() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
-        if ctx.input(|i| i.viewport().close_requested()) && self.storage.modal_open() {
+        #[cfg(feature = "editor-preview")]
+        let canvas_close_blocked = self
+            .canvas
+            .as_ref()
+            .is_some_and(canvas::CanvasState::blocks_navigation);
+        #[cfg(not(feature = "editor-preview"))]
+        let canvas_close_blocked = false;
+        if ctx.input(|i| i.viewport().close_requested())
+            && (self.storage.modal_open() || self.project_import.busy() || canvas_close_blocked)
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         } else if ctx.input(|i| i.viewport().close_requested()) {
             let title_result = self.commit_title_edit();
@@ -762,28 +775,6 @@ impl eframe::App for StudioApp {
                 }
             }
         }
-        if let Some(receiver) = &self.import_job {
-            let received = receiver.try_recv();
-            if matches!(received, Err(mpsc::TryRecvError::Disconnected)) {
-                self.import_job = None;
-                self.error = Some(UiError {
-                    msgid: "Archive checking was interrupted. Try opening it again.",
-                    details: "Archive worker disconnected".into(),
-                });
-                self.status = "Attention needed".into();
-            } else if let Ok(result) = received {
-                match result {
-                    Ok(preview) => {
-                        self.import_preview = Some(preview);
-                        self.status = "Archive checked".into();
-                    }
-                    Err(error) => {
-                        self.record_error(Err(Box::new(error)));
-                    }
-                }
-                self.import_job = None;
-            }
-        }
         self.prepare_capture_frame();
         self.toolbar(ui, t);
         self.status_bar(ui, t);
@@ -796,7 +787,11 @@ impl eframe::App for StudioApp {
         if self.library {
             self.library(ui, t);
         } else {
-            if show_inspector {
+            #[cfg(feature = "editor-preview")]
+            let canvas_open = self.canvas.is_some();
+            #[cfg(not(feature = "editor-preview"))]
+            let canvas_open = false;
+            if show_inspector && !canvas_open {
                 self.inspector(ui, t);
             }
             self.editor(ui, t);
@@ -808,6 +803,10 @@ impl eframe::App for StudioApp {
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
         self.storage_dialog(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        if let Some(canvas) = &mut self.canvas {
+            canvas.dialogs(&ctx, &self.database, self.language, t);
+        }
         #[cfg(feature = "editor-preview")]
         self.notes_dialogs(&ctx, t);
         #[cfg(feature = "editor-preview")]
@@ -827,6 +826,10 @@ impl eframe::App for StudioApp {
 }
 
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    #[cfg(feature = "editor-preview")]
+    if error.is::<canvas::PendingCanvas>() {
+        return "Finish or preserve the pending board operation before leaving.";
+    }
     #[cfg(feature = "editor-preview")]
     if error.is::<recovery::ReadOnlyRecoveryView>() {
         return "Recovery preview is read only. Preserved note drafts remain available.";

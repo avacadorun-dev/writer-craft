@@ -69,6 +69,8 @@ impl StudioApp {
                         .color(t.muted),
                     );
                 } else {
+                    #[cfg(feature = "editor-preview")]
+                    self.canvas_navigation(ui, t);
                     components::singleline(ui, &mut self.search, l.text("Find a document…"));
                     ui.add_space(14.0);
                     ui.horizontal(|ui| {

@@ -7,6 +7,14 @@ impl StudioApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(t.editor).inner_margin(0))
             .show(ui, |ui| {
+                #[cfg(feature = "editor-preview")]
+                {
+                    let blocked = self.modal_open();
+                    if let Some(canvas) = &mut self.canvas {
+                        canvas.show(ui, &self.database, self.language, t, blocked);
+                        return;
+                    }
+                }
                 let Some(document) = self.document.clone() else {
                     ui.centered_and_justified(|ui| {
                         if ui.button(l.text("Add your first document")).clicked() {

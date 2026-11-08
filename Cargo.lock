@@ -875,7 +875,7 @@ dependencies = [
 [[package]]
 name = "craft-canvas-egui"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-canvas?rev=63845f9471182d8597757ddd6b7d2f8db45e6d3b#63845f9471182d8597757ddd6b7d2f8db45e6d3b"
+source = "git+https://github.com/avacadorun-dev/craft-canvas?rev=ca8b74aed8df0ab5db38308a3cf0ef235f3443a1#ca8b74aed8df0ab5db38308a3cf0ef235f3443a1"
 dependencies = [
  "craft-canvas-model",
  "egui",
@@ -884,7 +884,7 @@ dependencies = [
 [[package]]
 name = "craft-canvas-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-canvas?rev=63845f9471182d8597757ddd6b7d2f8db45e6d3b#63845f9471182d8597757ddd6b7d2f8db45e6d3b"
+source = "git+https://github.com/avacadorun-dev/craft-canvas?rev=ca8b74aed8df0ab5db38308a3cf0ef235f3443a1#ca8b74aed8df0ab5db38308a3cf0ef235f3443a1"
 dependencies = [
  "serde",
  "serde_json",
