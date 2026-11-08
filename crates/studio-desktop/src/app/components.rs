@@ -76,7 +76,8 @@ pub(super) fn modal(
     width: f32,
     body: impl FnOnce(&mut egui::Ui),
 ) -> egui::ModalResponse<()> {
-    let frame = egui::Frame::popup(&ctx.style()).inner_margin(egui::Margin::same(MODAL_INSET));
+    let frame =
+        egui::Frame::popup(&ctx.global_style()).inner_margin(egui::Margin::same(MODAL_INSET));
     egui::Modal::new(egui::Id::new(id))
         .frame(frame)
         .show(ctx, |ui| {
