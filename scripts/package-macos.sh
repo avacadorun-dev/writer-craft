@@ -4,8 +4,12 @@ cd "$(dirname "$0")/.."
 
 profile=debug
 editor_preview=${WRITERCRAFT_EDITOR_PREVIEW:-0}
+native_editor=${WRITERCRAFT_NATIVE_EDITOR:-0}
 if [[ "$editor_preview" != 0 && "$editor_preview" != 1 ]]; then
   echo 'WRITERCRAFT_EDITOR_PREVIEW must be 0 or 1.' >&2; exit 2
+fi
+if [[ "$native_editor" != 0 && "$native_editor" != 1 ]]; then
+  echo 'WRITERCRAFT_NATIVE_EDITOR must be 0 or 1.' >&2; exit 2
 fi
 output=
 rust_target=
@@ -23,6 +27,7 @@ while (($#)); do
       echo "Usage: $0 [--debug|--release] [--target aarch64-apple-darwin] [--output APP_PATH]"
       echo 'Local builds default to debug. Optimized release builds run on GitHub Actions.'
       echo 'WRITERCRAFT_EDITOR_PREVIEW=1 builds an isolated editor engineering preview.'
+      echo 'WRITERCRAFT_NATIVE_EDITOR=1 enables the native editor without changing application identity.'
       exit 0 ;;
     *) echo "Unknown option: $1. Use --help." >&2; exit 2 ;;
   esac
@@ -49,12 +54,12 @@ version="$(python3 scripts/release-check.py --print-version)"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
 
 build=(cargo build --locked -p studio-desktop)
-if [[ "$editor_preview" == 1 ]]; then build+=(--features editor-preview); fi
+if [[ "$editor_preview" == 1 || "$native_editor" == 1 ]]; then build+=(--features editor-preview); fi
 if [[ "$profile" == release ]]; then build+=(--release); fi
 if [[ -n "$rust_target" ]]; then build+=(--target "$rust_target"); fi
 "${build[@]}"
 
-python3 - "$output" "$profile" "$rust_target" "$version" "$editor_preview" <<'PYTHON'
+python3 - "$output" "$profile" "$rust_target" "$version" "$editor_preview" "$native_editor" <<'PYTHON'
 import os
 import plistlib
 import re
@@ -65,8 +70,9 @@ import tempfile
 from pathlib import Path
 
 output = Path(sys.argv[1]).resolve()
-profile, rust_target, version, preview_flag = sys.argv[2:]
+profile, rust_target, version, preview_flag, native_flag = sys.argv[2:]
 editor_preview = preview_flag == "1"
+native_editor = native_flag == "1" or editor_preview
 app_name = "WriterCraft Editor Preview" if editor_preview else "WriterCraft"
 bundle_id = "app.writercraft.editor-preview" if editor_preview else "app.writercraft.desktop"
 marketing_version = version.split("-", 1)[0].split("+", 1)[0]
@@ -111,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix=".writercraft-package-", dir=output.pare
                       "--output", str(licenses / "THIRD_PARTY_NOTICES.txt")]
     if rust_target:
         notice_command += ["--target", rust_target]
-    if editor_preview:
+    if native_editor:
         notice_command += ["--features", "studio-desktop/editor-preview"]
     subprocess.run(notice_command, check=True)
     info = {
@@ -120,6 +126,7 @@ with tempfile.TemporaryDirectory(prefix=".writercraft-package-", dir=output.pare
         "CFBundleShortVersionString": marketing_version, "CFBundleVersion": build_number,
         "CFBundleGetInfoString": app_name + " " + version, "WriterCraftVersion": version,
         "WriterCraftBuildCommit": os.environ.get("GITHUB_SHA", "local-debug"),
+        "WriterCraftNativeEditor": native_editor,
         "LSMinimumSystemVersion": os.environ.get("MACOSX_DEPLOYMENT_TARGET", "14.0"),
         "NSHighResolutionCapable": True, "CFBundleIconFile": "WriterCraft.icns",
         "CFBundleDevelopmentRegion": "en", "CFBundleLocalizations": ["ru", "en", "de", "fr", "es", "pt", "zh-Hans", "ja"],

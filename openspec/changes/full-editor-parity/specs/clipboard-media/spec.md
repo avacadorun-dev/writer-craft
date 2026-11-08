@@ -35,7 +35,3 @@ A clipboard image URL MUST NOT cause ambient network or filesystem access from t
 
 - **WHEN** the captured clipboard HTML contains a permitted external image
 - **THEN** the host receives a pending import requirement before any document mutation.
-
-## Verification boundary
-
-These requirements remain part of app issue #7 and full editor epic #4. The first implementation supplies deferred engine contracts and internal owned-image capsules. Full native app wiring, external HTTP acquisition, file drop, mixed/open wrapper fitting, rectangular table selection and cross-application paste UX remain required until verified. A synthetic fixture or OS format roundtrip alone does not close those issues.

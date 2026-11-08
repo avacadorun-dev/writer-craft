@@ -21,7 +21,7 @@ impl StudioApp {
                     .frame(
                         egui::Frame::new()
                             .fill(t.editor)
-                            .inner_margin(egui::Margin::symmetric(24, 10)),
+                            .inner_margin(egui::Margin::symmetric(24, 8)),
                     )
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
@@ -40,9 +40,7 @@ impl StudioApp {
                                 .size()
                                 .x
                                 + 52.0;
-                            let read_only = document.read_only
-                                || (document.rich_json.is_some()
-                                    && !cfg!(feature = "editor-preview"));
+                            let read_only = !self.can_edit_manuscript();
                             let badge_width = if read_only {
                                 ui.painter()
                                     .layout_no_wrap(
@@ -57,18 +55,15 @@ impl StudioApp {
                                 0.0
                             };
                             let title_width =
-                                (ui.available_width() - focus_width - badge_width - 88.0).max(60.0);
+                                (ui.available_width() - focus_width - badge_width - 128.0)
+                                    .max(60.0);
                             ui.allocate_ui_with_layout(
-                                egui::vec2(title_width, 34.0),
+                                egui::vec2(title_width, 40.0),
                                 Layout::left_to_right(Align::Center),
                                 |ui| {
-                                    ui.add(
-                                        egui::Label::new(
-                                            RichText::new(&document.title).size(18.0).strong(),
-                                        )
-                                        .truncate(),
-                                    )
-                                    .on_hover_text(&document.title);
+                                    ui.add_enabled_ui(!self.is_recovery_read_only(), |ui| {
+                                        self.document_title(ui, &document, t);
+                                    });
                                 },
                             );
                             if read_only {
@@ -77,9 +72,20 @@ impl StudioApp {
                                         .size(11.0)
                                         .color(t.warning),
                                 )
-                                .on_hover_text(l.text("Original format · read only"));
+                                .on_hover_text(l.text(
+                                    if self.is_recovery_read_only() {
+                                        "Recovery preview · read only"
+                                    } else {
+                                        "Original format · read only"
+                                    },
+                                ));
                             }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if icons::icon_button(ui, Icon::Search, l.text("Find in document"))
+                                    .clicked()
+                                {
+                                    self.open_document_find();
+                                }
                                 if icons::icon_button(ui, Icon::Export, l.text("Export text"))
                                     .clicked()
                                 {

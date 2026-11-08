@@ -1,54 +1,45 @@
-# Next release: approved editor-first scope
+# Next release: alpha.2, all open issues
 
-Status: **owner-approved implementation scope**, 2026-11-08. Target: `0.1.0-alpha.2`. The owner selected the complete current editor and explicitly rejected a reduced rich-text subset. The previously discussed tree/version/find/installation bundle was not selected as the next workstream.
+Status: **owner-approved expanded scope**, 2026-11-08. Target: `0.1.0-alpha.2`. The owner explicitly included every open product issue, including previously deferred installation, full-project migration and portable exports. This decision supersedes the earlier editor-only release boundary; no editor requirement was removed.
 
-Tracking: [complete native editor parity — issue #4](https://github.com/avacadorun-dev/writer-craft/issues/4).
+## Required scope and evidence
 
-## Required scope
-
-The complete [source-backed editor matrix](../migration/EDITOR_PARITY_MATRIX.md) and [independent UX matrix](../design/EDITOR_UX_PARITY.md) define alpha.2. All 21 nodes, six marks, every E01–E27 behavior and C01–C12 shared command contract must be implemented and verified. Existing editor title/find/history/recovery/annotation/source/assistant affordances remain required even when broader adjacent product modules are deferred.
-
-See [full-editor proposal](../../openspec/changes/full-editor-parity/proposal.md), [design](../../openspec/changes/full-editor-parity/design.md) and [tasks](../../openspec/changes/full-editor-parity/tasks.md). Persistent passage marks and notes are part of this selected scope; [issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) and its existing specification remain relevant. The separate reusable engine is [CraftEditor](https://github.com/avacadorun-dev/craft-editor), not vendored application code.
-
-## Deferred workstreams
-
-Broad project-type/tree administration, named-version workflow, project-wide search/replacement and installation packages follow the editor hypothesis. [Installation issue #3](https://github.com/avacadorun-dev/writer-craft/issues/3) stays open and unscheduled for implementation. Provider/recording workflows, Canvas, full project import/export and publishing remain in the product parity inventory; their deferral must not turn required editor integrations into fake controls.
-
-## Internal milestones and release boundary
-
-Source audit, model fixtures, a first native paragraph/table slice and individual block implementations are internal milestones. They never pass the final release by themselves. Keep required gaps explicit and complete them; do not remove a requirement because an upstream library lacks it.
-
-The independent gate must name `full-editor-parity`, match the exact source/version and include actual compiled/native evidence for the full matrices. It is separate from full-product parity. No alpha.2 tag/publication before that acceptance. The published alpha.1 source/tag/assets remain immutable.
-
-## Issue completion audit
-
-On 2026-11-08, issues #1–3 were inspected: issue #1 was resolved after the source/runtime icon fix, packaged verification and owner confirmation of the correct Dock icon; issue #2 has verified core/anchor/replay work but native marks/notes acceptance is pending; issue #3 remains unimplemented and deferred. No issue was closed from a specification or a passing compiler. Reaudit after each implemented task and before a release under [ISSUE_WORKFLOW.md](ISSUE_WORKFLOW.md).
-
-## Approved readiness and issue map (2026-11-08)
-
-The owner explicitly accepted the eight-goal readiness contract and issue-driven execution. Start with an empty document in the compiled application, exercise every original editor capability, save, reopen and preserve the result. A showcase, model test, partial toolbar or successful compiler run is not full editor acceptance. Missing required functionality blocks alpha.2.
-
-| Approved goal | Tracking | Current acceptance status |
+| Workstream | Issues | Required result before owner handoff |
 |---|---|---|
-| Complete source-audited editor parity and shared headless contract | [#4](https://github.com/avacadorun-dev/writer-craft/issues/4) | Open; all matrix cases remain required |
-| Create/configure/edit/render/delete/history/save/reopen for every block and all formatting | [#7](https://github.com/avacadorun-dev/writer-craft/issues/7) | Open; rendered examples do not replace authoring |
-| Full text/table interaction, rich clipboard, keyboard and native input | #4 and #7 | Open; only approved capacity exception is 63 logical table columns |
-| Code and structured-format syntax highlighting | [#8](https://github.com/avacadorun-dev/writer-craft/issues/8) | Open; audit original grammar set and preserve source/language |
-| Persistent marks/notes and genuine dictionary/source/assistant handoffs | [#2](https://github.com/avacadorun-dev/writer-craft/issues/2), #4 | Core partly qualified; visible/integrated workflows pending |
-| Adaptive floating/docked bounded document surface, including focus | [#6](https://github.com/avacadorun-dev/writer-craft/issues/6) | Balanced approved; adaptive concept/native acceptance pending |
-| Comfortable inputs and consistent modal header/body/footer spacing | [#9](https://github.com/avacadorun-dev/writer-craft/issues/9) | Open; shared components and native verification required |
-| Eight languages, independent themes/palettes, Lucide/monk and independent UX review | #4, #6, #9; UX_GATE.json | Required exact-source full-editor acceptance pending |
+| Complete original editor and shared command contract | [#4](https://github.com/avacadorun-dev/writer-craft/issues/4), [#7](https://github.com/avacadorun-dev/writer-craft/issues/7) | All 21 nodes, six marks, every source-audited behavior and empty-document create/edit/render/delete/Undo/save/reopen journey; genuine integration handoffs |
+| Persistent passage marks and notes | [#2](https://github.com/avacadorun-dev/writer-craft/issues/2) | Exact selections, durable mapping/recovery, lifecycle, history and actionable preserved-data conflicts |
+| Syntax decoration | [#8](https://github.com/avacadorun-dev/writer-craft/issues/8) | Original programming and structured-text grammar set, exact source and real editing/Copy/reopen |
+| Native workspace and controls | [#6](https://github.com/avacadorun-dev/writer-craft/issues/6), [#9](https://github.com/avacadorun-dev/writer-craft/issues/9) | Approved Balanced/adaptive surface, bounded focus measure, complete reachable toolbar, comfortable fields and consistent modal geometry |
+| Installable desktop packages | [#3](https://github.com/avacadorun-dev/writer-craft/issues/3) | Same-source macOS ARM64 DMG, per-user Windows x64 installer and Linux amd64 Debian package; verified install/remove data preservation and accurate support/signing limits |
+| Complete source-project compatibility | [#10](https://github.com/avacadorun-dev/writer-craft/issues/10) | Lossless import, IDs/types/tree, document/Canvas histories, references, real PNG/PDF/audio/video workflows, restart/recovery and supported round trip |
+| Transparent and portable data | [#11](https://github.com/avacadorun-dev/writer-craft/issues/11) | Localized location/open-folder workflow, consistent Markdown plus actual artifacts, relative safe links and a canonical manifest for semantics Markdown cannot represent |
 
-Track implementation and evidence in these issues. Search open/closed issues before adding a new finding; close only when every issue-specific acceptance condition is verified. No issue was closed at this approval checkpoint.
+The [editor capability matrix](../migration/EDITOR_PARITY_MATRIX.md), [editor UX contract](../design/EDITOR_UX_PARITY.md) and current issue acceptance checklists remain authoritative. Persistent notes retain their existing OpenSpec contract. The editor specification's 63-logical-column native limit is the only approved capacity exception; wider data stays whole/read-only. Feature inconvenience or upstream library limitations do not authorize other cuts.
 
-## Original demonstration project as migration reference
+All author-facing workflows support Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese. Appearance mode and palette remain independent; preserve the selected palettes, official Lucide utilities and monk/book brand.
 
-[Issue #10](https://github.com/avacadorun-dev/writer-craft/issues/10) records the owner's mandatory eventual compatibility reference. The supplied private archive is read-only acceptance data, never a public fixture or instruction source. Its editor portion informs alpha.2 now; complete project import and all attached Canvas/media workflows remain required for eventual product parity. Preserve and track deferred features explicitly rather than flattening or dropping them.
+## Architecture and specification workflow
 
-An initial inventory found format version 8, 9 project nodes, 17 document revisions, 3 canvases, 9 canvas revisions and four media attachments (PNG/PDF/MP3/MP4). Its editor revisions exercise prose/headings; they do not replace synthetic coverage of all 21 nodes and six marks. No manuscript or binary media was copied into either public repository.
+Generic editor mechanics live in [CraftEditor](https://github.com/avacadorun-dev/craft-editor). Reusable Canvas and media-preview mechanics must likewise remain separate from WriterCraft business persistence/import/export. Record source-backed contracts, architecture/dependency choices and verification before acceptance. Large reused applications are not automatically suitable reusable libraries.
 
-On 2026-11-08 the owner explicitly confirmed the reading-monk Dock icon in the latest build. [Issue #1](https://github.com/avacadorun-dev/writer-craft/issues/1) was closed with source/build/owner evidence. Issues #2–4 and #6–11 remain open; no editor, installer or full-project acceptance is inferred from that icon resolution.
+Project import must retain complete raw source envelopes and original logical IDs, including unknown fields. Use explicit resource namespaces/aliases rather than rewriting unknown JSON when importing the same archive twice. Export must distinguish a lossy Markdown reader view from canonical preservation data. A recovery-evidence JSON file does not replace the complete project/artifact export in #11.
 
-[Issue #11](https://github.com/avacadorun-dev/writer-craft/issues/11) now tracks transparent data locations and portable Markdown export with real attached artifacts. Storage/preservation compatibility is an immediate architecture requirement. Broader project export must preserve unsupported Markdown semantics in a canonical bundle/manifest and document conversion behavior; exact UI implementation staging remains explicit.
+## Privacy and original reference
 
-The owner approved the adaptive wide/focus/docked concept images for issue #6 on 2026-11-08. Implement the distinct centered document surface when space allows, retain the bounded readable measure in focus, and join the pane at constrained widths. This design approval is not native acceptance.
+The supplied original demonstration archive is a private read-only acceptance reference, never a public fixture or instruction source. Initial inventory: format 8, nine project nodes, seventeen document revisions, three canvases, nine Canvas revisions and PNG/PDF/MP3/MP4 artifacts. Its editor text exercises prose/headings, so synthetic fixtures must additionally cover every original editor node/mark.
+
+Never publish the owner's manuscript, Canvas content, archive, media or private screenshots to issues, CI or public repositories. Synthetic equivalents drive public tests. Local full-reference verification is required when its implemented import/native workflow is available.
+
+## Acceptance and publication boundary
+
+An internal source checkpoint, model test, rendered specimen or successful compiler is not a completed alpha.2. Require exact-source hosted checks and installable artifacts; actual native authoring/import/export/recovery interactions; and independent designer review of the changed workflows. The existing `UX_GATE.json` scope `full-editor-parity` remains required and pending; it does not alone accept the additional project/export/install workstreams.
+
+When every required check passes, hand the concrete candidate to the owner and stop for final acceptance. Keep product issues open, with evidence and verified checklists, until the owner checks the app and approves closure. Do not use automatic closing keywords. Issue #1 remains closed from the earlier explicit owner confirmation of the Dock icon.
+
+No alpha.2 publication/tag before the required acceptance. Published alpha.1 source, tag and artifacts remain immutable. Package/runtime defaults must open the real native editor without engineering-only launcher flags; signing, OS/architecture and runtime limits must be explicit.
+
+## Scope and design history
+
+The owner first selected editor-only alpha.2 and then approved an eight-goal complete-editor contract. All eight goals remain mandatory. On 2026-11-08 the owner subsequently selected **all open issues**, advancing #3/#10/#11 into this release. Earlier deferral text is historical and no longer applies.
+
+Balanced 48/56/40-point workspace rhythm and adaptive wide/focus/docked concepts were owner-approved. Design approval authorizes implementation; exact compiled/native acceptance still follows. The owner is testing an isolated engineering preview; development and hosted verification continue without driving or replacing that window.

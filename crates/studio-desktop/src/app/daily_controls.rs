@@ -104,6 +104,15 @@ impl StudioApp {
     /// Commit title metadata before Save, navigation or close. On failure the exact
     /// title draft and current manuscript context remain available for correction.
     pub(super) fn commit_title_edit(&mut self) -> AppResult<()> {
+        if self.is_recovery_read_only() && self.daily_controls.editing_title() {
+            return Err(studio_core::StudioError::ReadOnly {
+                document_id: self
+                    .document
+                    .as_ref()
+                    .map_or_else(String::new, |document| document.id.clone()),
+            }
+            .into());
+        }
         let Some(mut draft) = self.daily_controls.title.take() else {
             return Ok(());
         };

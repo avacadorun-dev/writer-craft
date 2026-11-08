@@ -62,7 +62,7 @@ impl StudioApp {
                     |ui| {
                         ui.set_clip_rect(commands);
                         if icons::icon_button(ui, Icon::Home, l.text("Project library")).clicked() {
-                            let result = self.save();
+                            let result = self.save_explicit();
                             if result.is_ok() {
                                 self.library = true;
                             }
@@ -83,7 +83,7 @@ impl StudioApp {
                             }
                         });
                         if icons::icon_button(ui, Icon::Save, l.text("Save · ⌘S")).clicked() {
-                            let result = self.save();
+                            let result = self.save_explicit();
                             self.record_error(result);
                         }
                         if !self.library
@@ -211,15 +211,28 @@ impl StudioApp {
     }
 
     pub(super) fn shortcuts(&mut self, ctx: &egui::Context) {
+        if self.daily_controls.title_has_focus(ctx) {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+                let result = self.save_explicit();
+                self.record_error(result);
+            }
+            return;
+        }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             #[cfg(feature = "editor-preview")]
-            let result = self.save_focused_note(ctx).unwrap_or_else(|| self.save());
+            let result = self
+                .save_focused_note(ctx)
+                .unwrap_or_else(|| self.save_explicit());
             #[cfg(not(feature = "editor-preview"))]
-            let result = self.save();
+            let result = self.save_explicit();
             self.record_error(result);
             if self.modal_open() {
                 return;
             }
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F)) {
+            self.open_document_find();
+            return;
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::N)) {
             self.project_dialog = true;

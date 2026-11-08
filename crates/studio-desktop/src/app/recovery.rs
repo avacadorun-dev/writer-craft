@@ -110,7 +110,7 @@ fn recovery_json(snapshot: &RichRecoverySnapshot) -> serde_json::Result<Vec<u8>>
     serde_json::to_vec_pretty(&json!({
         "format": "writercraft.document-recovery", "format_version": 1,
         "preservation_notice": "Data-only recovery evidence. This is not a portable workspace backup. It cannot authorize attachment remapping or native replay when imported.",
-        "media": { "included": false, "references_only": true }, "snapshot": snapshot,
+        "media": { "workspace_media_files_included": false, "embedded_json_preserved": true }, "snapshot": snapshot,
     }))
 }
 fn sidecar(database: &Path, suffix: &str) -> PathBuf {
@@ -252,7 +252,7 @@ impl StudioApp {
                 ui.add_space(12.0);
                 ui.label(l.format("Preserved note records: {count}",&[("count",dialog.snapshot.annotations().len().to_string())]));
                 ui.label(RichText::new(l.text("Includes deleted notes and their history.")).size(13.0).color(t.muted));
-                ui.label(RichText::new(l.text("Images and other media remain in this workspace. Recovery JSON includes references, not media files or a portable backup.")).size(13.0).color(t.muted));
+                ui.label(RichText::new(l.text("Separately stored media files remain in this workspace. Embedded JSON is preserved; recovery JSON is not a portable backup.")).size(13.0).color(t.muted));
                 if let Some(status) = dialog.status { ui.add_space(8.0); ui.colored_label(t.warning,l.text(status.message())); }
                 ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {

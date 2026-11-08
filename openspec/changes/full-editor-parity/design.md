@@ -36,3 +36,8 @@ Only step 5 can authorize an alpha.2 candidate. Steps 1–4 are development chec
 The owner requested the first compiled table/formatting checkpoint for hands-on testing before the full alpha.2 candidate. An optional `editor-preview` feature mounts the separate engine in the existing bounded manuscript pane. The `--editor-preview` flag or bundle environment selects a separate `WriterCraft/Editor Preview` workspace and bundle identity; the normal running alpha.1 preview is not replaced.
 
 The host owns structured draft CAS and canonical SQLite revisions; the engine owns an independent session/history clock. Save acknowledges the whole structured tree and keeps the live caret/history. Formatting-only edits are persisted; plain-text save/proposal paths cannot flatten rich documents. A separate hosted workflow compiles and packages this development checkpoint, records the exact source and lock, and does not tag or publish alpha.2. Native interaction and independent design review remain required before owner handoff. This milestone does not waive any remaining editor parity requirement.
+
+
+## Clipboard verification boundary
+
+These requirements remain part of app issue #7 and full editor epic #4. The first implementation supplies deferred engine contracts and internal owned-image capsules. Full native app wiring, external HTTP acquisition, file drop, mixed/open wrapper fitting, rectangular table selection and cross-application paste UX remain required until verified. A synthetic fixture or OS format roundtrip alone does not close those issues.

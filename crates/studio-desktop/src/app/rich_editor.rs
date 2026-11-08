@@ -18,8 +18,10 @@ pub(super) struct RichState {
     media: rendering::RenderState,
     pending_proofs: Vec<ReplayProof>,
     read_only: bool,
+    recovery_read_only: bool,
     last_diagnostic: Option<String>,
     dialog: Option<authoring::BlockDialog>,
+    find_requested: bool,
 }
 
 impl RichState {
@@ -55,11 +57,44 @@ impl RichState {
             draft_version: draft.map(|draft| draft.version),
             recovered,
             read_only,
+            recovery_read_only: false,
             media: rendering::RenderState::default(),
             pending_proofs: vec![],
             last_diagnostic: None,
             dialog: None,
+            find_requested: false,
         }))
+    }
+
+    pub(super) fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+    pub(super) fn is_recovery_read_only(&self) -> bool {
+        self.recovery_read_only
+    }
+
+    /// Mount only the acknowledged canonical tree. A conflicting durable draft
+    /// remains intact in the workspace and is never used as attachment authority.
+    pub(super) fn open_saved_read_only(document: &Document) -> AppResult<Self> {
+        let content = document
+            .rich_json
+            .as_ref()
+            .ok_or("missing_saved_rich_document")?;
+        let mut session =
+            EditorSession::new(RichDocument::from_json(content.clone())?, Revision(0));
+        session.options.id = egui::Id::new(("rich-manuscript", &document.id));
+        Ok(Self {
+            session,
+            draft_version: None,
+            recovered: false,
+            read_only: true,
+            recovery_read_only: true,
+            media: rendering::RenderState::default(),
+            pending_proofs: vec![],
+            last_diagnostic: None,
+            dialog: None,
+            find_requested: false,
+        })
     }
 
     #[cfg(test)]
@@ -72,18 +107,84 @@ impl RichState {
     }
 
     fn write_draft(&mut self, workspace: &Workspace, document: &Document) -> AppResult<()> {
-        let draft = workspace.save_rich_draft(
-            &document.id,
-            document.revision,
-            self.draft_version.as_deref(),
-            self.session.document().to_json()?,
-        )?;
+        if self.read_only {
+            return Err(studio_core::StudioError::ReadOnly {
+                document_id: document.id.clone(),
+            }
+            .into());
+        }
+        for change in self.session.take_pending_changes() {
+            self.pending_proofs.push(change.replay_proof());
+        }
+        let content = self.session.document().to_json()?;
+        let draft = if self.recovered {
+            // Old unproven snapshots keep conservative recovery; they never
+            // receive fabricated replay or attachment authority.
+            workspace.save_rich_draft(
+                &document.id,
+                document.revision,
+                self.draft_version.as_deref(),
+                content,
+            )?
+        } else {
+            workspace.save_rich_editor_draft(
+                &document.id,
+                document.revision,
+                self.draft_version.as_deref(),
+                &self.pending_proofs,
+                content,
+            )?
+        };
         self.draft_version = Some(draft.version);
         Ok(())
     }
 }
 
 impl StudioApp {
+    pub(super) fn open_saved_recovery(
+        &mut self,
+        snapshot: &studio_core::RichRecoverySnapshot,
+    ) -> AppResult<()> {
+        self.commit_title_edit()?;
+        self.save()?;
+        self.workspace.verify_rich_recovery_snapshot(snapshot)?;
+        let document = snapshot.document().clone();
+        let projects = self.workspace.list_projects()?;
+        let project = projects
+            .iter()
+            .find(|project| project.id == document.project_id)
+            .cloned()
+            .ok_or("missing_recovery_project")?;
+        let documents = self.workspace.list_documents(&project.id)?;
+        let proposals = self.workspace.proposals(&document.id)?;
+        let mut rich = RichState::open_saved_read_only(&document)?;
+        rich.session.set_clipboard_provider(self.clipboard.clone());
+        rich.session
+            .set_clipboard_mode(craft_editor_egui::clipboard::ClipboardMode::Deferred)?;
+        rich.session
+            .set_clipboard_intent_gate(self.clipboard_intents.clone())?;
+        self.cancel_clipboard_work();
+        let notes = self.notes.prepare(&self.workspace, &document);
+        self.body = rich.session.document().plain_text();
+        self.rich = Some(rich);
+        self.document = Some(document);
+        self.projects = projects;
+        self.project = Some(project);
+        self.documents = documents;
+        self.proposals = proposals;
+        self.dirty = None;
+        self.autosave_paused = false;
+        self.library = false;
+        self.daily_controls.document_changed();
+        self.expected.clear();
+        self.replacement.clear();
+        self.frozen_selection = None;
+        self.status = "Recovery preview · read only".into();
+        self.recovery = None;
+        self.record_error(notes);
+        Ok(())
+    }
+
     pub(super) fn create_editor_example(&mut self) -> AppResult<()> {
         let project = self.workspace.create_project("Editor Preview")?;
         self.workspace.create_rich_document(
@@ -155,6 +256,12 @@ impl StudioApp {
     pub(super) fn save_rich_editor(&mut self) -> AppResult<()> {
         let document = self.document.as_ref().ok_or("No active document")?;
         let rich = self.rich.as_mut().ok_or("No active rich editor")?;
+        if rich.is_read_only() {
+            return Err(studio_core::StudioError::ReadOnly {
+                document_id: document.id.clone(),
+            }
+            .into());
+        }
         // A pending native preedit belongs to the input method, not canonical storage.
         for change in rich.session.take_pending_changes() {
             rich.pending_proofs.push(change.replay_proof());
@@ -288,8 +395,12 @@ impl StudioApp {
                                     ui.add_space(28.0);
                                     if rich.read_only {
                                         ui.label(
-                                            RichText::new(l.text("Original format · read only"))
-                                                .color(t.warning),
+                                            RichText::new(l.text(if rich.recovery_read_only {
+                                                "Recovery preview · read only"
+                                            } else {
+                                                "Original format · read only"
+                                            }))
+                                            .color(t.warning),
                                         );
                                     }
                                     let style = CanvasStyle {
@@ -376,7 +487,11 @@ impl StudioApp {
                 self.record_error(result);
             }
         }
+        let find_requested = std::mem::take(&mut rich.find_requested);
         self.rich = Some(rich);
+        if find_requested {
+            self.open_document_find();
+        }
         if let Some(response) = manuscript_response {
             self.rich_note_selection_menu(&response);
         }
@@ -1106,6 +1221,200 @@ mod tests {
             .ok_or("Missing cells")?
             .push(fresh_cell(false));
         assert!(wider_than_native_limit(&table));
+        Ok(())
+    }
+    #[test]
+    fn verified_draft_restart_recovers_marks_before_a_fresh_canvas_session_is_mounted()
+    -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let database = app.database.clone();
+        let document = app.document.as_ref().ok_or("Missing document")?.clone();
+        let project = app.project.as_ref().ok_or("Missing project")?.clone();
+        let anchor = app.workspace.capture_annotation_anchor(
+            &document.id,
+            document.revision,
+            "intro",
+            ScalarOffset(7),
+            ScalarOffset(13),
+            "native",
+        )?;
+        let note = app.workspace.create_annotation(
+            &document.id,
+            document.revision,
+            anchor,
+            "Keep this passage",
+        )?;
+        let rich = app.rich.as_mut().ok_or("Missing rich session")?;
+        let point = DocPoint {
+            block_id: "intro".into(),
+            offset: ScalarOffset(0),
+        };
+        rich.session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        rich.session.insert_plain_text("New ")?;
+        rich.write_draft(&app.workspace, &document)?;
+        let expected = rich.session.document().to_json()?;
+        assert!(
+            app.workspace
+                .rich_draft(&document.id)?
+                .ok_or("Missing durable draft")?
+                .has_annotation_checkpoint
+        );
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        drop(app); // Simulate a stopped process: no canonical save, history or focus state survives.
+
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context);
+        let mut reopened = StudioApp::new(&creation, database, false, None)?;
+        reopened.open_project(project)?;
+        let current = reopened
+            .document
+            .as_ref()
+            .ok_or("Missing reopened document")?;
+        assert_eq!(current.id, document.id);
+        assert_eq!(current.revision, document.revision + 1);
+        assert_eq!(current.rich_json.as_ref(), Some(&expected));
+        let recovered_note = reopened.workspace.annotation(&note.id)?;
+        assert_eq!(
+            recovered_note.anchor_status,
+            studio_core::AnchorStatus::Attached
+        );
+        assert_eq!(recovered_note.anchor.start, ScalarOffset(11));
+        assert_eq!(recovered_note.anchor.exact_text, "native");
+        let rich = reopened.rich.as_ref().ok_or("Missing fresh session")?;
+        assert!(!rich.recovered);
+        assert!(!rich.session.can_undo());
+        assert_eq!(rich.pending_proof_count(), 0);
+        assert!(reopened.dirty.is_none());
+        assert!(reopened.workspace.rich_draft(&document.id)?.is_none());
+        assert_eq!(reopened.status, "Unsaved text recovered");
+        Ok(())
+    }
+    #[test]
+    fn recovery_conflict_preserves_previous_project_and_saved_view_refuses_writes() -> AppResult<()>
+    {
+        let (_directory, mut app) = fixture()?;
+        let old_document = app
+            .document
+            .as_ref()
+            .ok_or("Missing original document")?
+            .clone();
+        let old_project = app
+            .project
+            .as_ref()
+            .ok_or("Missing original project")?
+            .clone();
+        let old_body = app.body.clone();
+        let project = app.workspace.create_project("Conflicting recovery")?;
+        let target = app.workspace.create_rich_document(
+            &project.id,
+            "Preserved writing",
+            RichDocument::plain("p", "saved passage")?.to_json()?,
+        )?;
+        let mut editor = craft_editor_model::Editor::new(
+            RichDocument::from_json(target.rich_json.clone().ok_or("Missing rich JSON")?)?,
+            Revision(0),
+        );
+        let change = editor.apply(craft_editor_model::Transaction {
+            base_revision: Revision(0),
+            commands: vec![craft_editor_model::Command::ReplaceText {
+                range: craft_editor_model::TextRange {
+                    block_id: "p".into(),
+                    start: ScalarOffset(0),
+                    end: ScalarOffset(0),
+                },
+                expected: String::new(),
+                replacement: "draft ".into(),
+            }],
+        })?;
+        let draft = app.workspace.save_rich_editor_draft(
+            &target.id,
+            target.revision,
+            None,
+            &[change.replay_proof()],
+            editor.document().to_json()?,
+        )?;
+        // A later author-created note makes the earlier attachment checkpoint stale.
+        let anchor = app.workspace.capture_annotation_anchor(
+            &target.id,
+            target.revision,
+            "p",
+            ScalarOffset(6),
+            ScalarOffset(13),
+            "passage",
+        )?;
+        let note = app.workspace.create_annotation(
+            &target.id,
+            target.revision,
+            anchor,
+            "Keep this later note",
+        )?;
+        app.open_project(project)?;
+        assert!(app.recovery.is_some());
+        assert_eq!(
+            app.document.as_ref().map(|document| &document.id),
+            Some(&old_document.id)
+        );
+        assert_eq!(
+            app.project.as_ref().map(|project| &project.id),
+            Some(&old_project.id)
+        );
+        assert_eq!(app.body, old_body);
+        assert_eq!(app.workspace.rich_draft(&target.id)?.as_ref(), Some(&draft));
+
+        let snapshot = app.workspace.rich_recovery_snapshot(&target.id)?;
+        app.open_saved_recovery(&snapshot)?;
+        assert!(app.is_recovery_read_only());
+        assert!(!app.can_edit_manuscript());
+        assert_eq!(app.body, target.body);
+        assert_eq!(
+            app.document.as_ref().map(|document| &document.id),
+            Some(&target.id)
+        );
+        let rich = app.rich.as_mut().ok_or("Missing read-only saved view")?;
+        let point = DocPoint {
+            block_id: "p".into(),
+            offset: ScalarOffset(0),
+        };
+        rich.session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        // Even a mistaken future dispatcher bypassing the canvas cannot publish a write.
+        rich.session.insert_plain_text("must not save ")?;
+        app.dirty = Some(Instant::now());
+        let error = app
+            .save()
+            .err()
+            .ok_or("A read-only view unexpectedly saved")?;
+        assert!(matches!(
+            error.downcast_ref::<studio_core::StudioError>(),
+            Some(studio_core::StudioError::ReadOnly { .. })
+        ));
+        let rich = app.rich.as_mut().ok_or("Missing recovery editor")?;
+        rich.session.undo()?;
+        rich.session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(6),
+            },
+            head: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(13),
+            },
+        })?;
+        app.dirty = None;
+        let error = app
+            .begin_note()
+            .err()
+            .ok_or("A read-only view unexpectedly created a note")?;
+        assert!(error.is::<recovery::ReadOnlyRecoveryView>());
+        assert!(app.recovery.is_none());
+        assert_eq!(app.workspace.document(&target.id)?, target);
+        assert_eq!(app.workspace.rich_draft(&target.id)?.as_ref(), Some(&draft));
+        assert_eq!(app.workspace.annotation(&note.id)?, note);
         Ok(())
     }
 }

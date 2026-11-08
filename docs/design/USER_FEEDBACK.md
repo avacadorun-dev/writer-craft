@@ -144,3 +144,10 @@ Consequence: use shared fields with 40 px minimum height, 12 px horizontal and 8
 Regression evidence: actual compiled search and New document/New project/block-source dialogs in Light/Dark, common/minimum windows and long German/French/CJK text. Verify full field bounds, clipped long values with reachable caret, focus/Tab/Enter/Escape, error/disabled states, action placement and unchanged data after Cancel. Source fixes and the modal illustration remain unverified until the hosted build and independent native retest. The source fix also ensures an editor-preview document created from these forms starts as a canonical structured manuscript, rather than routing the author into the plain editor.
 
 Owner decision, 2026-11-08: the owner approved the displayed adaptive wide/focus/docked concepts for F-34 and issue #6. This authorizes structural layout implementation while preserving Balanced rhythm and comfortable prose measure. The independent full-editor gate remains pending until exact compiled/native evidence passes.
+
+
+## F-36 — All open issues in alpha.2 and final owner acceptance (2026-11-08)
+
+The owner instructed the implementation team to continue autonomously until alpha.2 and its issues are ready for final review. After an explicit scope clarification, the owner selected all open issues, including installation #3, complete original-project/Canvas/media compatibility #10 and portable Markdown/artifacts #11. This supersedes earlier editor-only deferrals while preserving all eight approved editor goals and the single 63-column exception.
+
+Keep product issues open until the owner checks the final candidate and approves closure. Independent actual native review covers the new project/import/export/recovery surfaces as well as the complete editor. Do not present partial engineering checkpoints as final acceptance, and do not drive or replace the owner's running preview while they test it. Source, compiler, fixture or mockup evidence alone does not complete these gates.

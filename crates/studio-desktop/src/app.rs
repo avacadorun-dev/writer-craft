@@ -5,6 +5,7 @@ mod clipboard_host;
 mod clipboard_jobs;
 mod commands;
 mod components;
+mod daily_controls;
 mod dialogs;
 mod library;
 mod manuscript;
@@ -15,6 +16,8 @@ mod navigator;
 mod notes;
 #[cfg(feature = "editor-preview")]
 mod project_clipboard;
+#[cfg(feature = "editor-preview")]
+mod recovery;
 #[cfg(feature = "editor-preview")]
 mod rendering;
 mod review;
@@ -72,6 +75,8 @@ pub struct StudioApp {
     #[cfg(feature = "editor-preview")]
     notes: notes::NotesState,
     #[cfg(feature = "editor-preview")]
+    recovery: Option<recovery::RecoveryDialog>,
+    #[cfg(feature = "editor-preview")]
     clipboard_jobs: clipboard_jobs::ClipboardJobs,
     #[cfg(feature = "editor-preview")]
     clipboard_recovery: Option<clipboard_host::ClipboardRecovery>,
@@ -102,6 +107,7 @@ pub struct StudioApp {
     project_name: String,
     document_dialog: bool,
     document_name: String,
+    daily_controls: daily_controls::DailyControls,
     expected: String,
     replacement: String,
     focus_replacement: bool,
@@ -170,6 +176,8 @@ impl StudioApp {
             #[cfg(feature = "editor-preview")]
             notes: notes::NotesState::default(),
             #[cfg(feature = "editor-preview")]
+            recovery: None,
+            #[cfg(feature = "editor-preview")]
             clipboard_jobs: clipboard_jobs::ClipboardJobs::new()?,
             #[cfg(feature = "editor-preview")]
             clipboard_recovery: None,
@@ -205,6 +213,7 @@ impl StudioApp {
             project_name: String::new(),
             document_dialog: false,
             document_name: String::new(),
+            daily_controls: daily_controls::DailyControls::default(),
             expected: String::new(),
             replacement: String::new(),
             focus_replacement: false,
@@ -287,30 +296,62 @@ impl StudioApp {
     }
 
     fn open_project(&mut self, project: Project) -> AppResult<()> {
+        self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
         self.save()?;
-        self.documents = self.workspace.list_documents(&project.id)?;
-        self.project = Some(project);
-        self.document = None;
-        self.body.clear();
-        #[cfg(feature = "editor-preview")]
-        {
-            self.rich = None;
-            self.notes.clear();
-        }
-        self.library = false;
-        if let Some(document) = self.documents.first().cloned() {
+        let documents = self.workspace.list_documents(&project.id)?;
+        if let Some(document) = documents.first().cloned() {
+            // The old project/context remains intact if opening needs an explicit
+            // recovery choice. Never display an empty project after a guarded refusal.
             self.open_document(document)?;
+            #[cfg(feature = "editor-preview")]
+            if self.recovery.is_some() {
+                return Ok(());
+            }
+        } else {
+            self.document = None;
+            self.body.clear();
+            #[cfg(feature = "editor-preview")]
+            {
+                self.rich = None;
+                self.notes.clear();
+            }
+            self.daily_controls.document_changed();
         }
+        self.documents = documents;
+        self.project = Some(project);
+        self.library = false;
         Ok(())
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
         self.save()?;
         let document = self.workspace.document(&document.id)?;
+        #[cfg(feature = "editor-preview")]
+        let (document, recovered_checkpoint) = if let Some(draft) =
+            self.workspace.rich_draft(&document.id)?
+            && draft.has_annotation_checkpoint
+        {
+            // Recovery checks the exact durable binding before a new session or
+            // decoration source can observe guessed or stale attachments.
+            match self.workspace.recover_rich_editor_draft(
+                &document.id,
+                document.revision,
+                &draft.version,
+            ) {
+                Ok(recovered) => (recovered, true),
+                Err(error) => {
+                    self.show_recovery_conflict(&document.id, &error)?;
+                    return Ok(());
+                }
+            }
+        } else {
+            (document, false)
+        };
         #[cfg(feature = "editor-preview")]
         let mut rich = rich_editor::RichState::open(&self.workspace, &document)?;
         #[cfg(feature = "editor-preview")]
@@ -362,6 +403,11 @@ impl StudioApp {
         }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
+        self.daily_controls.document_changed();
+        #[cfg(feature = "editor-preview")]
+        if recovered_checkpoint {
+            self.status = "Unsaved text recovered".into();
+        }
         self.expected.clear();
         self.frozen_selection = None;
         self.replacement.clear();
@@ -372,6 +418,11 @@ impl StudioApp {
         let result = self.save_dirty_document();
         self.autosave_paused = result.is_err();
         result
+    }
+
+    fn save_explicit(&mut self) -> AppResult<()> {
+        self.commit_title_edit()?;
+        self.save()
     }
 
     fn save_dirty_document(&mut self) -> AppResult<()> {
@@ -522,10 +573,38 @@ impl StudioApp {
             self.focus_mode,
         )
     }
+    fn can_edit_manuscript(&self) -> bool {
+        let Some(document) = &self.document else {
+            return false;
+        };
+        if document.read_only {
+            return false;
+        }
+        #[cfg(feature = "editor-preview")]
+        if let Some(rich) = &self.rich {
+            return !rich.is_read_only();
+        }
+        document.rich_json.is_none()
+    }
+
+    fn is_recovery_read_only(&self) -> bool {
+        #[cfg(feature = "editor-preview")]
+        {
+            self.rich
+                .as_ref()
+                .is_some_and(rich_editor::RichState::is_recovery_read_only)
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            false
+        }
+    }
+
     fn rich_modal_open(&self) -> bool {
         #[cfg(feature = "editor-preview")]
         {
             self.notes.modal_open()
+                || self.recovery.is_some()
                 || self
                     .rich
                     .as_ref()
@@ -544,6 +623,7 @@ impl StudioApp {
             || self.error.is_some()
             || self.full_review.is_some()
             || self.rich_modal_open()
+            || self.daily_controls.modal_open()
     }
 }
 
@@ -568,22 +648,28 @@ impl eframe::App for StudioApp {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         if ctx.input(|i| i.viewport().close_requested()) {
-            #[cfg(feature = "editor-preview")]
-            let note_drafts_pending = self.notes.has_unsaved_drafts();
-            #[cfg(not(feature = "editor-preview"))]
-            let note_drafts_pending = false;
-            if note_drafts_pending {
+            let title_result = self.commit_title_edit();
+            if title_result.is_err() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                #[cfg(feature = "editor-preview")]
-                if !self.notes.close_confirmation_open() {
-                    self.notes.request_close_confirmation();
-                }
+                self.record_error(title_result);
             } else {
-                let result = self.save();
-                if result.is_err() {
+                #[cfg(feature = "editor-preview")]
+                let note_drafts_pending = self.notes.has_unsaved_drafts();
+                #[cfg(not(feature = "editor-preview"))]
+                let note_drafts_pending = false;
+                if note_drafts_pending {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    #[cfg(feature = "editor-preview")]
+                    if !self.notes.close_confirmation_open() {
+                        self.notes.request_close_confirmation();
+                    }
+                } else {
+                    let result = self.save();
+                    if result.is_err() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    }
+                    self.record_error(result);
                 }
-                self.record_error(result);
             }
         }
         if let Some(receiver) = &self.import_job {
@@ -627,8 +713,11 @@ impl eframe::App for StudioApp {
         let had_modal = self.modal_open();
         self.full_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
+        self.daily_control_dialogs(&ctx, t);
         #[cfg(feature = "editor-preview")]
         self.notes_dialogs(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.recovery_dialogs(&ctx, t);
         if had_modal && !self.modal_open() {
             // The next manuscript may not have been emitted in this frame yet.
             // Focus only after its TextEdit has registered an accessibility node.
@@ -680,6 +769,10 @@ impl eframe::App for StudioApp {
 }
 
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    #[cfg(feature = "editor-preview")]
+    if error.is::<recovery::ReadOnlyRecoveryView>() {
+        return "Recovery preview is read only. Preserved note drafts remain available.";
+    }
     if let Some(error) = error.downcast_ref::<studio_core::StudioError>() {
         use studio_core::StudioError;
         return match error {
@@ -690,6 +783,9 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
                 "The document changed. Reload it before saving."
             }
             StudioError::AnnotationConflict { .. } => "The note changed. Reload it before editing.",
+            StudioError::DraftAnnotationConflict => {
+                "The draft and notes are preserved. Review their attachments before recovering this document."
+            }
             StudioError::DraftChanged => {
                 "The working draft changed. Preserve your changes before retrying."
             }
@@ -1372,6 +1468,14 @@ mod catalog_source_checks {
             include_str!("app/review.rs"),
             include_str!("app/dialogs.rs"),
             include_str!("app/settings.rs"),
+            include_str!("app/components.rs"),
+            include_str!("app/authoring.rs"),
+            include_str!("app/rich_editor.rs"),
+            include_str!("app/notes.rs"),
+            include_str!("app/clipboard_host.rs"),
+            include_str!("app/rendering.rs"),
+            include_str!("app/daily_controls.rs"),
+            include_str!("app/recovery.rs"),
         ];
         for source in sources {
             for marker in [".text(", ".format("] {
