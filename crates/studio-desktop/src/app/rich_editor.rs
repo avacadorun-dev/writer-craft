@@ -338,7 +338,9 @@ impl StudioApp {
                                     for change in output.changes {
                                         rich.pending_proofs.push(change.replay_proof());
                                     }
-                                    if let Some(error) = output.errors.into_iter().next() {
+                                    if let Some(error) = output.errors.into_iter().find(|error| {
+                                        !matches!(error, craft_editor_egui::Error::DecorationSource)
+                                    }) {
                                         if let craft_editor_egui::Error::Clipboard(clipboard) =
                                             &error
                                         {
