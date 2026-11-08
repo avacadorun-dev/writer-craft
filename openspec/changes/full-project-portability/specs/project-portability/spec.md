@@ -178,3 +178,48 @@ against explicit native transport guards even when several original artifact nam
   destination collides
 - THEN no success receipt exists, an owned partial output remains visibly incomplete, existing
   user data is not overwritten and no recursive cleanup removes unrelated files.
+
+
+### Requirement: Acknowledged current writing before workspace backup
+
+Workspace backup SHALL wait for the current board's actual save acknowledgement and any newer local text, composition or failed-save resolution before selecting a destination or starting the snapshot worker. A queued save SHALL not count as saved writing. The prerequisite SHALL remain bound to the exact project/board, preserve local drafts and recheck current state on Continue, including after note prerequisites.
+
+#### Scenario: Typing continues while a requested save is pending
+
+- **WHEN** the author requests a backup before the active card save is acknowledged and types more before that acknowledgement
+- **THEN** no backup picker or worker starts until the newer writing is acknowledged or the author explicitly returns/cancels the backup; the current card and unrelated writing remain intact
+
+#### Scenario: A prerequisite fails or the project context changes
+
+- **WHEN** the saved board becomes stale, persistence fails, composition remains active or the captured board context changes
+- **THEN** backup remains unstarted with an actionable review/cancel path, and an earlier verified backup receipt is not presented as the result of this attempt
+
+### Requirement: Explicit native project transfer
+
+The native application SHALL distinguish complete single-project archives/readable restore folders,
+original Studio imports and whole-workspace backups. An export SHALL keep its captured project
+identity visible, preserve current work before snapshotting, and never implicitly save unrelated
+parked note drafts. Restoration SHALL preview verified preserved scope and activate only a fully
+committed independent project through the same core commands.
+
+#### Scenario: Pending work in the current project
+
+- WHEN the author continues a project export or restore while current writing, board saves or
+  project-scoped note edits are pending
+- THEN current writing is saved, exact board acknowledgement is awaited, affected notes offer
+  explicit Review/Cancel, unrelated parked notes remain untouched and the captured transfer target
+  is rechecked immediately before the worker begins.
+
+#### Scenario: Pinned preview and publication race
+
+- WHEN the author confirms a native restore preview or requests cancellation during a transfer
+- THEN the worker consumes the already verified private snapshot without reopening the ambient
+  source, atomic publication acknowledgement wins over a later cancellation request, and a missing
+  acknowledgement is shown truthfully with the selected path/new-project result kept reviewable.
+
+#### Scenario: Native transfer presentation
+
+- WHEN a transfer is configured, verified, running, cancelled, failed or completed
+- THEN eight locales show the actual scope and target, bounded local content scrolling, consistent
+  40px actions and24px insets, a reachable stable footer, and an actionable persistent outcome;
+  unavailable selected-document scope is not offered as a functioning control.

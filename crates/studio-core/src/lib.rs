@@ -36,14 +36,15 @@ pub use project_portability::{
     MAX_PORTABLE_SHARD_BYTES, MAX_PORTABLE_SHARD_RECORDS, MAX_PORTABLE_SHARDS,
     MAX_PORTABLE_TRANSPORT_BYTES, MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS,
     MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES, PortableObjectReference,
-    PortableObjectSource, PortableProjectHeader, PortableProjectScope, PortableResourceBudget,
-    PortableShardDescriptor, PreparedPortableProject, ProjectAssetSource, ProjectAttachment,
-    ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo,
-    ProjectCanvasSnapshot, ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
-    ProjectPortableExportWorker, ProjectReadingCanvas, ProjectReadingDocument, ProjectReadingNode,
-    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
-    ValidatedEvidenceReference, ValidatedPortableProjectImport, ValidatedProjectImport,
-    VerifiedPortableProjectStream, VerifiedPortableRecord, visit_portable_shard,
+    PortableObjectSource, PortableProjectHeader, PortableProjectScope, PortableProjectSummary,
+    PortableResourceBudget, PortableShardDescriptor, PreparedPortableProject, ProjectAssetSource,
+    ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision,
+    ProjectCanvasRevisionInfo, ProjectCanvasSnapshot, ProjectEvidenceSnapshot,
+    ProjectExportSnapshot, ProjectImportWorker, ProjectPortableExportWorker, ProjectReadingCanvas,
+    ProjectReadingDocument, ProjectReadingNode, ProjectTransferCancellation, ProjectTreeNode,
+    ValidatedEvidenceObject, ValidatedEvidenceReference, ValidatedPortableProjectImport,
+    ValidatedProjectImport, VerifiedPortableProjectStream, VerifiedPortableRecord,
+    visit_portable_shard,
 };
 pub use project_structure::ImportedProjectStructure;
 pub use rich::{RichDraft, RichRevision};

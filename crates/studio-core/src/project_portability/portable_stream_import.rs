@@ -2,6 +2,7 @@
 use std::io::{Read, Write};
 
 use rusqlite::{Connection, MAIN_DB, OptionalExtension, params};
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -30,6 +31,23 @@ pub trait PortableObjectSource {
         &'a mut self,
         object: &PortableObjectReference,
     ) -> std::io::Result<Box<dyn Read + 'a>>;
+}
+
+/// Lightweight preserved-content counts for a pinned native restore preview.
+/// These are not a claim that every preserved domain is natively editable.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortableProjectSummary {
+    /// Captured authored project title.
+    pub title: String,
+    /// Explicit complete-project or selected-documents scope.
+    pub scope: super::PortableProjectScope,
+    /// Current node records, including contentless containers.
+    pub node_count: u64,
+    /// Current preserved board identities.
+    pub canvas_count: u64,
+    /// Logical original artifact declarations, independent of digest deduplication.
+    pub attachment_count: u64,
 }
 
 /// A transport-verified private snapshot, not permission to activate record semantics.
@@ -167,6 +185,30 @@ impl VerifiedPortableProjectStream {
     /// Verified small header. It does not imply source/record semantic validity.
     pub fn header(&self) -> &PortableProjectHeader {
         &self.header
+    }
+    /// Inspect bounded current metadata after transport verification; semantic restore still
+    /// validates supported content before any independent project becomes visible.
+    pub fn project_summary(&self) -> Result<PortableProjectSummary> {
+        if self.domain_record_count("project")? != 1 {
+            return invalid("Native project must contain one captured project identity");
+        }
+        let raw: String = self.index.query_row(
+            "SELECT raw_json FROM records WHERE domain='project'",
+            [],
+            |row| row.get(0),
+        )?;
+        let project: Value = serde_json::from_str(&raw)?;
+        let title = project["title"]
+            .as_str()
+            .filter(|title| !title.trim().is_empty() && title.chars().count() <= 120)
+            .ok_or_else(|| StudioError::Validation("Native project title is invalid".into()))?;
+        Ok(PortableProjectSummary {
+            title: title.into(),
+            scope: self.header.scope(),
+            node_count: self.domain_record_count("nodes")?,
+            canvas_count: self.domain_record_count("canvases")?,
+            attachment_count: self.domain_record_count("assets")?,
+        })
     }
     /// Actual verified count across all component domains.
     pub fn record_count(&self) -> u64 {

@@ -186,3 +186,45 @@ fn cancellation_during_object_copy_should_expose_no_partly_verified_snapshot() {
     };
     assert!(VerifiedPortableProjectStream::preflight(&root, &mut source, &cancel).is_err());
 }
+
+#[test]
+fn restore_preview_should_use_pinned_current_metadata_without_claiming_revision_totals() {
+    let (root, mut objects) = fixture();
+    let verified = VerifiedPortableProjectStream::preflight(
+        &root,
+        &mut objects,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    objects.0.clear();
+    let summary = verified.project_summary().unwrap();
+    assert_eq!(summary.title, "Preflight");
+    assert_eq!(summary.scope, PortableProjectScope::CompleteProject);
+    assert_eq!(summary.node_count, 1);
+    assert_eq!(summary.canvas_count, 0);
+    assert_eq!(summary.attachment_count, 0);
+}
+
+#[test]
+fn restore_preview_should_refuse_repeated_project_identity_before_activation() {
+    let raw=b"{\"logicalId\":\"one\",\"title\":\"First\"}\n{\"logicalId\":\"two\",\"title\":\"Second\"}\n";
+    let sha = format!("{:x}", Sha256::digest(raw));
+    let page = PortableShardDescriptor::new(
+        "project",
+        PortableObjectReference::new(&sha, raw.len() as u64).unwrap(),
+        2,
+    )
+    .unwrap();
+    let root = PortableProjectHeader::new(PortableProjectScope::CompleteProject, None, vec![page])
+        .unwrap()
+        .to_bytes()
+        .unwrap();
+    let mut objects = Objects(BTreeMap::from([(sha, raw.to_vec())]));
+    let verified = VerifiedPortableProjectStream::preflight(
+        &root,
+        &mut objects,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    assert!(verified.project_summary().is_err());
+}

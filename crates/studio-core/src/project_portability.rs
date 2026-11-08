@@ -34,7 +34,9 @@ pub use portable_format::{
 pub use portable_reading::{ProjectReadingCanvas, ProjectReadingDocument, ProjectReadingNode};
 pub use portable_restore::{MAX_PORTABLE_COMPANION_V1_BYTES, ValidatedPortableProjectImport};
 pub use portable_stream::{PreparedPortableProject, ProjectPortableExportWorker};
-pub use portable_stream_import::{PortableObjectSource, VerifiedPortableProjectStream};
+pub use portable_stream_import::{
+    PortableObjectSource, PortableProjectSummary, VerifiedPortableProjectStream,
+};
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 
 use std::collections::{BTreeMap, HashMap};
