@@ -47,6 +47,12 @@ pub(super) struct CaptureProbe {
     readback_requests: u8,
     #[cfg(any(feature = "editor-preview", test))]
     navigated_generation: Option<u64>,
+    #[cfg(any(feature = "editor-preview", test))]
+    settled_navigation_generation: Option<u64>,
+    #[cfg(any(feature = "editor-preview", test))]
+    navigation_sample: Option<CaptureReadiness>,
+    #[cfg(any(feature = "editor-preview", test))]
+    navigation_stable_frames: u8,
 }
 impl CaptureProbe {
     #[cfg(feature = "editor-preview")]
@@ -59,6 +65,33 @@ impl CaptureProbe {
             return false;
         }
         self.navigated_generation = Some(generation);
+        self.navigation_sample = None;
+        self.navigation_stable_frames = 0;
+        true
+    }
+    #[cfg(any(feature = "editor-preview", test))]
+    fn needs_settled_navigation(&mut self, readiness: CaptureReadiness) -> bool {
+        if self.navigated_generation != Some(readiness.generation)
+            || self.settled_navigation_generation == Some(readiness.generation)
+            || readiness.target_visible
+            || !readiness.settled
+            || readiness.pending_atoms != 0
+            || readiness.failed_atoms != 0
+        {
+            self.navigation_sample = None;
+            self.navigation_stable_frames = 0;
+            return false;
+        }
+        if self.navigation_sample == Some(readiness) {
+            self.navigation_stable_frames = self.navigation_stable_frames.saturating_add(1);
+        } else {
+            self.navigation_sample = Some(readiness);
+            self.navigation_stable_frames = 1;
+        }
+        if self.navigation_stable_frames < STABLE_FRAMES {
+            return false;
+        }
+        self.settled_navigation_generation = Some(readiness.generation);
         true
     }
     fn readback_due(&self, now: Instant) -> bool {
@@ -141,13 +174,15 @@ impl StudioApp {
         }
         #[cfg(feature = "editor-preview")]
         if let Some(rich) = &mut self.rich {
-            let generation = rich
-                .capture_readiness(self.capture_probe.target.as_deref())
-                .generation;
-            if self.capture_probe.needs_navigation(generation) {
-                // Scroll once per actual metric generation, then let native animation finish.
-                // Repeating nearest-edge scrolling for an object taller than the viewport
-                // would artificially alternate its top/bottom edge forever.
+            let readiness = rich.capture_readiness(self.capture_probe.target.as_deref());
+            if self.capture_probe.needs_navigation(readiness.generation)
+                || self.capture_probe.needs_settled_navigation(readiness)
+            {
+                // A progressive metric change can leave an earlier animated scroll at a
+                // position that no longer shows the selected target. After actual native
+                // render/scroll stability, allow one semantic retry per generation only
+                // while that target is still unseen. Visible tall objects never retry;
+                // repeated nearest-edge scrolling could alternate their top/bottom edges.
                 rich.session.request_scroll_to_caret();
             }
         }
@@ -373,6 +408,99 @@ mod tests {
             assert!(!probe.needs_navigation(1));
         }
         assert!(probe.needs_navigation(2));
+    }
+    #[test]
+    fn stable_unseen_target_gets_one_post_layout_navigation_per_generation() {
+        let mut probe = CaptureProbe::default();
+        let unseen = CaptureReadiness {
+            generation: 7,
+            scroll_offset_bits: 3061.162_f32.to_bits(),
+            target_visible: false,
+            ..CaptureReadiness::default()
+        };
+        assert!(probe.needs_navigation(7));
+        assert!(!probe.needs_settled_navigation(unseen));
+        assert!(!probe.needs_settled_navigation(unseen));
+        assert!(probe.needs_settled_navigation(unseen));
+        for _ in 0..120 {
+            assert!(!probe.needs_navigation(7));
+            assert!(!probe.needs_settled_navigation(unseen));
+            assert!(!probe.observe(unseen));
+        }
+        assert_eq!(probe.stable_frames, 0);
+        assert!(!probe.requested);
+        assert!(probe.needs_navigation(8));
+        let next = CaptureReadiness {
+            generation: 8,
+            ..unseen
+        };
+        assert!(!probe.needs_settled_navigation(next));
+        assert!(!probe.needs_settled_navigation(next));
+        assert!(probe.needs_settled_navigation(next));
+    }
+    #[test]
+    fn post_layout_navigation_waits_for_valid_unchanged_geometry() {
+        let unseen = CaptureReadiness {
+            generation: 3,
+            target_visible: false,
+            ..CaptureReadiness::default()
+        };
+        for invalid in [
+            CaptureReadiness {
+                settled: false,
+                ..unseen
+            },
+            CaptureReadiness {
+                pending_atoms: 1,
+                ..unseen
+            },
+            CaptureReadiness {
+                failed_atoms: 1,
+                ..unseen
+            },
+            CaptureReadiness {
+                target_visible: true,
+                ..unseen
+            },
+            CaptureReadiness {
+                generation: 4,
+                ..unseen
+            },
+        ] {
+            let mut probe = CaptureProbe::default();
+            assert!(probe.needs_navigation(3));
+            assert!(!probe.needs_settled_navigation(unseen));
+            assert!(!probe.needs_settled_navigation(unseen));
+            assert!(!probe.needs_settled_navigation(invalid));
+            assert!(!probe.needs_settled_navigation(unseen));
+            assert!(!probe.needs_settled_navigation(unseen));
+            assert!(probe.needs_settled_navigation(unseen));
+        }
+        let mut probe = CaptureProbe::default();
+        assert!(probe.needs_navigation(3));
+        for offset in 0..120 {
+            assert!(!probe.needs_settled_navigation(CaptureReadiness {
+                scroll_offset_bits: (offset as f32).to_bits(),
+                ..unseen
+            }));
+        }
+        assert!(!probe.needs_settled_navigation(unseen));
+        assert!(!probe.needs_settled_navigation(unseen));
+        assert!(probe.needs_settled_navigation(unseen));
+    }
+    #[test]
+    fn visible_tall_targets_never_get_post_layout_navigation() {
+        let mut probe = CaptureProbe::default();
+        assert!(probe.needs_navigation(4));
+        let visible = CaptureReadiness {
+            generation: 4,
+            visible_atoms: 1,
+            ..CaptureReadiness::default()
+        };
+        for _ in 0..120 {
+            assert!(!probe.needs_navigation(4));
+            assert!(!probe.needs_settled_navigation(visible));
+        }
     }
     #[test]
     fn capture_refuses_live_data_and_does_not_replace_existing_outputs() -> AppResult<()> {
