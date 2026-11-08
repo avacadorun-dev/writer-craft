@@ -1,8 +1,8 @@
 //! One bounded background clipboard worker; native document mutation stays on the UI thread.
 use std::fmt;
 use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+    Arc, Mutex, TryLockError,
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 
@@ -11,7 +11,7 @@ use craft_editor_egui::{
     EditorSession,
     clipboard::{
         ClipboardBundle, ClipboardError, ClipboardProvider, ClipboardRequest, CutGuard, PasteGuard,
-        PreparedPaste, WriteAck,
+        PreparedPaste, WriteAck, WriteTicket,
     },
 };
 use craft_editor_model::Change;
@@ -104,6 +104,37 @@ enum Prepared {
 struct Epochs {
     writes: AtomicU64,
     cancel: AtomicU64,
+    // Only the final cancellation/start handshake is locked. OS and project I/O stay outside.
+    publication_fence: Mutex<()>,
+    active_write: AtomicBool,
+}
+struct ActiveWrite<'a>(&'a AtomicBool);
+impl Drop for ActiveWrite<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+impl Epochs {
+    fn begin_write(
+        &self,
+        cancel: u64,
+        write: Option<u64>,
+    ) -> std::result::Result<Option<ActiveWrite<'_>>, ClipboardError> {
+        let _fence = self
+            .publication_fence
+            .lock()
+            .map_err(|_| ClipboardError::Unavailable)?;
+        if !current(self, cancel, write) {
+            return Ok(None);
+        }
+        self.active_write.store(true, Ordering::Release);
+        Ok(Some(ActiveWrite(&self.active_write)))
+    }
+}
+struct NativeOutput {
+    command: egui::OutputCommand,
+    epoch: Option<u64>,
+    error: Option<SubmitFailureKind>,
 }
 struct Job {
     request: ClipboardRequest,
@@ -120,6 +151,7 @@ pub(super) struct ClipboardJobs {
     #[cfg(test)]
     ready: std::collections::VecDeque<ClipboardCompletion>,
     epochs: Arc<Epochs>,
+    native_output: Option<NativeOutput>,
 }
 impl ClipboardJobs {
     pub fn new() -> std::io::Result<Self> {
@@ -145,6 +177,7 @@ impl ClipboardJobs {
             #[cfg(test)]
             ready: std::collections::VecDeque::new(),
             epochs,
+            native_output: None,
         })
     }
     /// A newer rich Copy/Cut supersedes older pending writes. The host must also call
@@ -198,8 +231,85 @@ impl ClipboardJobs {
     /// Cut/Paste jobs even when their exact document revision/selection has not otherwise changed.
     pub fn cancel_pending(&self) -> std::result::Result<(), SubmitFailureKind> {
         advance(&self.epochs.cancel).ok_or(SubmitFailureKind::EpochExhausted)?;
-        advance(&self.epochs.writes).ok_or(SubmitFailureKind::EpochExhausted)?;
+        // Independent widget Copy is immutable and has no document destination. Modal/project
+        // cancellation must not repeatedly discard it. Only a newer Copy/Cut intent supersedes it.
         Ok(())
+    }
+    /// Retain the exact native widget command until older rich writes have actually returned.
+    /// This does not write or acknowledge the clipboard. Newer Copy intents replace older ones.
+    pub fn defer_native_output(&mut self, command: egui::OutputCommand) {
+        self.native_output = Some(NativeOutput {
+            command,
+            epoch: None,
+            error: None,
+        });
+        self.progress_native_output();
+    }
+    /// Try the small publication handshake; never wait on worker or OS I/O.
+    pub fn progress_native_output(&mut self) {
+        let Some(pending) = self.native_output.as_mut() else {
+            return;
+        };
+        if pending.error.is_some() {
+            return;
+        }
+        if let Some(epoch) = pending.epoch {
+            if self.epochs.writes.load(Ordering::Acquire) != epoch {
+                self.native_output = None;
+            }
+            return;
+        }
+        let _fence = match self.epochs.publication_fence.try_lock() {
+            Ok(fence) => fence,
+            Err(TryLockError::WouldBlock) => return,
+            Err(TryLockError::Poisoned(_)) => {
+                pending.error = Some(SubmitFailureKind::Closed);
+                return;
+            }
+        };
+        let epoch = advance(&self.epochs.cancel).and_then(|_| advance(&self.epochs.writes));
+        match epoch {
+            Some(epoch) => pending.epoch = Some(epoch),
+            None => pending.error = Some(SubmitFailureKind::EpochExhausted),
+        }
+    }
+    pub fn has_pending_native_output(&self) -> bool {
+        self.native_output.is_some()
+    }
+    pub fn native_output_error(&self) -> Option<SubmitFailureKind> {
+        self.native_output
+            .as_ref()
+            .and_then(|pending| pending.error)
+    }
+    pub fn retry_native_output(&mut self) {
+        if let Some(pending) = &mut self.native_output {
+            pending.error = None;
+        }
+        self.progress_native_output();
+    }
+    pub fn dismiss_native_output(&mut self) {
+        self.native_output = None;
+    }
+    /// Return an output only after the serial worker's prior write ended and no newer Copy won.
+    /// The host must actually re-emit this value; taking it is not a native write ACK.
+    pub fn take_ready_native_output(&mut self) -> Option<egui::OutputCommand> {
+        self.progress_native_output();
+        let pending = self.native_output.take()?;
+        if pending
+            .epoch
+            .is_some_and(|epoch| self.epochs.writes.load(Ordering::Acquire) != epoch)
+        {
+            return None;
+        }
+        if pending.error.is_none()
+            && pending.epoch.is_some()
+            && !self.epochs.active_write.load(Ordering::Acquire)
+        {
+            Some(pending.command)
+        } else {
+            self.native_output = Some(pending);
+            None
+        }
     }
     pub fn take_completed(&mut self) -> Vec<ClipboardCompletion> {
         #[cfg(test)]
@@ -276,6 +386,19 @@ fn current(epochs: &Epochs, cancel: u64, write: Option<u64>) -> bool {
     epochs.cancel.load(Ordering::Acquire) == cancel
         && write.is_none_or(|write| epochs.writes.load(Ordering::Acquire) == write)
 }
+fn publish(
+    ticket: WriteTicket,
+    provider: &dyn ClipboardProvider,
+    bundle: &ClipboardBundle,
+    epochs: &Epochs,
+    cancel: u64,
+    write: Option<u64>,
+) -> std::result::Result<Option<WriteAck>, ClipboardError> {
+    let Some(_activity) = epochs.begin_write(cancel, write)? else {
+        return Ok(None);
+    };
+    ticket.write(provider, bundle).map(Some)
+}
 fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
     let captured = captured_bundle(&job.request);
     let intent = request_intent(&job.request);
@@ -286,8 +409,16 @@ fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
         match job.request {
             ClipboardRequest::Copy { bundle, ticket } => match job.scope.prepare_copy(&bundle) {
                 Ok(outbound) if current(epochs, job.cancel_epoch, job.write_epoch) => {
-                    match ticket.write(job.provider.as_ref(), &outbound) {
-                        Ok(_) => Prepared::Copied,
+                    match publish(
+                        ticket,
+                        job.provider.as_ref(),
+                        &outbound,
+                        epochs,
+                        job.cancel_epoch,
+                        job.write_epoch,
+                    ) {
+                        Ok(Some(_)) => Prepared::Copied,
+                        Ok(None) => Prepared::Cancelled,
                         Err(error) => Prepared::Failed(JobError::Transport(error)),
                     }
                 }
@@ -300,8 +431,16 @@ fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
                 guard,
             } => match job.scope.prepare_copy(&bundle) {
                 Ok(outbound) if current(epochs, job.cancel_epoch, job.write_epoch) => {
-                    match ticket.write(job.provider.as_ref(), &outbound) {
-                        Ok(ack) => Prepared::Cut(guard, ack),
+                    match publish(
+                        ticket,
+                        job.provider.as_ref(),
+                        &outbound,
+                        epochs,
+                        job.cancel_epoch,
+                        job.write_epoch,
+                    ) {
+                        Ok(Some(ack)) => Prepared::Cut(guard, ack),
+                        Ok(None) => Prepared::Cancelled,
                         Err(error) => Prepared::Failed(JobError::Transport(error)),
                     }
                 }
@@ -335,7 +474,7 @@ mod tests {
     use craft_editor_egui::clipboard::ClipboardResult;
     use craft_editor_egui::{DocPoint, Selection};
     use craft_editor_model::{Document, Revision, ScalarOffset};
-    use std::sync::{Condvar, Mutex, atomic::AtomicUsize};
+    use std::sync::{Condvar, atomic::AtomicUsize};
     use std::time::Duration;
     use studio_core::Workspace;
     type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
@@ -584,6 +723,179 @@ mod tests {
             provider.inner.bundle.lock().map_err(|_| "mock lock")?.plain,
             "ANEWE"
         );
+        Ok(())
+    }
+    fn blocked_write(
+        jobs: &ClipboardJobs,
+        session: &EditorSession,
+        fail: bool,
+    ) -> TestResultWith<(Arc<BlockingProvider>, Receiver<()>)> {
+        let (entered, waiting) = mpsc::sync_channel(1);
+        let provider = Arc::new(BlockingProvider {
+            inner: Provider {
+                fail,
+                ..Default::default()
+            },
+            entered,
+            released: Mutex::new(false),
+            ready: Condvar::new(),
+        });
+        jobs.submit(
+            session.begin_cut()?.ok_or("missing cut")?,
+            scope()?,
+            provider.clone(),
+            &egui::Context::default(),
+        )
+        .map_err(|_| "submit failed")?;
+        Ok((provider, waiting))
+    }
+    type TestResultWith<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+    #[test]
+    fn widget_text_output_waits_for_actual_old_write_and_document_cancellation_does_not_cancel_it()
+    -> TestResult {
+        let mut jobs = ClipboardJobs::new()?;
+        let mut session = editor()?;
+        let original = session.document().clone();
+        let (provider, entered) = blocked_write(&jobs, &session, false)?;
+        entered.recv_timeout(Duration::from_secs(10))?;
+        jobs.defer_native_output(egui::OutputCommand::CopyText("dialog exact 😀".into()));
+        assert!(jobs.take_ready_native_output().is_none());
+        for _ in 0..3 {
+            jobs.cancel_pending().map_err(|_| "cancel failed")?;
+        }
+        assert!(jobs.has_pending_native_output());
+        *provider.released.lock().map_err(|_| "mock lock")? = true;
+        provider.ready.notify_all();
+        let result = jobs.complete(completed(&jobs)?, Some(&mut session));
+        assert!(matches!(result.outcome, ClipboardOutcome::Cancelled));
+        let Some(egui::OutputCommand::CopyText(text)) = jobs.take_ready_native_output() else {
+            return Err("widget command lost".into());
+        };
+        assert_eq!(text, "dialog exact 😀");
+        assert_eq!(session.document(), &original);
+        assert!(!session.can_undo());
+        // Returning/re-emitting a widget command is not an OS write acknowledgement.
+        assert_eq!(
+            provider.inner.bundle.lock().map_err(|_| "mock lock")?.plain,
+            "BCD"
+        );
+        assert!(!jobs.has_pending_native_output());
+        assert!(jobs.take_ready_native_output().is_none());
+        Ok(())
+    }
+    #[test]
+    fn rapid_widget_image_copy_keeps_exact_latest_pixels_and_old_write_failure_does_not_clear_clipboard()
+    -> TestResult {
+        let mut jobs = ClipboardJobs::new()?;
+        let session = editor()?;
+        let (provider, entered) = blocked_write(&jobs, &session, true)?;
+        entered.recv_timeout(Duration::from_secs(10))?;
+        provider.inner.bundle.lock().map_err(|_| "mock lock")?.plain =
+            "previous owned clipboard".into();
+        let first = egui::ColorImage::from_rgba_unmultiplied([1, 1], &[255, 0, 0, 255]);
+        let latest =
+            egui::ColorImage::from_rgba_unmultiplied([2, 1], &[0, 255, 0, 255, 0, 0, 255, 128]);
+        let pixels = latest.pixels.clone();
+        jobs.defer_native_output(egui::OutputCommand::CopyImage(first));
+        jobs.defer_native_output(egui::OutputCommand::CopyImage(latest));
+        assert!(jobs.take_ready_native_output().is_none());
+        *provider.released.lock().map_err(|_| "mock lock")? = true;
+        provider.ready.notify_all();
+        let _completion = completed(&jobs)?;
+        let Some(egui::OutputCommand::CopyImage(image)) = jobs.take_ready_native_output() else {
+            return Err("latest image lost".into());
+        };
+        assert_eq!(image.size, [2, 1]);
+        assert_eq!(image.pixels, pixels);
+        assert_eq!(
+            provider.inner.bundle.lock().map_err(|_| "mock lock")?.plain,
+            "previous owned clipboard"
+        );
+        assert!(jobs.take_ready_native_output().is_none());
+        Ok(())
+    }
+    #[test]
+    fn newer_rich_copy_supersedes_waiting_widget_output_in_publication_order() -> TestResult {
+        let mut jobs = ClipboardJobs::new()?;
+        let session = editor()?;
+        let (provider, entered) = blocked_write(&jobs, &session, false)?;
+        entered.recv_timeout(Duration::from_secs(10))?;
+        jobs.defer_native_output(egui::OutputCommand::CopyText("older widget".into()));
+        let mut newer = editor()?;
+        newer.insert_plain_text("fresh")?;
+        newer.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(0),
+            },
+            head: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(7),
+            },
+        })?;
+        jobs.submit(
+            newer.begin_copy()?.ok_or("missing copy")?,
+            scope()?,
+            provider.clone(),
+            &egui::Context::default(),
+        )
+        .map_err(|_| "submit failed")?;
+        assert!(jobs.take_ready_native_output().is_none());
+        *provider.released.lock().map_err(|_| "mock lock")? = true;
+        provider.ready.notify_all();
+        let _old = completed(&jobs)?;
+        let current = jobs.complete(completed(&jobs)?, None);
+        assert!(matches!(current.outcome, ClipboardOutcome::Copied));
+        assert!(jobs.take_ready_native_output().is_none());
+        assert_eq!(
+            provider.inner.bundle.lock().map_err(|_| "mock lock")?.plain,
+            "AfreshE"
+        );
+        assert_eq!(provider.inner.writes.load(Ordering::Relaxed), 2);
+        Ok(())
+    }
+    #[test]
+    fn busy_publication_handshake_is_nonblocking_and_retains_widget_output_for_next_frame()
+    -> TestResult {
+        let mut jobs = ClipboardJobs::new()?;
+        let epochs = jobs.epochs.clone();
+        let fence = epochs
+            .publication_fence
+            .lock()
+            .map_err(|_| "fence poisoned")?;
+        jobs.defer_native_output(egui::OutputCommand::CopyText("keep exact".into()));
+        assert!(jobs.has_pending_native_output());
+        assert!(jobs.take_ready_native_output().is_none());
+        drop(fence);
+        let Some(egui::OutputCommand::CopyText(text)) = jobs.take_ready_native_output() else {
+            return Err("capture lost after retry".into());
+        };
+        assert_eq!(text, "keep exact");
+        Ok(())
+    }
+    #[test]
+    fn publication_error_retains_exact_widget_command_until_retry_or_explicit_dismiss() -> TestResult
+    {
+        let mut jobs = ClipboardJobs::new()?;
+        jobs.epochs.cancel.store(u64::MAX, Ordering::Release);
+        jobs.defer_native_output(egui::OutputCommand::CopyText("recover exact".into()));
+        assert_eq!(
+            jobs.native_output_error(),
+            Some(SubmitFailureKind::EpochExhausted)
+        );
+        assert!(jobs.has_pending_native_output());
+        assert!(jobs.take_ready_native_output().is_none());
+        jobs.epochs.cancel.store(0, Ordering::Release);
+        jobs.retry_native_output();
+        let Some(egui::OutputCommand::CopyText(text)) = jobs.take_ready_native_output() else {
+            return Err("retry lost capture".into());
+        };
+        assert_eq!(text, "recover exact");
+        jobs.defer_native_output(egui::OutputCommand::CopyText(
+            "dismiss only explicitly".into(),
+        ));
+        jobs.dismiss_native_output();
+        assert!(!jobs.has_pending_native_output());
         Ok(())
     }
     #[test]

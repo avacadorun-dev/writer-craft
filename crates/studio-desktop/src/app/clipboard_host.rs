@@ -112,6 +112,7 @@ impl StudioApp {
     }
     /// Call before shortcuts/input and before applying any background completion.
     pub(super) fn clipboard_frame_start(&mut self, ctx: &egui::Context) {
+        self.clipboard_jobs.progress_native_output();
         let rich_focused = !self.library
             && !self.modal_open()
             && self
@@ -135,7 +136,8 @@ impl StudioApp {
             .clipboard_recovery
             .as_ref()
             .is_some_and(|recovery| recovery.items.len() >= RECOVERY_BACKPRESSURE);
-        let pending = self.clipboard_intents.has_pending_write();
+        let pending = self.clipboard_intents.has_pending_write()
+            || self.clipboard_jobs.has_pending_native_output();
         if (preserve && rich_focused) || pending {
             let mut refused = false;
             ctx.input_mut(|input| {
@@ -194,18 +196,49 @@ impl StudioApp {
                 )
             })
         });
-        if self.modal_open() || ordinary_copy {
+        let needs_ordering = self.clipboard_intents.has_pending_write()
+            || self.clipboard_jobs.has_pending_native_output();
+        if ordinary_copy || self.modal_open() {
             self.cancel_clipboard_work();
-            return;
+            if ordinary_copy && needs_ordering {
+                let captured = ctx.output_mut(|output| {
+                    let mut latest = None;
+                    for command in std::mem::take(&mut output.commands) {
+                        if matches!(
+                            &command,
+                            egui::OutputCommand::CopyText(_) | egui::OutputCommand::CopyImage(_)
+                        ) {
+                            // Native clipboard semantics retain the latest Copy intent in order.
+                            latest = Some(command);
+                        } else {
+                            output.commands.push(command);
+                        }
+                    }
+                    latest
+                });
+                if let Some(command) = captured {
+                    self.clipboard_jobs.defer_native_output(command);
+                    self.status = WORKING.into();
+                }
+            }
+        } else {
+            let requests = self
+                .rich
+                .as_mut()
+                .map(|rich| rich.session.take_clipboard_requests())
+                .unwrap_or_default();
+            for request in requests {
+                let scope = self.clipboard_scope().ok();
+                self.submit_clipboard_request(request, scope, ctx);
+            }
         }
-        let requests = self
-            .rich
-            .as_mut()
-            .map(|rich| rich.session.take_clipboard_requests())
-            .unwrap_or_default();
-        for request in requests {
-            let scope = self.clipboard_scope().ok();
-            self.submit_clipboard_request(request, scope, ctx);
+        if let Some(command) = self.clipboard_jobs.take_ready_native_output() {
+            // Preserve the framework's exact native TextEdit/image output path. This is actual
+            // re-emission, not a fabricated ClipboardProvider write acknowledgement.
+            ctx.output_mut(|output| output.commands.push(command));
+            self.status = "Content copied".into();
+        } else if self.clipboard_jobs.native_output_error().is_some() {
+            self.status = "The clipboard worker stopped. Captured content is preserved.".into();
         }
     }
     fn submit_clipboard_request(
@@ -282,6 +315,46 @@ impl StudioApp {
     /// Render as a separate bounded bottom panel above the existing status bar, not inside its
     /// fixed-height row. Actions are explicit new intents; a failed Cut is never silently retried.
     pub(super) fn clipboard_recovery_actions(&mut self, ui: &mut egui::Ui) {
+        if self.clipboard_jobs.native_output_error().is_some() {
+            let l = self.language;
+            let tokens = theme::tokens(ui.ctx());
+            let mut retry = false;
+            let mut dismiss = false;
+            egui::Panel::bottom("native-widget-clipboard-recovery")
+                .resizable(false)
+                .frame(
+                    egui::Frame::new()
+                        .fill(tokens.panel)
+                        .inner_margin(egui::Margin::symmetric(16, 10)),
+                )
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            l.text("The clipboard worker stopped. Captured content is preserved."),
+                        );
+                        retry = ui
+                            .add_enabled(
+                                !self.modal_open(),
+                                egui::Button::new(l.text("Copy captured content"))
+                                    .min_size(egui::vec2(0.0, 32.0)),
+                            )
+                            .clicked();
+                        dismiss = ui
+                            .add(
+                                egui::Button::new(l.text("Dismiss captured content"))
+                                    .min_size(egui::vec2(0.0, 32.0)),
+                            )
+                            .clicked();
+                    });
+                });
+            if retry {
+                self.clipboard_jobs.retry_native_output();
+                self.status = WORKING.into();
+            }
+            if dismiss {
+                self.clipboard_jobs.dismiss_native_output();
+            }
+        }
         let Some(recovery) = &self.clipboard_recovery else {
             return;
         };
@@ -431,6 +504,66 @@ mod tests {
             },
         })?;
         Ok((directory, app, context))
+    }
+    #[test]
+    fn deferred_widget_output_blocks_paste_until_the_exact_command_is_reemitted() -> AppResult<()> {
+        let (_directory, mut app, context) = fixture()?;
+        let input = egui::Id::new("deferred-native-input");
+        context.memory_mut(|memory| memory.request_focus(input));
+        app.clipboard_jobs
+            .defer_native_output(egui::OutputCommand::CopyText("exact widget 😀".into()));
+        let mut text = String::new();
+        let mut frame = context.run_ui(
+            egui::RawInput {
+                events: vec![egui::Event::Paste("WRONG OLD BUFFER".into())],
+                focused: true,
+                ..Default::default()
+            },
+            |root| {
+                app.clipboard_frame_start(root.ctx());
+                egui::CentralPanel::default().show(root, |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut text).id(input));
+                });
+                app.clipboard_frame_end(root.ctx());
+            },
+        );
+        frame.textures_delta.clear();
+        assert!(text.is_empty());
+        assert!(frame.platform_output.commands.iter().any(|command|matches!(command,egui::OutputCommand::CopyText(text) if text=="exact widget 😀")));
+        assert!(!app.clipboard_jobs.has_pending_native_output());
+        assert_eq!(app.status, "Content copied");
+        Ok(())
+    }
+    #[test]
+    fn ordinary_widget_copy_keeps_native_output_path_and_latest_deferred_image_is_exact()
+    -> AppResult<()> {
+        let (_directory, mut app, context) = fixture()?;
+        let mut ordinary = context.run_ui(egui::RawInput::default(), |root| {
+            root.ctx().copy_text("ordinary exact".into());
+            app.clipboard_frame_end(root.ctx());
+        });
+        ordinary.textures_delta.clear();
+        assert_eq!(
+            ordinary.platform_output.commands,
+            vec![egui::OutputCommand::CopyText("ordinary exact".into())]
+        );
+        assert!(!app.clipboard_jobs.has_pending_native_output());
+        app.clipboard_jobs
+            .defer_native_output(egui::OutputCommand::CopyText("older intent".into()));
+        let image =
+            egui::ColorImage::from_rgba_unmultiplied([2, 1], &[255, 0, 0, 255, 0, 255, 0, 128]);
+        let expected = image.clone();
+        let mut latest = context.run_ui(egui::RawInput::default(), |root| {
+            root.ctx().copy_image(image.clone());
+            app.clipboard_frame_end(root.ctx());
+        });
+        latest.textures_delta.clear();
+        assert_eq!(
+            latest.platform_output.commands,
+            vec![egui::OutputCommand::CopyImage(expected)]
+        );
+        assert!(!app.clipboard_jobs.has_pending_native_output());
+        Ok(())
     }
     #[test]
     fn pending_rich_copy_refuses_dialog_paste_before_old_os_text_can_replace_its_input()
