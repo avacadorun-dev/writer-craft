@@ -1,6 +1,6 @@
 //! Structured snapshots and drafts share the application revision authority.
 //!
-//! This persistence checkpoint does not implement native editor/annotation parity.
+//! Native annotation decorations and full editor parity require separate UI evidence.
 //! Original opaque imports remain read-only; legacy text commands cannot flatten
 //! a document after its structured representation has been enabled.
 
@@ -95,7 +95,7 @@ impl Workspace {
         expected_revision: i64,
         content: Value,
     ) -> Result<Document> {
-        self.save_rich_snapshot(id, expected_revision, content, "manual")
+        self.save_rich_snapshot(id, expected_revision, content, "manual", None)
     }
 
     fn save_rich_snapshot(
@@ -104,6 +104,7 @@ impl Workspace {
         expected_revision: i64,
         content: Value,
         source: &str,
+        historical_revision: Option<i64>,
     ) -> Result<Document> {
         let (content, body, encoded) = validate_tree(content)?;
         let mut connection = self.connection()?;
@@ -114,12 +115,20 @@ impl Workspace {
         let previous = current.rich_json.as_ref().ok_or_else(|| {
             StudioError::Validation("Structured editing is not enabled for this document".into())
         })?;
-        let result = if previous == &content {
+        let result = if previous == &content && historical_revision.is_none() {
             current
         } else {
             let updated = write_revision(&transaction, &current, &body, source)?;
             write_rich_snapshot(&transaction, id, updated.revision, &encoded)?;
-            read_document(&transaction, id)?
+            let result = read_document(&transaction, id)?;
+            super::annotations::reconcile_annotations(
+                &transaction,
+                &current,
+                &result,
+                None,
+                historical_revision,
+            )?;
+            result
         };
         transaction.execute("DELETE FROM rich_working_drafts WHERE document_id=?1 AND base_revision=?2 AND content_json=?3", params![id, expected_revision, encoded])?;
         transaction.commit()?;
@@ -148,7 +157,15 @@ impl Workspace {
         } else {
             let updated = write_revision(&transaction, &current, &body, "manual")?;
             write_rich_snapshot(&transaction, id, updated.revision, &encoded)?;
-            read_document(&transaction, id)?
+            let result = read_document(&transaction, id)?;
+            super::annotations::reconcile_annotations(
+                &transaction,
+                &current,
+                &result,
+                Some(&change.mappings),
+                None,
+            )?;
+            result
         };
         transaction.execute("DELETE FROM rich_working_drafts WHERE document_id=?1 AND base_revision=?2 AND content_json=?3", params![id, expected_revision, encoded])?;
         transaction.commit()?;
@@ -254,7 +271,13 @@ impl Workspace {
             let encoded = connection.query_row("SELECT content_json FROM rich_document_revisions WHERE document_id=?1 AND revision=?2", params![id, historical_revision], |row| row.get::<_, String>(0)).optional()?.ok_or_else(|| StudioError::NotFound { kind: "Structured revision", id: historical_revision.to_string() })?;
             serde_json::from_str(&encoded)?
         };
-        self.save_rich_snapshot(id, expected_revision, content, "undo")
+        self.save_rich_snapshot(
+            id,
+            expected_revision,
+            content,
+            "undo",
+            Some(historical_revision),
+        )
     }
 }
 

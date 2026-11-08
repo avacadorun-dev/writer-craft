@@ -3,7 +3,12 @@
 //! Every canonical save creates a revision. Proposed replacements remain separate
 //! until explicit apply, and undo refuses to overwrite intervening changes.
 
+mod annotations;
 mod rich;
+pub use annotations::{
+    AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationStatus,
+    PassageAnnotation,
+};
 pub use rich::{RichDraft, RichRevision};
 
 use std::path::Path;
@@ -17,7 +22,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -67,6 +72,9 @@ pub enum StudioError {
     /// Selected range no longer contains its captured literal text.
     #[error("Selected text changed; refresh the selection before preparing a replacement")]
     ExpectedTextMismatch,
+    /// Annotation metadata changed after the author opened it.
+    #[error("Annotation changed from revision {expected} to {actual}; reload before saving")]
+    AnnotationConflict { expected: i64, actual: i64 },
     /// A replacement target was not uniquely addressable.
     #[error("The exact text appears more than once; choose a longer unique phrase")]
     AmbiguousMatch,
@@ -287,6 +295,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("schema.sql"))?;
             transaction.execute_batch(include_str!("drafts.sql"))?;
             transaction.execute_batch(include_str!("rich.sql"))?;
+            transaction.execute_batch(include_str!("annotations.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -295,7 +304,10 @@ impl Workspace {
             if version < 2 {
                 transaction.execute_batch(include_str!("drafts.sql"))?;
             }
-            transaction.execute_batch(include_str!("rich.sql"))?;
+            if version < 3 {
+                transaction.execute_batch(include_str!("rich.sql"))?;
+            }
+            transaction.execute_batch(include_str!("annotations.sql"))?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         transaction.commit()?;
