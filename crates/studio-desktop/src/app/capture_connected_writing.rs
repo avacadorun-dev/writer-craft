@@ -10,6 +10,7 @@ const ACTIVE: &str = "connected-capture-active";
 const FRAME: &str = "connected-capture-frame";
 const INITIAL: &str = "Synthetic card: Привет 😀 e\u{301}";
 const LATER: &str = " — later draft 日本語";
+const CLIPPED_TEXT: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
 
 #[derive(Clone, Default)]
 struct Observation {
@@ -81,6 +82,19 @@ fn click(rect: Rect) -> Vec<Event> {
         },
     ]
 }
+fn rect_value(rect: Rect) -> Value {
+    json!([rect.min.x, rect.min.y, rect.max.x, rect.max.y])
+}
+fn value_rect(value: &Value) -> Option<Rect> {
+    let rect = value.as_array()?;
+    if rect.len() != 4 {
+        return None;
+    }
+    Some(Rect::from_min_max(
+        egui::pos2(rect[0].as_f64()? as f32, rect[1].as_f64()? as f32),
+        egui::pos2(rect[2].as_f64()? as f32, rect[3].as_f64()? as f32),
+    ))
+}
 fn has_row(state: &Value, document: &str) -> bool {
     state["visible"]
         .as_array()
@@ -119,6 +133,7 @@ pub(super) struct ConnectedCapture {
     terminal: bool,
     preservation_verified: bool,
     durability_evidence: Value,
+    diagnostic: Option<Value>,
     failure: Option<String>,
 }
 impl ConnectedCapture {
@@ -135,7 +150,7 @@ impl ConnectedCapture {
         }
         if !matches!(
             scenario.as_str(),
-            "canvas-inline" | "canvas-cancel" | "hierarchy-search"
+            "canvas-inline" | "canvas-cancel" | "canvas-clipped-2x" | "hierarchy-search"
         ) {
             return Err("unknown_connected_capture_scenario".into());
         }
@@ -191,6 +206,19 @@ impl ConnectedCapture {
             app.open_canvas(&board.canvas.id)?;
         }
         ctx.data_mut(|data| data.insert_temp(egui::Id::new(ACTIVE), true));
+        if scenario == "canvas-clipped-2x" {
+            app.canvas
+                .as_mut()
+                .ok_or("capture_canvas_missing")?
+                .set_capture_camera(
+                    ctx,
+                    craft_canvas_model::WorldPoint {
+                        x: 4096.0,
+                        y: -2048.0,
+                    },
+                    2.0,
+                )?;
+        }
         Ok(Some(Self {
             scenario,
             project: project.id,
@@ -205,6 +233,7 @@ impl ConnectedCapture {
             terminal: false,
             preservation_verified: false,
             durability_evidence: Value::Null,
+            diagnostic: None,
             failure: None,
         }))
     }
@@ -230,6 +259,13 @@ impl ConnectedCapture {
             .filter(|rect| rect.is_positive())
         {
             self.advance(name, state, click(*rect));
+        }
+    }
+    fn expected_text(&self) -> String {
+        match self.scenario.as_str() {
+            "canvas-cancel" => String::new(),
+            "canvas-clipped-2x" => CLIPPED_TEXT.into(),
+            _ => format!("{INITIAL}{LATER}"),
         }
     }
     fn verify_preservation(&mut self, app: &StudioApp, state: &Value) -> AppResult<()> {
@@ -262,11 +298,7 @@ impl ConnectedCapture {
                 .iter()
                 .find(|node| node["id"] == id)
                 .ok_or("connected_capture_new_card_not_durable")?;
-            let expected = if self.scenario == "canvas-cancel" {
-                String::new()
-            } else {
-                format!("{INITIAL}{LATER}")
-            };
+            let expected = self.expected_text();
             if nodes.len() != 2
                 || node["text"] != expected
                 || saved.revision.content != state["canonical"]
@@ -299,6 +331,7 @@ impl ConnectedCapture {
         let expected_count = match self.scenario.as_str() {
             "canvas-inline" => 4,
             "canvas-cancel" => 2,
+            "canvas-clipped-2x" => 3,
             _ => 1,
         };
         if history.len() != expected_count
@@ -324,10 +357,20 @@ impl ConnectedCapture {
                 self.advance(
                     "new-card-input-mounted",
                     state,
-                    vec![Event::Text(INITIAL.into())],
+                    vec![Event::Text(if self.scenario == "canvas-clipped-2x" {
+                        CLIPPED_TEXT.into()
+                    } else {
+                        INITIAL.into()
+                    })],
                 );
             }
-            2 if state["editor"]["text"] == INITIAL => {
+            2 if state["editor"]["text"]
+                == if self.scenario == "canvas-clipped-2x" {
+                    CLIPPED_TEXT
+                } else {
+                    INITIAL
+                } =>
+            {
                 if self.scenario == "canvas-cancel" {
                     self.advance(
                         "cancel-native-draft",
@@ -336,12 +379,22 @@ impl ConnectedCapture {
                     );
                 } else {
                     let mut events = key(Key::S, Modifiers::COMMAND);
-                    events.push(Event::Paste(LATER.into()));
-                    self.advance("save-before-later-native-paste", state, events);
+                    if self.scenario != "canvas-clipped-2x" {
+                        events.push(Event::Paste(LATER.into()));
+                    }
+                    self.advance(
+                        if self.scenario == "canvas-clipped-2x" {
+                            "save-clipped-native-input"
+                        } else {
+                            "save-before-later-native-paste"
+                        },
+                        state,
+                        events,
+                    );
                 }
             }
             3 => {
-                let expected = format!("{INITIAL}{LATER}");
+                let expected = self.expected_text();
                 let ready = if self.scenario == "canvas-cancel" {
                     state["editor"].is_null()
                 } else {
@@ -415,11 +468,21 @@ impl ConnectedCapture {
         } else {
             "hierarchy"
         };
-        let state = observation
+        let mut state = observation
             .surfaces
             .get(surface)
             .cloned()
             .unwrap_or(Value::Null);
+        if !state.is_null() {
+            state["native_caret"] = ctx.output(|output| output.ime.map(|ime|json!({"input_rect":rect_value(ime.rect),"cursor_rect":rect_value(ime.cursor_rect)}))).unwrap_or(Value::Null);
+            if !self.scenario.starts_with("canvas-") {
+                state["rendered_target_rect"] = observation
+                    .controls
+                    .get(&format!("hierarchy.document.{}", self.documents[2].id))
+                    .map(|rect| rect_value(*rect))
+                    .unwrap_or(Value::Null);
+            }
+        }
         let previous_steps = self.steps.len();
         if state["project_id"] == self.project && self.failure.is_none() {
             if self.scenario.starts_with("canvas-") {
@@ -446,11 +509,43 @@ impl ConnectedCapture {
                 .is_some_and(|id| has_visible_node(&self.final_state, id))
         } else {
             has_row(&self.final_state, &self.documents[2].id)
+                && value_rect(&self.final_state["rendered_target_rect"]).is_some_and(|rect| {
+                    rect.is_positive() && ctx.content_rect().contains(rect.center())
+                })
                 && app
                     .document
                     .as_ref()
                     .is_some_and(|document| document.id == self.documents[2].id)
         };
+        if self.scenario == "canvas-clipped-2x" && self.terminal {
+            let clip = self.final_state["visible_nodes"]
+                .as_array()
+                .and_then(|nodes| {
+                    nodes
+                        .iter()
+                        .find(|node| node["node_id"].as_str() == self.card.as_deref())
+                })
+                .and_then(|node| value_rect(&node["body_clip"]));
+            let reserve = self.final_state["visible_nodes"]
+                .as_array()
+                .and_then(|nodes| {
+                    nodes
+                        .iter()
+                        .find(|node| node["node_id"].as_str() == self.card.as_deref())
+                })
+                .and_then(|node| value_rect(&node["reserved"]));
+            let cursor = value_rect(&self.final_state["native_caret"]["cursor_rect"]);
+            let clipped = reserve
+                .zip(clip)
+                .is_some_and(|(reserve, clip)| reserve.width() > clip.width() + 20.0);
+            let caret_visible = cursor
+                .zip(clip)
+                .is_some_and(|(cursor, clip)| clip.contains(cursor.center()));
+            let zoom = self.final_state["camera"]["zoom"].as_f64();
+            self.diagnostic = Some(
+                json!({"name":"clipped-card-native-caret","status":if clipped && caret_visible && zoom==Some(2.0) {"passed"} else {"failed"},"actual_zoom":zoom,"card_is_clipped":clipped,"native_caret_visible":caret_visible,"clip":clip.map(rect_value),"cursor":cursor.map(rect_value),"os_ime_acceptance":false}),
+            );
+        }
         let bytes = Sha256::digest(self.final_state.to_string().as_bytes());
         let mut generation = [0_u8; 8];
         generation.copy_from_slice(&bytes[..8]);
@@ -468,7 +563,7 @@ impl ConnectedCapture {
         }
     }
     pub(super) fn evidence(&self) -> Value {
-        json!({"scenario":self.scenario,"expected_project_id":self.project,"expected_card_id":self.card,"expected_document_id":self.documents[2].id,"phase":self.phase,"steps":self.steps,"terminal":self.terminal,"content_contract_satisfied":self.preservation_verified && self.failure.is_none(),"failure":self.failure,"durability_evidence":self.durability_evidence,"final_state":self.final_state,"fixture_source":"Persisted synthetic documents and board; imported-shape ProjectTreeNode projection. This is not importer or process-restart acceptance.","input_provenance":"scripted egui RawInput through compiled native widgets; no OS pasteboard/IME/accessibility claim","os_input_acceptance":false,"full_journey_acceptance":false})
+        json!({"scenario":self.scenario,"expected_project_id":self.project,"expected_card_id":self.card,"expected_document_id":self.documents[2].id,"phase":self.phase,"steps":self.steps,"terminal":self.terminal,"content_contract_satisfied":self.preservation_verified && self.failure.is_none(),"failure":self.failure,"durability_evidence":self.durability_evidence,"diagnostic":self.diagnostic,"final_state":self.final_state,"fixture_source":"Persisted synthetic documents and board; imported-shape ProjectTreeNode projection. This is not importer or process-restart acceptance.","input_provenance":"scripted egui RawInput through compiled native widgets; no OS pasteboard/IME/accessibility claim","os_input_acceptance":false,"full_journey_acceptance":false})
     }
 }
 

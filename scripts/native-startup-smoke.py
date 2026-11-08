@@ -113,6 +113,16 @@ def validate_capture_state(state: dict, target: str | None, scenario: str | None
         raise ValueError("Observed native viewport dimensions are missing")
 
 
+def validate_clipped_caret(probe: dict, final: dict) -> None:
+    diagnostic = probe.get("diagnostic") or {}
+    clip, cursor = diagnostic.get("clip") or [], diagnostic.get("cursor") or []
+    if len(clip) != 4 or len(cursor) != 4 or not all(isinstance(value, (int, float)) for value in clip + cursor):
+        raise ValueError("The actual clipped-card native caret geometry is missing")
+    caret_center = [(cursor[0] + cursor[2]) / 2, (cursor[1] + cursor[3]) / 2]
+    if not (clip[0] <= caret_center[0] <= clip[2] and clip[1] <= caret_center[1] <= clip[3]) or diagnostic.get("actual_zoom") != 2 or (final.get("camera") or {}).get("zoom") != 2 or diagnostic.get("card_is_clipped") is not True or diagnostic.get("native_caret_visible") is not True or diagnostic.get("status") != "passed":
+        raise ValueError("The actual 2x clipped-card native caret is not visible; inspect retained diagnostic PNG and sidecar")
+
+
 def validate_connected_state(state: dict, scenario: str) -> None:
     """Connected probes must name actual semantic targets; rich-editor defaults cannot pass."""
     probe = state.get("connected_capture") or {}
@@ -125,7 +135,7 @@ def validate_connected_state(state: dict, scenario: str) -> None:
     if len(steps) < required or any(len(step.get("observed_state_sha256", "")) != 64 for step in steps):
         raise ValueError("Connected native action record is missing or incomplete")
     durability = probe.get("durability_evidence") or {}
-    expected_history = {"canvas-inline": 4, "canvas-cancel": 2, "hierarchy-search": 1}.get(scenario)
+    expected_history = {"canvas-inline": 4, "canvas-cancel": 2, "canvas-clipped-2x": 3, "hierarchy-search": 1}.get(scenario)
     if durability.get("independent_workspace_reread") is not True or durability.get("process_restart_verified") is not False or len(durability.get("history") or []) != expected_history:
         raise ValueError("Connected native probe has no exact independent durability/history record")
     final = probe.get("final_state") or {}
@@ -148,12 +158,17 @@ def validate_connected_state(state: dict, scenario: str) -> None:
                 raise ValueError("Cancel changed the new card's saved empty content")
         else:
             editor = final.get("editor") or {}
-            expected = "Synthetic card: Привет 😀 e\u0301 — later draft 日本語"
+            expected = "M" * 32 if scenario == "canvas-clipped-2x" else "Synthetic card: Привет 😀 e\u0301 — later draft 日本語"
             if editor.get("node_id") != card or editor.get("text") != expected or chosen[0].get("text") != expected or any(editor.get(key) is not False for key in ("dirty", "submitted", "composing")):
                 raise ValueError("Native card input, later draft and durable content disagree")
+        if scenario == "canvas-clipped-2x":
+            validate_clipped_caret(probe, final)
     elif scenario == "hierarchy-search":
         selected = probe.get("expected_document_id")
         rows = final.get("visible") or []
+        rendered = final.get("rendered_target_rect") or []
+        if len(rendered) != 4 or rendered[2] <= rendered[0] or rendered[3] <= rendered[1]:
+            raise ValueError("The selected nested target has no current rendered control rectangle")
         if not selected or final.get("query") != "echo" or final.get("selected_document") != selected or not any(row.get("document_id") == selected and row.get("depth", 0) >= 2 for row in rows) or len([row for row in rows if row.get("title") == "Echo"]) != 2:
             raise ValueError("Nested duplicate-name navigation did not reach the exact expected document")
     else:
@@ -229,6 +244,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
         scenarios = {
             "compact-light-en-canvas-inline": "canvas-inline",
             "compact-dark-en-canvas-cancel": "canvas-cancel",
+            "compact-light-en-canvas-clipped-2x": "canvas-clipped-2x",
             "compact-light-en-hierarchy-search": "hierarchy-search",
         }
         for name, language, section, compact, flags in (
@@ -254,6 +270,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
             ("wide-light-en-small-inter-flowchart", "en", None, False, ["--light"]),
             ("compact-light-en-canvas-inline", "en", None, True, ["--light"]),
             ("compact-dark-en-canvas-cancel", "en", None, True, []),
+            ("compact-light-en-canvas-clipped-2x", "en", None, True, ["--light"]),
             ("compact-light-en-hierarchy-search", "en", None, True, ["--light"]),
         ):
             target = targets.get(name)
@@ -283,7 +300,6 @@ def main(bundle: Path, normal_app: bool = False) -> int:
                         raise ValueError("Missing or oversized native capture state")
                     state = json.loads(capture_state.read_text())
                     case["native_state"] = state
-                    validate_capture_state(state, target, scenario)
                     case["capture_size_pixels"] = png_dimensions(capture)
                     case["capture_sha256"] = sha256(capture)
                     if state.get("image_size_pixels") != list(case["capture_size_pixels"]):
@@ -296,6 +312,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
                     case["observed_layout_coverage"] = "wide" if observed[0] >= 1200 else "constrained"
                     if not compact and case["observed_layout_coverage"] != "wide":
                         case["coverage_limitation"] = "Hosted window-server viewport constrained the requested wide state; actual wide app acceptance remains pending."
+                    validate_capture_state(state, target, scenario)
                     case["status"] = "captured-settled-native-view"
             except (OSError, ValueError, subprocess.SubprocessError, zlib.error, struct.error) as error:
                 case.update(status="failed", error=str(error))
@@ -345,10 +362,17 @@ def self_test() -> None:
                 with self.assertRaises(ValueError): validate_capture_state(dict(good, **{field: value}), "image")
         def test_connected_capture_refuses_default_readiness_and_invented_acceptance(self):
             good = {"schema_version": 1, "status": "captured", "target_block": None, "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "pending_atoms": 0, "failed_atoms": 0}}
-            for scenario in ("canvas-inline", "canvas-cancel", "hierarchy-search"):
+            for scenario in ("canvas-inline", "canvas-cancel", "canvas-clipped-2x", "hierarchy-search"):
                 with self.assertRaises(ValueError): validate_capture_state(good, None, scenario)
             probe = {"scenario": "canvas-inline", "terminal": True, "content_contract_satisfied": True, "failure": None, "os_input_acceptance": True, "full_journey_acceptance": False}
             with self.assertRaises(ValueError): validate_connected_state(dict(good, canonical_unchanged=None, connected_capture=probe), "canvas-inline")
+        def test_clipped_caret_cannot_pass_from_boolean_labels_alone(self):
+            final = {"camera": {"zoom": 2}}
+            probe = {"diagnostic": {"actual_zoom": 2, "card_is_clipped": True, "native_caret_visible": True, "status": "passed", "clip": [0, 0, 100, 100], "cursor": [120, 20, 122, 40]}}
+            with self.assertRaises(ValueError): validate_clipped_caret(probe, final)
+            probe["diagnostic"]["cursor"] = [20, 20, 22, 40]
+            validate_clipped_caret(probe, final)
+            with self.assertRaises(ValueError): validate_clipped_caret(probe, {"camera": {"zoom": 1}})
         def test_child_exit_and_timeout_are_recorded(self):
             with tempfile.TemporaryDirectory(prefix="writercraft-smoke-test-") as directory:
                 output = Path(directory)

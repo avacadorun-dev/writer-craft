@@ -151,6 +151,21 @@ impl CanvasState {
             media_viewer: None,
         })
     }
+    /// Set presentation only for an explicitly armed hosted synthetic capture.
+    pub(super) fn set_capture_camera(
+        &mut self,
+        ctx: &egui::Context,
+        center: WorldPoint,
+        zoom: f64,
+    ) -> AppResult<()> {
+        if !super::capture_connected_writing::enabled(ctx) {
+            return Err("capture_camera_requires_armed_synthetic_fixture".into());
+        }
+        self.view
+            .set_camera(craft_canvas_model::Camera::new(center, zoom)?);
+        self.fit_on_open = false;
+        Ok(())
+    }
     pub(super) fn modal_open(&self) -> bool {
         self.media_viewer.is_some()
     }
