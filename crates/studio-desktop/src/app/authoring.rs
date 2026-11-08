@@ -571,6 +571,7 @@ pub(super) fn toolbar(
 ) -> AppResult<()> {
     let mut error = None;
     let expanded = ui.available_width() >= 790.0;
+    let minimal = ui.available_width() < 560.0;
     ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
     ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
@@ -617,7 +618,10 @@ pub(super) fn toolbar(
                     ("bold", Icon::Bold, "Bold"),
                     ("italic", Icon::Italic, "Italic"),
                     ("underline", Icon::Underline, "Underline"),
-                ] {
+                ]
+                .into_iter()
+                .take(if minimal { 1 } else { 3 })
+                {
                     capture(
                         mark_button(ui, &mut rich.session, Format::Mark(mark), msgid, icon, l, t),
                         &mut error,
@@ -710,91 +714,135 @@ pub(super) fn toolbar(
                 }
                 let more = icons::icon_button(ui, Icon::More, l.text("More formatting"));
                 egui::Popup::menu(&more).show(|ui| {
-                    for (action, msgid) in [
-                        (Format::Mark("strike"), "Strikethrough"),
-                        (Format::Mark("code"), "Inline code"),
-                        (Format::Quote, "Block quote"),
-                        (Format::Bullet, "Bullet list"),
-                        (Format::Ordered, "Numbered list"),
-                        (Format::Indent, "Increase indent"),
-                        (Format::Outdent, "Decrease indent"),
-                    ] {
-                        if ui
-                            .add_enabled_ui(rich.session.selection().is_some(), |ui| {
-                                icons::labeled_button(
+                    egui::ScrollArea::vertical()
+                        .max_height((ui.ctx().content_rect().height() - 120.0).max(160.0))
+                        .show(ui, |ui| {
+                            if minimal {
+                                for (mark, label) in [
+                                    ("bold", "Bold"),
+                                    ("italic", "Italic"),
+                                    ("underline", "Underline"),
+                                ] {
+                                    let action = Format::Mark(mark);
+                                    if icons::labeled_button(
+                                        ui,
+                                        format_icon(action),
+                                        l.text(label),
+                                        active(&rich.session, action) == MarkState::On,
+                                    )
+                                    .clicked()
+                                    {
+                                        capture(format(&mut rich.session, action), &mut error);
+                                        rich.session.request_canvas_focus(ui.ctx());
+                                        ui.close();
+                                    }
+                                }
+                                ui.separator();
+                            }
+                            for (action, msgid) in [
+                                (Format::Mark("strike"), "Strikethrough"),
+                                (Format::Mark("code"), "Inline code"),
+                                (Format::Quote, "Block quote"),
+                                (Format::Bullet, "Bullet list"),
+                                (Format::Ordered, "Numbered list"),
+                                (Format::Indent, "Increase indent"),
+                                (Format::Outdent, "Decrease indent"),
+                            ] {
+                                if ui
+                                    .add_enabled_ui(rich.session.selection().is_some(), |ui| {
+                                        icons::labeled_button(
+                                            ui,
+                                            format_icon(action),
+                                            l.text(msgid),
+                                            active(&rich.session, action) == MarkState::On,
+                                        )
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
+                                    capture(format(&mut rich.session, action), &mut error);
+                                    rich.session.request_canvas_focus(ui.ctx());
+                                    ui.close();
+                                }
+                            }
+                            ui.separator();
+                            for kind in [Kind::InlineMath, Kind::Link] {
+                                if ui
+                                    .add_enabled_ui(rich.session.selection().is_some(), |ui| {
+                                        icons::labeled_button(
+                                            ui,
+                                            kind.icon(),
+                                            l.text(kind.title()),
+                                            false,
+                                        )
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
+                                    open_dialog(rich, kind, None);
+                                    ui.close();
+                                }
+                            }
+                            if let Some(target) = editable_target(&rich.session)
+                                && icons::labeled_button(
                                     ui,
-                                    format_icon(action),
-                                    l.text(msgid),
-                                    active(&rich.session, action) == MarkState::On,
-                                )
-                            })
-                            .inner
-                            .clicked()
-                        {
-                            capture(format(&mut rich.session, action), &mut error);
-                            rich.session.request_canvas_focus(ui.ctx());
-                            ui.close();
-                        }
-                    }
-                    ui.separator();
-                    for kind in [Kind::InlineMath, Kind::Link] {
-                        if ui
-                            .add_enabled_ui(rich.session.selection().is_some(), |ui| {
-                                icons::labeled_button(ui, kind.icon(), l.text(kind.title()), false)
-                            })
-                            .inner
-                            .clicked()
-                        {
-                            open_dialog(rich, kind, None);
-                            ui.close();
-                        }
-                    }
-                    if let Some(target) = editable_target(&rich.session)
-                        && icons::labeled_button(ui, Icon::TextCursor, l.text("Edit block"), false)
-                            .clicked()
-                    {
-                        if let Some(kind) = Kind::from_node(&target.expected) {
-                            open_dialog(rich, kind, Some(target));
-                        }
-                        ui.close();
-                    }
-                    if rich.session.node_selection().is_some()
-                        && icons::labeled_button(ui, Icon::Trash, l.text("Delete block"), false)
-                            .clicked()
-                    {
-                        capture(
-                            rich.session
-                                .delete_selected_node()
-                                .map(|_| ())
-                                .map_err(Into::into),
-                            &mut error,
-                        );
-                        rich.session.request_canvas_focus(ui.ctx());
-                        ui.close();
-                    }
-                    if let Some(context) = TableContext::current(&rich.session) {
-                        ui.separator();
-                        for (msgid, action) in [
-                            ("Add row below", TableAction::AddRow),
-                            ("Add column right", TableAction::AddColumn),
-                            ("Delete row", TableAction::DeleteRow),
-                            ("Delete column", TableAction::DeleteColumn),
-                            ("Merge selected cells", TableAction::Merge),
-                            ("Split cell", TableAction::Split),
-                        ] {
-                            if ui
-                                .add_enabled(
-                                    context.allows(action),
-                                    egui::Button::new(l.text(msgid)),
+                                    Icon::TextCursor,
+                                    l.text("Edit block"),
+                                    false,
                                 )
                                 .clicked()
                             {
-                                capture(context.apply(&mut rich.session, action), &mut error);
+                                if let Some(kind) = Kind::from_node(&target.expected) {
+                                    open_dialog(rich, kind, Some(target));
+                                }
+                                ui.close();
+                            }
+                            if rich.session.node_selection().is_some()
+                                && icons::labeled_button(
+                                    ui,
+                                    Icon::Trash,
+                                    l.text("Delete block"),
+                                    false,
+                                )
+                                .clicked()
+                            {
+                                capture(
+                                    rich.session
+                                        .delete_selected_node()
+                                        .map(|_| ())
+                                        .map_err(Into::into),
+                                    &mut error,
+                                );
                                 rich.session.request_canvas_focus(ui.ctx());
                                 ui.close();
                             }
-                        }
-                    }
+                            if let Some(context) = TableContext::current(&rich.session) {
+                                ui.separator();
+                                for (msgid, action) in [
+                                    ("Add row below", TableAction::AddRow),
+                                    ("Add column right", TableAction::AddColumn),
+                                    ("Delete row", TableAction::DeleteRow),
+                                    ("Delete column", TableAction::DeleteColumn),
+                                    ("Merge selected cells", TableAction::Merge),
+                                    ("Split cell", TableAction::Split),
+                                ] {
+                                    if ui
+                                        .add_enabled(
+                                            context.allows(action),
+                                            egui::Button::new(l.text(msgid)),
+                                        )
+                                        .clicked()
+                                    {
+                                        capture(
+                                            context.apply(&mut rich.session, action),
+                                            &mut error,
+                                        );
+                                        rich.session.request_canvas_focus(ui.ctx());
+                                        ui.close();
+                                    }
+                                }
+                            }
+                        });
                 });
             });
         },

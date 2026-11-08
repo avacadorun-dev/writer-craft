@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Manuscript saved · unsaved note edits",
+        [
+            "Рукопись сохранена · есть несохранённые заметки",
+            "Manuscript saved · unsaved note edits",
+            "Manuskript gespeichert · ungespeicherte Notizen",
+            "Manuscrit enregistré · notes non enregistrées",
+            "Manuscrito guardado · notas sin guardar",
+            "Manuscrito salvo · notas não salvas",
+            "文稿已保存 · 笔记修改尚未保存",
+            "原稿は保存済み · 未保存のメモがあります",
+        ],
+    ),
+    (
         "Discard draft and reload",
         [
             "Удалить черновик и загрузить заметку",

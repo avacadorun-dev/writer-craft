@@ -173,8 +173,17 @@ impl StudioApp {
                             .color(t.muted),
                     );
                     ui.separator();
-                    ui.label(RichText::new(l.text(&self.status)).size(12.0).color(
-                        if self.error.is_some() {
+                    #[cfg(feature = "editor-preview")]
+                    let unsaved_notes = self.notes.has_unsaved_drafts();
+                    #[cfg(not(feature = "editor-preview"))]
+                    let unsaved_notes = false;
+                    let status = if unsaved_notes && self.status == "All changes saved" {
+                        l.text("Manuscript saved · unsaved note edits")
+                    } else {
+                        l.text(&self.status)
+                    };
+                    ui.label(RichText::new(status).size(12.0).color(
+                        if self.error.is_some() || unsaved_notes {
                             t.warning
                         } else {
                             t.muted
