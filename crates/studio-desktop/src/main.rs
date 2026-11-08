@@ -1,8 +1,10 @@
 //! WriterCraft native executable; the domain engine is shared with the CLI.
 mod app;
 mod brand;
+mod editor_preferences;
 pub mod i18n;
 pub mod icons;
+mod preference_file;
 pub mod theme;
 
 use std::path::PathBuf;
@@ -11,7 +13,8 @@ fn main() -> eframe::Result {
     let mut database = std::env::var_os("WRITERCRAFT_DATABASE")
         .map(PathBuf::from)
         .unwrap_or_else(default_database);
-    let mut demo = std::env::var("WRITERCRAFT_DEMO").as_deref() == Ok("1");
+    let mut demo =
+        editor_preview_requested() || std::env::var("WRITERCRAFT_DEMO").as_deref() == Ok("1");
     let mut compact = false;
     let mut capture = None;
     let mut arguments = std::env::args().skip(1);
@@ -39,9 +42,17 @@ fn main() -> eframe::Result {
         .map_err(|error| eframe::Error::AppCreation(Box::new(error)))?;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("WriterCraft")
+            .with_title(if editor_preview_requested() {
+                "WriterCraft Editor Preview"
+            } else {
+                "WriterCraft"
+            })
             .with_icon(std::sync::Arc::new(icon))
-            .with_app_id("app.writercraft.desktop")
+            .with_app_id(if editor_preview_requested() {
+                "app.writercraft.editor-preview"
+            } else {
+                "app.writercraft.desktop"
+            })
             .with_inner_size(if compact {
                 [1000.0, 680.0]
             } else {
@@ -74,5 +85,16 @@ fn default_database() -> PathBuf {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".local/share"));
-    base.join("WriterCraft/workspace.sqlite")
+    if editor_preview_requested() {
+        base.join("WriterCraft/Editor Preview/workspace.sqlite")
+    } else {
+        base.join("WriterCraft/workspace.sqlite")
+    }
+}
+
+/// An explicitly isolated development workspace, never the owner's normal library.
+fn editor_preview_requested() -> bool {
+    cfg!(feature = "editor-preview")
+        && (std::env::var("WRITERCRAFT_EDITOR_PREVIEW").as_deref() == Ok("1")
+            || std::env::args().any(|argument| argument == "--editor-preview"))
 }

@@ -83,3 +83,86 @@ The owner observed excessive space between the monk and WriterCraft name and ask
 ## F-28 — Application and Dock icon
 
 The owner observed an unfamiliar application icon despite the new toolbar mark. A bundled ICNS alone is insufficient when the native framework supplies a default runtime icon. The first alpha must explicitly use the generated matching monk/book PNG as its viewport/application icon, alongside the ICNS bundle asset. Keep both outputs reproducible through the icon-generation script. Verify a fresh isolated launch; do not overwrite the owner's active preview merely to refresh its icon.
+
+## F-29 — Editor-first alpha.2 with complete original editor scope (2026-11-08)
+
+The owner selected editor work first for the next alpha and deferred the other candidate feature streams. The owner then explicitly clarified that this means **all functionality currently present in the original editor, with no cuts**, not a basic-formatting subset. The implementation owner relayed this clarification to the independent designer. Earlier tree/named-version/installer planning is not implementation authorization for this editor-first scope.
+
+Consequence: inventory the actual toolbar/extensions, all current blocks and marks, native selection across blocks/tables, context actions, typography, persistent note/dictionary decorations, clipboard/composition/accessibility, source references, editor history/save/recovery and real editor integration handoffs. The contract is `EDITOR_UX_PARITY.md`, coordinated with the technical parity matrix. Source bugs should be corrected rather than copied; do not introduce NER, notification or other unrelated domain features.
+
+A prioritized native slice may validate the model/input/anchor architecture internally, but cannot satisfy the final release gate. Independent eventual acceptance must name `full-editor-parity`, distinct from full-product parity, and requires complete compiled/native evidence. The existing alpha.1 native-foundation acceptance does not approve new editor code. No acceptance or implementation-completion claim is created by this feedback entry.
+
+## F-30 — Approved native table capacity for alpha.2 (2026-11-08)
+
+The owner considered the native engine's 63-column table limit acceptable and unlikely to constrain normal use. The implementation owner accepted this bounded capacity for alpha.2; do not fork WordCraft solely to raise it. This is an explicit exception to F-29's otherwise complete editor scope, not permission to remove other editor capabilities.
+
+Native UI and MCP creation or structural widening beyond 63 logical columns must fail before any mutation, with a clear capacity explanation. Existing canonical tables wider than 63 columns must remain whole and preserved, with an explicit read-only capacity state; never truncate, reshape or silently convert them to fit the native view. Logical column count accounts for merged cells/spans and is distinct from pixel width.
+
+The generic canonical model/legacy parser keeps its existing span validation 1–100 and no new 63-total-column cap. Canonical compatibility and native editing capacity are separate contracts. Regression cases cover 63-column editing, rejected 64th-column creation/widening with unchanged revisions/content, and exact preservation/read-only handling of wider canonical tables, including merged cells. No implementation, passed test or UX approval is asserted by this entry; the full-editor gate remains pending.
+
+## F-31 — Airy manuscript workspace and integrated formatting (2026-11-08)
+
+The owner rejected the actual editor workspace because the top contains too much empty space and the formatting strip looks wrong. The owner requested designer-led presentation that is attractive and useful, then clarified that the interface must retain air rather than cram controls together. The owner wants approximate design pictures for comparison and will approve an option before implementation. The implementation owner relayed this correction while the owner was testing the separate preview; do not disturb or replace that running app before handoff. Track the finding in [issue #6](https://github.com/avacadorun-dev/writer-craft/issues/6).
+
+Consequence: prepare polished same-size Comfort and Balanced concepts using the existing monk, selected Lucide family, typography and theme roles. Comfort proposes 52/76/42 px global/identity/format bars; Balanced proposes 48/56/40 px. Both keep comfortable manuscript gutters, 42–44 px navigation rows, fixed bounded panes, left-aligned headings and an integrated flat formatting row. Remove redundant hero/eyebrow spacing and outer-toolbar framing. Use measured grouped overflow, not clipped controls, tiny targets or horizontal toolbar scrolling. [WORKSPACE_EDITOR_REDESIGN.md](WORKSPACE_EDITOR_REDESIGN.md) records the comparison and behavior contract. The concepts are nonfunctional design illustrations, not native app captures, and no option is owner-approved yet. Await that choice before host layout implementation.
+
+Regression evidence after selection: actual compiled 1440 × 940 and 1000 × 680 views; navigator/inspector hidden/shown/resized; long German/French and CJK labels; Light/Dark and independent palettes; normal/maximum manuscript text sizes. Measure the chosen fixed header/toolbar heights and first content origin; check shared dividers, vertical centers, comfortable group spacing, independent 32 px targets and visible Focus exit. Pointer/keyboard toolbar and overflow interactions preserve exact selection, active/mixed formatting, caret/focus and Undo. The full interactive demonstration includes all 21 node types and six marks with real images, Mermaid and formulas; concept drawings or placeholders are not implementation evidence. No acceptance or issue closure is granted until independent native retest.
+
+Owner decision, 2026-11-08: after the implementation owner displayed the polished concept images, the owner explicitly selected **Balanced**. Proceed with the rendered 48 px global bar, 56 px document identity, 40 px flat formatting row and 28 px manuscript gutter, 264 px default navigator and unchanged comfortable control/body spacing. Comfort is a comparison artifact. This is design approval for implementation; native acceptance, regression verification and issue #6 closure remain pending. The owner's running source-99 preview remains undisturbed.
+
+
+## F-32 — Complete authoring journeys, not only rendered specimens (2026-11-08)
+
+The owner found that the running source-82 engineering preview exposed only a small formatting subset and no discoverable way to author most existing blocks. Pasting unfenced Mermaid source into prose produced paragraphs; the owner expected the original Insert and context workflows. The owner explicitly reiterated that alpha.2 must cover **the entire original editor**, not only Mermaid or a prebuilt gallery. Track the missing authoring surface in [issue #7](https://github.com/avacadorun-dev/writer-craft/issues/7), under [full editor scope #4](https://github.com/avacadorun-dev/writer-craft/issues/4).
+
+Consequence: start from an empty structured document and create, insert at the exact target, configure, edit again, delete, Undo/Redo, save and reopen every current node/mark through actual native commands. The full original toolbar/Insert/More/context/keyboard inventory remains required. A gallery, parser round trip or renderer demonstration cannot satisfy this journey. Preserve explicit block insertion and audited original rich/fenced paste semantics rather than guessing that ordinary prose beginning with a diagram keyword should be converted.
+
+Regression evidence: reproduce each original authoring journey with synthetic content, through pointer and keyboard, including cancellation, stale state, failure and Undo/Redo. The owner approved the complete eight-goal alpha.2 criteria after clarification; do not present the next incomplete checkpoint as acceptance of this scope. Keep the owner's currently open preview undisturbed while they test it.
+
+## F-33 — Syntax highlighting for code and structured text (2026-11-08)
+
+The owner found no visible syntax highlighting and explicitly included it in alpha.2. This covers programming languages and non-programming structured text formats that have an appropriate grammar, not indiscriminate coloring of ordinary prose. Track [issue #8](https://github.com/avacadorun-dev/writer-craft/issues/8).
+
+Consequence: expose the source-backed language/format choice, preserve stored unknown labels and exact code text, and render real syntax decorations during editing and after reopening. JSON, YAML and other required structured formats need their appropriate grammar. All languages/aliases supported by the original editor remain in scope; dependency convenience cannot silently remove a language. Theme-aware token colors must remain readable in Light/Dark and all independent palettes. A static colorful screenshot is not evidence of editable syntax support.
+
+Regression evidence: edit representative programming and structured-text samples, switch language/format, Copy exactly, Undo/Redo and save/reopen. Check Unicode, long lines with block-local overflow, font size and Light/Dark without changing canonical source text merely to apply highlighting.
+
+## F-34 — Adaptive document surface and bounded focus measure (2026-11-08)
+
+The owner supplied the original application's wide and panel-constrained states. With enough space, the manuscript appears as a distinct centered document surface with surrounding gutters; with panels open and less center width, it joins the pane structure. The owner rejected a focus state that visually stretches writing across the whole window. This updates the flat-only surface interpretation in F-31, while retaining its approved Balanced rhythm. Extend [issue #6](https://github.com/avacadorun-dev/writer-craft/issues/6); do not create a second workspace-layout issue.
+
+Consequence: use the actual remaining center width to select floating document or joined-pane presentation. Focus hides panels while retaining the same readable maximum text measure, clear document boundaries and a visible exit. Continuous writing remains the chosen primary mode; this does not introduce forced print pagination, a second application titlebar or another whole-app frame. Existing panel/scroll/selection/history state survives presentation changes.
+
+The designer prepared Light-mode wide/focus/docked images in [WORKSPACE_EDITOR_REDESIGN.md](WORKSPACE_EDITOR_REDESIGN.md), explicitly labelled nonfunctional concepts. The proposed 920 px document/760 px text measure and width threshold are reviewable design values, not an already accepted new geometry or native verification. Obtain the owner's image-based response before structural layout implementation, as previously requested. Model, source and mockup changes cannot close the issue.
+
+## F-35 — Comfortable fields and consistent modal insets (2026-11-08)
+
+The owner reported unusually shallow single-line fields in navigator search and New document, with inconsistent spacing among the modal title, body and actions. They requested comfortable field height/width and conventional uniform interior padding. Track [issue #9](https://github.com/avacadorun-dev/writer-craft/issues/9).
+
+Consequence: use shared fields with 40 px minimum height, 12 px horizontal and 8 px vertical inner padding, full available form width and centered single-line text. Dialog actions use the same 40 px rhythm. A modal has one 24 px horizontal inset grid for its header, labels, fields, separators and trailing action row; title and close target share a vertical center. Source editors keep comfortable multiline insets and local scrolling. Avoid growing the manuscript font to compensate for short controls.
+
+Regression evidence: actual compiled search and New document/New project/block-source dialogs in Light/Dark, common/minimum windows and long German/French/CJK text. Verify full field bounds, clipped long values with reachable caret, focus/Tab/Enter/Escape, error/disabled states, action placement and unchanged data after Cancel. Source fixes and the modal illustration remain unverified until the hosted build and independent native retest. The source fix also ensures an editor-preview document created from these forms starts as a canonical structured manuscript, rather than routing the author into the plain editor.
+
+Owner decision, 2026-11-08: the owner approved the displayed adaptive wide/focus/docked concepts for F-34 and issue #6. This authorizes structural layout implementation while preserving Balanced rhythm and comfortable prose measure. The independent full-editor gate remains pending until exact compiled/native evidence passes.
+
+
+## F-36 — All open issues in alpha.2 and final owner acceptance (2026-11-08)
+
+The owner instructed the implementation team to continue autonomously until alpha.2 and its issues are ready for final review. After an explicit scope clarification, the owner selected all open issues, including installation #3, complete original-project/Canvas/media compatibility #10 and portable Markdown/artifacts #11. This supersedes earlier editor-only deferrals while preserving all eight approved editor goals and the single 63-column exception.
+
+Keep product issues open until the owner checks the final candidate and approves closure. Independent actual native review covers the new project/import/export/recovery surfaces as well as the complete editor. Do not present partial engineering checkpoints as final acceptance, and do not drive or replace the owner's running preview while they test it. Source, compiler, fixture or mockup evidence alone does not complete these gates.
+
+## F-37 — Native rich blocks overlap after typography changes (2026-11-08)
+
+The owner reported a serious visible overlap in the complete-block showcase and supplied a cropped screenshot. The independently inspected image shows the lighthouse illustration covering part of the code/heading/table flow, and two separate Mermaid diagrams, captions and prose occupying overlapping vertical regions. The implementation owner identified the tested preview as application `141fce5e5fc27ca9bfeed1661831baa5f2370cc6` with engine `b96b4d971c649bc024f37a72fd7ba626e7393100`; its local build evidence agrees with that application source. Track [bug #12](https://github.com/avacadorun-dev/writer-craft/issues/12), alongside workspace layout #6 and complete editor #4.
+
+This is a **P1 native document-flow failure** and a correction to the expected usable rich-editor behavior. The screenshot proves visible overlap; it does not establish canonical document corruption. The screenshot does not record the active font, spacing or viewport metadata. Preserve the original JSON, assets, selection and history while investigating and correcting presentation. The earlier prose-only startup captures and successful source/model checks did not inspect this settled opaque-block viewport and cannot qualify its layout.
+
+Consequence: every independently flowing image, diagram, block formula, table, code block, heading, caption and paragraph must receive sufficient reserved native layout space for its actual painted content. Prose line-height preferences must preserve opaque intrinsic dimensions, formula baselines and independent table/code geometry. Progressive pending/ready/failure transitions and theme/font/width changes must retain a coherent document flow.
+
+Regression evidence: actual compiled captures must reach the affected blocks after visible media has settled, including the two Mermaid kinds and real image/formula output. Cover Sofia Sans/Inter/Source Serif 4; 17/19/21 and retained 28px; line-height 1.5/1.75/2; measures 60/70/80ch, Light/Dark and floating/joined/Focus transitions through a justified matrix. Compare actual painted atom/caption bounds with reserved flow and adjacent sibling bounds; positive abstract rectangles alone are insufficient. Verify the same source/selection/history before and after reflow and save/reopen. A source patch or top-of-document startup image cannot close #12 or pass the independent editor gate. Keep the owner's preview untouched until the authorized handoff.
+
+
+## F-38 — publish the completed checkpoint and continue parity in alpha.3
+
+Date: 2026-11-08. The owner requested finalizing the completed coherent application as alpha.2 now, publishing native installers including a macOS DMG, and moving unfinished large blocks to alpha.3. The owner also explicitly requested updating README with real current application screenshots. This supersedes the earlier all-open-issues alpha.2 scheduling decision; it does not waive data preservation, create full-parity evidence, close unfinished issues or authorize additional features. Regression/release checks: the installer must launch the current native rich editor under the normal application identity, screenshot claims must match a real compiled build, published alpha.1 stays immutable, and deferred work remains visible in issues and the alpha.3 plan.

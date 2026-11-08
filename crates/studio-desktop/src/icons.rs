@@ -38,6 +38,28 @@ pub enum Icon {
     Keyboard,
     Plug,
     TextCursor,
+    Bold,
+    Italic,
+    Underline,
+    Strike,
+    Code,
+    Quote,
+    BulletList,
+    OrderedList,
+    Indent,
+    Outdent,
+    Table,
+    Formula,
+    Image,
+    Diagram,
+    Info,
+    Idea,
+    Warning,
+    Todo,
+    Link,
+    Minus,
+    Focus,
+    Copy,
 }
 
 /// Allocate a decorative icon in the current layout.
@@ -84,6 +106,53 @@ pub fn icon_button(ui: &mut Ui, kind: Icon, label: &str) -> Response {
         );
     }
     response.on_hover_text(label)
+}
+
+/// A labelled native action with a fixed 20 px glyph and 8 px icon/text gap.
+/// The leading space is a layout measurement, never font-dependent padding characters.
+pub fn labeled_button(ui: &mut Ui, kind: Icon, label: &str, selected: bool) -> Response {
+    let foreground = if selected {
+        ui.visuals().selection.stroke.color
+    } else {
+        ui.visuals().text_color()
+    };
+    let foreground = if ui.is_enabled() {
+        foreground
+    } else {
+        ui.visuals().disable(foreground)
+    };
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        label,
+        28.0,
+        egui::TextFormat {
+            font_id: egui::TextStyle::Button.resolve(ui.style()),
+            color: foreground,
+            ..Default::default()
+        },
+    );
+    let response = ui.add(
+        egui::Button::new(job)
+            .selected(selected)
+            .frame_when_inactive(selected)
+            .min_size(vec2(0.0, 36.0))
+            .wrap_mode(egui::TextWrapMode::Extend),
+    );
+    response
+        .widget_info(|| WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), selected, label));
+    if ui.is_rect_visible(response.rect) {
+        let center = egui::pos2(
+            response.rect.left() + ui.spacing().button_padding.x + 10.0,
+            response.rect.center().y,
+        );
+        paint(
+            ui.painter(),
+            Rect::from_center_size(center, Vec2::splat(20.0)),
+            kind,
+            foreground,
+        );
+    }
+    response
 }
 
 struct IconGeometry {
@@ -146,7 +215,7 @@ pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const ALL: [Icon; 30] = [
+    const ALL: [Icon; 52] = [
         Icon::Home,
         Icon::Book,
         Icon::Folder,
@@ -177,6 +246,28 @@ mod tests {
         Icon::Keyboard,
         Icon::Plug,
         Icon::TextCursor,
+        Icon::Bold,
+        Icon::Italic,
+        Icon::Underline,
+        Icon::Strike,
+        Icon::Code,
+        Icon::Quote,
+        Icon::BulletList,
+        Icon::OrderedList,
+        Icon::Indent,
+        Icon::Outdent,
+        Icon::Table,
+        Icon::Formula,
+        Icon::Image,
+        Icon::Diagram,
+        Icon::Info,
+        Icon::Idea,
+        Icon::Warning,
+        Icon::Todo,
+        Icon::Link,
+        Icon::Minus,
+        Icon::Focus,
+        Icon::Copy,
     ];
     #[test]
     fn every_utility_has_a_pinned_official_lucide_source() -> Result<(), Box<dyn std::error::Error>>

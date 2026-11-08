@@ -1,0 +1,486 @@
+[
+  {
+    "name": "paragraphs-hardbreak-inline-math",
+    "input": {
+      "type": "doc",
+      "attrs": {
+        "schemaVersion": 4
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "p"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Я 😀 é",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "underline"
+                },
+                {
+                  "type": "strike"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.org"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " code",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "type": "inlineMath",
+              "attrs": {
+                "latex": "hidden_formula",
+                "description": "hidden math description"
+              }
+            },
+            {
+              "type": "text",
+              "text": "After",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "underline"
+                },
+                {
+                  "type": "strike"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.org"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "p2"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "two﻿threefour",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "underline"
+                },
+                {
+                  "type": "strike"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.org"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "text": "Я 😀 é code\nAfter\n\ntwo﻿threefour",
+    "words": 7,
+    "characters": 33,
+    "readingMinutes": 1
+  },
+  {
+    "name": "nested-container-and-table",
+    "input": {
+      "type": "doc",
+      "attrs": {
+        "schemaVersion": 4
+      },
+      "content": [
+        {
+          "type": "blockquote",
+          "attrs": {
+            "blockId": "quote"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "qp"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Quote",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    },
+                    {
+                      "type": "italic"
+                    },
+                    {
+                      "type": "underline"
+                    },
+                    {
+                      "type": "strike"
+                    },
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.org"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "li"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "List",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        },
+                        {
+                          "type": "italic"
+                        },
+                        {
+                          "type": "underline"
+                        },
+                        {
+                          "type": "strike"
+                        },
+                        {
+                          "type": "link",
+                          "attrs": {
+                            "href": "https://example.org"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "orderedList",
+          "attrs": {
+            "start": 2
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "ol"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Ordered",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        },
+                        {
+                          "type": "italic"
+                        },
+                        {
+                          "type": "underline"
+                        },
+                        {
+                          "type": "strike"
+                        },
+                        {
+                          "type": "link",
+                          "attrs": {
+                            "href": "https://example.org"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "callout",
+          "attrs": {
+            "kind": "idea",
+            "blockId": "callout"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "cp"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Callout",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    },
+                    {
+                      "type": "italic"
+                    },
+                    {
+                      "type": "underline"
+                    },
+                    {
+                      "type": "strike"
+                    },
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.org"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "attrs": {
+            "blockId": "table"
+          },
+          "content": [
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableHeader",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "th"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Head",
+                          "marks": [
+                            {
+                              "type": "bold"
+                            },
+                            {
+                              "type": "italic"
+                            },
+                            {
+                              "type": "underline"
+                            },
+                            {
+                              "type": "strike"
+                            },
+                            {
+                              "type": "link",
+                              "attrs": {
+                                "href": "https://example.org"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "td"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Cell",
+                          "marks": [
+                            {
+                              "type": "bold"
+                            },
+                            {
+                              "type": "italic"
+                            },
+                            {
+                              "type": "underline"
+                            },
+                            {
+                              "type": "strike"
+                            },
+                            {
+                              "type": "link",
+                              "attrs": {
+                                "href": "https://example.org"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "text": "\n\nQuote\n\n\n\n\n\nList\n\n\n\n\n\nOrdered\n\n\n\nCallout\n\n\n\n\n\n\n\nHead\n\n\n\nCell",
+    "words": 6,
+    "characters": 61,
+    "readingMinutes": 1
+  },
+  {
+    "name": "headings-code-opaque-blocks",
+    "input": {
+      "type": "doc",
+      "attrs": {
+        "schemaVersion": 4
+      },
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 6,
+            "blockId": "heading"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Heading",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "underline"
+                },
+                {
+                  "type": "strike"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.org"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "horizontalRule"
+        },
+        {
+          "type": "sceneBreak"
+        },
+        {
+          "type": "imageBlock",
+          "attrs": {
+            "src": "assets/synthetic.png",
+            "blockId": "image",
+            "alt": "not counted alt",
+            "caption": "not counted image caption"
+          }
+        },
+        {
+          "type": "mermaidBlock",
+          "attrs": {
+            "blockId": "mermaid",
+            "code": "flowchart LR; A-->B",
+            "caption": "not counted diagram caption"
+          }
+        },
+        {
+          "type": "mathBlock",
+          "attrs": {
+            "blockId": "math",
+            "latex": "not_counted_formula",
+            "description": "not counted description"
+          }
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "rust",
+            "blockId": "code"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "fn main() {\n  x();\n}\n"
+            }
+          ]
+        }
+      ]
+    },
+    "text": "Heading\n\n\n\n\n\n\n\n\n\n\n\nfn main() {\n  x();\n}\n",
+    "words": 6,
+    "characters": 40,
+    "readingMinutes": 1
+  }
+]

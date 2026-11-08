@@ -64,7 +64,7 @@ Closing a verified finding follows the owner's authorized workflow. Tags, draft 
 
 Run an issue audit after each implementation task and before each release candidate. Read linked issues plus the current open list, for example with `gh issue list --state open --limit 100 --json number,title,url`; paginate when needed. Check the actual issue body and acceptance criteria rather than relying on its title or an old local status.
 
-For fully verified work, append a concise resolution comment with the fix commit, build/version, relevant test or native/package evidence and any remaining scope limitation. Mark only verified acceptance checkboxes complete. Close the issue with reason `completed` through `gh issue close <number> --reason completed` under the verified owner account. The standing instruction authorizes this closure; do not ask for routine confirmation again. Closing is appropriate only when every required acceptance condition for that issue has passed, including distribution evidence if the issue concerns an installed build.
+For fully verified work, append a concise ready-for-owner-review comment with the fix commit, build/version, relevant native/package evidence and any remaining scope limitation. Mark only verified acceptance checkboxes complete. The owner's latest alpha.2 instruction requires product issues to stay open until the final candidate has been checked and accepted by the owner. After that explicit acceptance, close only the accepted, fully verified issues with reason `completed` under the verified owner account, without a redundant confirmation. Do not add automatic closing keywords while acceptance is pending.
 
 For partial or unverified work, leave the issue open and state the exact outstanding check. A planned feature, generated specification, passing compilation, available archive or published release is not by itself completion evidence. Reuse/reopen the existing issue when a confirmed regression invalidates its resolution. Do not use automatic closing keywords for a change whose issue acceptance is still pending.
 
@@ -73,7 +73,7 @@ Record the audit outcome in the task/release verification or handoff: issues clo
 ## Initial tracked findings
 
 - [Issue #1: macOS application/Dock icon behavior](https://github.com/avacadorun-dev/writer-craft/issues/1) — owner-authored account `avacadorun-dev`, labeled `bug`. Link actual fix and packaged-app retest evidence before considering it resolved.
-- [Persistent selected-passage marks and attached notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) was created through authenticated GitHub CLI as `avacadorun-dev`. It remains unscheduled future parity work.
+- [Persistent selected-passage marks and attached notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) was created through authenticated GitHub CLI as `avacadorun-dev`. It is included in the owner-approved alpha.2 editor scope; core work is partly qualified and native marks/notes acceptance remains pending.
 
 Tracking: [persistent text marks and author notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2).
 
@@ -82,3 +82,14 @@ On 2026-11-08, official GitHub CLI 2.103.3 was installed for the development env
 ## Administrative edits
 
 Routine changes to the project license, repository About/topics, release housekeeping or contributor tools are direct repository work. Do not create an issue for them unless the owner explicitly asks. The owner specifically requested changing the project to MIT without opening a license issue. This exception does not remove issue history for reported product bugs or enhancements.
+
+## Approved alpha.2 work breakdown
+
+The owner explicitly included all open product issues on 2026-11-08, superseding prior deferrals. The editor epic #4 remains complete, with #7 authoring, #8 syntax, #9 controls, #6 layout and #2 notes. Alpha.2 now also includes #3 installers, #10 complete source-project/Canvas/media compatibility and #11 transparent data/portable Markdown plus artifacts. Issue #1 was already closed after direct owner confirmation of the Dock icon. See [NEXT_RELEASE.md](NEXT_RELEASE.md).
+
+Keep every remaining product issue open until owner acceptance of the complete candidate, even after independent verification makes it ready to close. Continue updating exact source/build evidence and acceptance checklists. Routine administrative work still does not require a separate issue.
+
+
+## Latest scheduling decision — checkpoint alpha.2, remaining work alpha.3
+
+The owner subsequently authorized publishing the completed coherent checkpoint as alpha.2 and moving all unfinished large blocks to alpha.3. This supersedes the earlier scheduling statements above. Preserve original issue requirements and progress; use milestones and a current status note rather than claiming missing work is complete. In particular, keep the full-editor epic and incomplete project/media/Canvas/restore work open for alpha.3. Publishing alpha.2 alone never satisfies an issue or grants final owner acceptance.

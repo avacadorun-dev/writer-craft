@@ -5,9 +5,9 @@ Pinned upstream commit: `53fab88ff9d1b48f4704b5b5b560d6b4d560bf4c`.
 Original geometry: `https://raw.githubusercontent.com/lucide-icons/lucide/53fab88ff9d1b48f4704b5b5b560d6b4d560bf4c/icons/<name>.svg`.
 The complete upstream LICENSE is retained, including ISC copyright and Feather-derived MIT notices. WriterCraft's separate monk brand mark is not a Lucide utility icon.
 
-All30 utility icons use this one library. Original SVGs are unmodified. Native vector data is generated mechanically from their SVG paths/circles/rectangles; no icon was redrawn by hand. Geometry uses the original24×24 coordinate space, stroke width2 and round caps/joins. A generation-only Rust tool uses kurbo0.13.1 for SVG curves and Lyon for fill/stroke tessellation at0.01 source-unit tolerance. Native rendering adds a one-physical-pixel antialias fringe at the actual display scale. No SVG runtime, font asset or application dependency is added.
+All 52 utility icons use this one library. Original SVGs are unmodified. Native vector data is generated mechanically from their SVG paths/circles/rectangles; no icon was redrawn by hand. Geometry uses the original24×24 coordinate space, stroke width2 and round caps/joins. A generation-only Rust tool uses kurbo0.13.1 for SVG curves and Lyon for fill/stroke tessellation at0.01 source-unit tolerance. Native rendering adds a one-physical-pixel antialias fringe at the actual display scale. No SVG runtime, font asset or application dependency is added.
 
-`native_geometry.rs` is the generated selected subset (5942 unique vertices, 5823 triangles), with contour normals/edges for native antialiasing. Regeneration: parse the pinned source elements into equivalent SVG paths, preserve fill/stroke attributes, tessellate with round caps/joins and tolerance0.01, merge coincident vertices, derive exterior edges from triangle adjacency and regenerate the exhaustive Icon mapping. The isolated generator source and lockfile were used for this conversion; they are development tooling, not application dependencies. Verify original SVG SHA-256 values below before regeneration.
+`native_geometry.rs` is the generated selected subset (10,163 unique vertices, 9,924 triangles), with contour normals/edges for native antialiasing. Regeneration: parse the pinned source elements into equivalent SVG paths, preserve fill/stroke attributes, tessellate with round caps/joins and tolerance0.01, merge coincident vertices, derive exterior edges from triangle adjacency and regenerate the exhaustive Icon mapping. The isolated generator source and lockfile were used for this conversion; they are development tooling, not application dependencies. Verify original SVG SHA-256 values below before regeneration.
 
 | WriterCraft variant | Official Lucide file | SHA-256 |
 |---|---|---|
@@ -41,3 +41,32 @@ All30 utility icons use this one library. Original SVGs are unmodified. Native v
 | Keyboard | keyboard.svg | `f509925ca81964ed06251ad4702e989bb81a566ffc74d15c2226b4f07ded67be` |
 | Plug | plug.svg | `11ba780e4b6f15d37906a8a73537144b59720333d7a9fc8048a437d0389422f8` |
 | TextCursor | text-cursor.svg | `1224fd2e9488b38a4cdc743ea2ada7db7fe0a31e53d44758e5a5ac45f7971177` |
+
+## Editor authoring extension
+
+The editor subset below comes from the same pinned upstream revision and license. Canonical file names follow that source tree (for example, the bold-format glyph is `letter-b`, indentation uses `list-indent-*`, and warning uses `triangle-exclamation-point`). Original SVGs are unmodified. The existing generation-only Kurbo/Lyon executable produced the stroke triangles; mechanical vertex merging and exterior contour normals produce the same native antialias fringe. No runtime dependency or local Cargo build was added.
+
+| WriterCraft variant | Official Lucide file | SHA-256 |
+|---|---|---|
+| Bold | letter-b.svg | `c54339aca9fa8095097c3055126c37838ac2f2ba54cec3ba302a0b5d0cc44379` |
+| Italic | italic.svg | `dcce4f9719febb8b04b030133c1d4ad82f68d13932ac806fbee620422000ac83` |
+| Underline | underline.svg | `f83a0a4cc2f4e3a8616dd27b8a4c5a9e60e577a9791c08353eaa2fdc8370f6cb` |
+| Strike | strikethrough.svg | `1f52d0951beb1f5ddd888cf0e432694ed18ed3020d356f5d0b7ceb16bc371728` |
+| Code | code-xml.svg | `a6d2110227be375be21da7324d3c09262c1bf019d06bdeab356d515342ab7cce` |
+| Quote | quote.svg | `3c7a2f8443ae5c88cb3f35fdcc27a037a1af13fe35be28eb8cabded8672a9ac1` |
+| BulletList | list.svg | `ff97a7379eb962ddc3863bb59f0f45875ac8da91aac8a38a67361e7118d2d627` |
+| OrderedList | list-ordered.svg | `df549e10677b86c9a9f07c0c696b40a4937019212e73bc982a4e8dae7c557d8f` |
+| Indent | list-indent-increase.svg | `56932539f1c6aecbf0e82a8b401cd937c57e886d968c41230ad6df54f7446a2d` |
+| Outdent | list-indent-decrease.svg | `b67137c021b93811c6741c0a4a4487471585319d65c00b12320e678af36f390f` |
+| Table | table-2.svg | `7b1808e170670d644af828bed77022fc8baba27a654e0805f3fb98e0bec62077` |
+| Formula | sigma.svg | `4479d09dc10cbfcefc7f112ce6fd825da57779aa60d6d83f62882aa78421da18` |
+| Image | image-plus.svg | `19a5bef8f17d2397b2c41422553f53746e7c8ad9886a11e7ad397c5371368ec0` |
+| Diagram | workflow.svg | `ae99ea8f56a2835a2cca35b2fbb57643ab73443610970dba23e24bd9df75cfec` |
+| Info | info.svg | `bc977a64eb96f3e9c1041ffd09a3fceb70e3e65c02b571f76064062ed31f3cb9` |
+| Idea | lightbulb.svg | `e33bbec15b1e64cca958e086850f951c0dc2201cd5778bb3695fda3cb6ea457d` |
+| Warning | triangle-exclamation-point.svg | `4866f38b8560d410f21e3226413e0b77997b6dfbb6931fadfe0a0d5aef9ffeb4` |
+| Todo | list-todo.svg | `8620dcb86d9d27e0eeebc627b6a0f995ff3bb0264fd3c12ad003401981771848` |
+| Link | link.svg | `4f3237183dcaabfac92f4e94c776a9a9e45c3c5e77a921061a6b34b61eb5413f` |
+| Minus | minus.svg | `a0c743ab6dbf545d8a6e19ef3874f48ede686ce68d25e231bd81f540d97b1f19` |
+| Focus | focus.svg | `d52fde05ccbd7bf629e05daeb8eadf824c85333aeca78e674db01493bc8b1f10` |
+| Copy | copy.svg | `ea80e566c7a12628a447cb53179b19aea4f60b9143e2becd0d0f20bf260e5718` |

@@ -134,8 +134,27 @@ def render_notices(metadata, target):
     return "".join(sections), warnings
 
 
+def bundled_font_notices(asset_root):
+    font_root = asset_root / "fonts"
+    notices = sorted(path for path in font_root.iterdir()
+                     if "LICENSE" in path.name or path.name == "NOTICE.md")
+    if not notices:
+        raise ValueError("Bundled font notices are missing")
+    sections = ["\n" + "=" * 78 + "\nBundled manuscript and interface fonts\n"
+                "Original attribution and font licenses follow verbatim.\n\n"]
+    for path in notices:
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 2 * 1024 * 1024:
+            raise ValueError("Bundled font notice must be a bounded nonempty regular file")
+        contents = path.read_bytes().decode("utf-8")
+        sections.append("--- Bundled font file: " + path.name + " ---\n" + contents)
+        if not contents.endswith("\n"):
+            sections.append("\n")
+        sections.append("--- End bundled font file ---\n\n")
+    return "".join(sections)
+
+
 def host_target():
-    details = subprocess.check_output(["rustc", "-vV"], text=True)
+    details = subprocess.check_output(["rustc", "-vV"], text=True, encoding="utf-8")
     for line in details.splitlines():
         if line.startswith("host: "):
             return line[6:]
@@ -147,6 +166,8 @@ def main():
     parser.add_argument("--target", help="Rust target triple; defaults to rustc's host")
     parser.add_argument("--manifest-path", type=Path, default=ROOT / "Cargo.toml")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--features", action="append", default=[],
+                        help="Cargo feature selection used by the packaged binary; repeatable")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
@@ -157,10 +178,13 @@ def main():
     target = args.target or host_target()
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", target):
         raise ValueError("Target must be a Rust target triple")
-    metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--locked", "--filter-platform", target, "--format-version", "1",
-         "--manifest-path", str(args.manifest_path)], text=True))
+    metadata_command = ["cargo", "metadata", "--locked", "--filter-platform", target,
+                        "--format-version", "1", "--manifest-path", str(args.manifest_path)]
+    for features in args.features:
+        metadata_command.extend(["--features", features])
+    metadata = json.loads(subprocess.check_output(metadata_command, text=True, encoding="utf-8"))
     report, warnings = render_notices(metadata, target)
+    report += bundled_font_notices(ROOT / "assets")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(report.encode("utf-8"))
     for warning in warnings:
@@ -239,6 +263,21 @@ class NoticeTests(unittest.TestCase):
             self.assertIn("Package file: legal/terms.txt", report)
             self.assertIn("Explicit terms\n", report)
             self.assertTrue(any("Declared license file is unavailable" in item for item in warnings))
+
+    def test_bundled_font_attribution_is_in_the_combined_report_without_machine_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "fonts").mkdir()
+            original = "Copyright © Font Authors\n\nSIL OPEN FONT LICENSE Version 1.1\n"
+            (root / "fonts/SofiaSans-LICENSE.txt").write_bytes(original.encode("utf-8"))
+            (root / "fonts/NOTICE.md").write_text("Immutable font source and version.\n")
+            report = bundled_font_notices(root)
+            self.assertIn(original, report)
+            self.assertIn("Immutable font source and version.", report)
+            self.assertNotIn(str(root), report)
+            (root / "fonts/SofiaSans-LICENSE.txt").write_bytes(b"")
+            with self.assertRaisesRegex(ValueError, "bounded nonempty regular file"):
+                bundled_font_notices(root)
 
     def test_incomplete_dependency_graph_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -31,7 +31,7 @@ Review outcomes: `not reviewed`, `changes required`, `engineering probe only`, `
 | ID | Observable acceptance |
 |---|---|
 | UX-01 One workspace | One application chrome, no URL/reload/browser-history layer and no rounded whole-app frame. Navigator, content and inspector share clear boundaries. Native window controls remain functional. |
-| UX-02 Bounded writing | Long text scrolls within the editor; navigation, command bar and status remain stable. No forced publication page breaks in everyday writing. Font measure/line spacing remain comfortable at supported sizes. |
+| UX-02 Bounded writing | Long text scrolls within the editor; navigation, command bar and status remain stable. No forced publication page breaks in everyday writing. Font measure/line spacing remain comfortable at supported sizes. Per F-34, wide and Focus views retain a centered bounded document and readable maximum measure; constrained centers join the pane structure without losing selection/scroll state. |
 | UX-03 Responsive panes | Test minimum supported window, common laptop window and wide display; inspector closed/open; navigator/inspector at both resize limits. Preserve a useful editor minimum, collapse inspector first, then offer explicit panel recovery. No clipped primary controls or horizontal-scroll workaround for ordinary writing. The toolbar identity-zone separator and visible navigator edge share one effective boundary at normal and resized widths; long project/document titles cannot overlap adjacent labels or utility controls (owner feedback F-19). |
 | UX-04 Native command behavior | File/New/Open/Save/Find/Undo/Redo have conventional macOS behavior, coherent menu/shortcut labels and accessible names. Context-specific commands operate on the focused surface. A raw shortcut handler cannot open unrelated dialogs above another active dialog, including two shortcut events received within one frame. Creating a project/document with Enter and with the button must keep the app running and show the created item. |
 | UX-05 Focus and transients | Keyboard reaches and activates every primary control. Context menus preserve the selected occurrence. Escape dismisses the innermost transient first and restores the previous caret/focus. A focus-mode button has a visible exit and restores the previous pane layout. |
@@ -94,3 +94,39 @@ Read the structured preferences contract in `DESKTOP_UX.md` before reviewing set
 - All utility glyphs use the licensed Lucide subset; product branding uses the monk/book mark. Check 28-pixel toolbar readability and light/dark contrast.
 - Appearance preview cards display actual theme colors and keep mode and palette as separate controls. Selected state is legible without relying solely on fill color.
 - Show the real complete updated interface and open the owner's isolated demonstration preview after the icon replacement.
+
+
+## Owner correction regression matrix: F-32 through F-35
+
+- Require a complete empty-document authoring journey for every existing block/mark. A known-good showcase verifies appearance only; discoverable Insert/context/keyboard commands, edit again, Cancel, Undo/Redo and durable reopen need their own interaction evidence.
+- Inspect real syntax decoration for programming and structured-text languages while editing and after reopen, in Light/Dark. Source, Copy and unknown stored labels remain exact; colorful mockups do not qualify syntax support.
+- Compare wide/Focus/joined manuscript states around the approved adaptive threshold. Keep a bounded text measure, balanced exterior gutters when present, local scroll, reachable full toolbar/overflow and a visible Focus exit. New adaptive concept pictures need owner image review before structural layout implementation.
+- Inspect actual compiled search/New document/New project/source fields and modal actions: 40 px minimum standard height, full available width, centered text, one 24 px inset grid, deliberate header/body/footer rhythm, localized long values and minimum-window fit. Exercise Tab/Enter/Escape/Cancel, disabled/error states and exact focus restoration. A larger painted border around an unchanged tiny interaction target fails this check.
+
+Do not access the owner's open preview for these checks until handoff. F-32–F-35 remain acceptance blockers until exact-source compiled/native evidence exists; the designer's source fixes and design artifacts do not change `UX_GATE.json`.
+
+## Owner correction regression matrix: F-37 native rich-block flow
+
+The owner-observed overlap in [bug #12](https://github.com/avacadorun-dev/writer-craft/issues/12) is P1 and blocks the rich-writing journey. Read F-37 and the alpha.2 review addendum before accepting any layout, typography, renderer or progressive-readiness change. A cropped failure screenshot establishes a visible layout defect; canonical corruption requires separate storage evidence.
+
+Required evidence and checks:
+
+- Capture the actual compiled affected viewport after the expected visible images, diagrams and formulas have acknowledged their current source/presentation identity. Record app/engine/lock identity, effective preferences, viewport, scale, visible atom IDs and readiness. Fixed frame counts or elapsed sleeps do not establish readiness. An unexpected renderer failure is a failed valid-fixture case, even when its fallback is safe.
+- Use the complete-block synthetic document with prose, all heading levels, multiline highlighted code, ordinary/merged-cell tables, captions, portrait/landscape images, flowchart and tall sequence Mermaid diagrams, inline/block formulas, callouts and separators. Reach the actual opaque blocks by deterministic targeting or scrolling; above-the-fold prose does not exercise them.
+- Compare the **painted** image/diagram/formula/caption bounds with their reserved flow allocation and adjacent independent sibling blocks. Full content must remain readable at the correct aspect/baseline, with valid clipping at the viewport. Test overlap between separate blocks; intentional nesting inside a callout/table or internal diagram edge/node composition is not that failure.
+- Cover all three manuscript families; 17/19/21 and retained 28px; line-height 1.5/1.75/2; measures 60/70/80ch; Light/Dark; and floated/joined/Focus states. Use an explicit coverage table for independent dimensions and expand the known failing font-size/line-height/opaque-content combinations. A wasteful full Cartesian screenshot set is not required; every value, relevant interaction and adaptive boundary must have named evidence. Headless bounds tests complement the native cases.
+- Exercise pending→ready, source edit→rerender, failure→retry, theme invalidation, font/measure reflow and cache eviction/reentry. Verify sufficient space during transitions, stable meaningful scroll/caret/selection, correct hit targets, and no stale pixels or late result entering another block/document.
+- Preserve and compare exact canonical JSON/assets, semantic selection, Undo history and revision state around presentation-only changes. Verify insertion/property edit/delete/Undo/Redo, save and reopen for each affected block family. A presentation repair must not rewrite the manuscript to hide overlap.
+- Supply a fresh exact-source independent retest with complete affected block captures and interaction evidence. The owner review, implementation source fix, abstract geometry assertion or startup-only screenshot is not a substitute. `UX_GATE.json` remains pending until the required review actually passes; product issues remain open for final owner acceptance.
+
+
+### Capture coverage audit after 182c9a3 review
+
+Record effective logical viewport, device scale and PNG dimensions alongside the requested size. The three 182c9a3 startup cases labelled wide requested 1440×940 but produced 1024×684 PNGs without effective viewport/scale metadata; they cannot qualify wide geometry. See `UX_CAPTURE_REVIEW_182C9A3.md` for observed narrow states and the minimal target topology.
+
+An opaque-block capture must name expected nonzero visible atom IDs/types, establish current ready outputs and stable resolver/layout state across rendered frames, and bind its sidecar to the captured frame. Empty or wrong-target visibility, failed valid-fixture rendering, mismatched viewport/state and startup-only readiness must explicitly degrade the affected coverage claim. Preserve PNG integrity checks and separate native interaction evidence.
+
+
+## Owner-approved alpha.2 checkpoint boundary — 2026-11-08
+
+The owner explicitly authorized releasing the current completed coherent native editor checkpoint and moving unfinished large blocks to alpha.3. For this prerelease, the independent named scope is `native-rich-editor-alpha`: the implemented writing workspace, nonoverlapping currently integrated block rendering, bounded manuscript/controls/preferences and installable packages. Review the actual final source and captures; block P0/P1 defects within that scope. Retain specific limitations, pending broad original-parity, IME/accessibility, full Canvas/media/import/export and rich-assistant checks. Historical full-editor alpha.2 acceptance matrices remain the alpha.3 migration target, not a false declaration that those checks passed. Public engineering-alpha publication does not close product issues or certify daily use. The independent reviewer must make the final scoped decision; the implementer must not rewrite a pending full-parity gate into an approval.

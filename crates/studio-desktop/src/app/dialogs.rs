@@ -11,14 +11,11 @@ impl StudioApp {
             ctx.data_mut(|data| data.remove::<bool>(egui::Id::new("document-title-initial-focus")));
         }
         if self.project_dialog {
-            let response = modal(ctx, l, "new-project", l.text("New project"), 400.0, |ui| {
+            let response = modal(ctx, l, "new-project", l.text("New project"), 440.0, |ui| {
                 ui.label(l.text("Project title"));
                 ui.add_space(6.0);
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.project_name)
-                        .desired_width(f32::INFINITY)
-                        .hint_text(l.text("My new story")),
-                );
+                let response =
+                    components::singleline(ui, &mut self.project_name, l.text("My new story"));
                 let focus_id = egui::Id::new("project-title-initial-focus");
                 if !ctx.data(|data| data.get_temp::<bool>(focus_id).unwrap_or(false)) {
                     response.request_focus();
@@ -26,19 +23,20 @@ impl StudioApp {
                 }
                 let submitted =
                     response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                ui.add_space(16.0);
-                if ui
-                    .add_enabled(
-                        !self.project_name.trim().is_empty(),
-                        egui::Button::new(l.text("Create project")),
-                    )
-                    .clicked()
-                    || (submitted && !self.project_name.trim().is_empty())
-                {
+                let valid = !self.project_name.trim().is_empty();
+                let mut create = submitted && valid;
+                components::footer(ui, |ui| {
+                    create |=
+                        components::action(ui, l.text("Create project"), valid, Some(t)).clicked();
+                    if components::action(ui, l.text("Cancel"), true, None).clicked() {
+                        create = false;
+                        self.project_dialog = false;
+                    }
+                });
+                if create {
                     let result = (|| -> AppResult<()> {
                         let project = self.workspace.create_project(self.project_name.trim())?;
-                        self.workspace
-                            .create_document(&project.id, l.text("First chapter"), "")?;
+                        self.create_empty_manuscript(&project.id, l.text("First chapter"))?;
                         self.projects = self.workspace.list_projects()?;
                         self.open_project(project)?;
                         Ok(())
@@ -60,15 +58,12 @@ impl StudioApp {
                 l,
                 "new-document",
                 l.text("New document"),
-                400.0,
+                440.0,
                 |ui| {
                     ui.label(l.text("Document title"));
                     ui.add_space(6.0);
-                    let field = ui.add(
-                        egui::TextEdit::singleline(&mut self.document_name)
-                            .desired_width(f32::INFINITY)
-                            .hint_text(l.text("New chapter")),
-                    );
+                    let field =
+                        components::singleline(ui, &mut self.document_name, l.text("New chapter"));
                     let focus_id = egui::Id::new("document-title-initial-focus");
                     if !ctx.data(|data| data.get_temp::<bool>(focus_id).unwrap_or(false)) {
                         field.request_focus();
@@ -76,22 +71,23 @@ impl StudioApp {
                     }
                     let submitted =
                         field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                    ui.add_space(16.0);
-                    if ui
-                        .add_enabled(
-                            !self.document_name.trim().is_empty(),
-                            egui::Button::new(l.text("Add document")),
-                        )
-                        .clicked()
-                        || (submitted && !self.document_name.trim().is_empty())
-                    {
+                    let valid = !self.document_name.trim().is_empty();
+                    let mut create = submitted && valid;
+                    components::footer(ui, |ui| {
+                        create |= components::action(ui, l.text("Add document"), valid, Some(t))
+                            .clicked();
+                        if components::action(ui, l.text("Cancel"), true, None).clicked() {
+                            create = false;
+                            self.document_dialog = false;
+                        }
+                    });
+                    if create {
                         let result = (|| -> AppResult<()> {
                             self.save()?;
                             if let Some(project) = &self.project {
-                                let document = self.workspace.create_document(
+                                let document = self.create_empty_manuscript(
                                     &project.id,
                                     self.document_name.trim(),
-                                    "",
                                 )?;
                                 self.documents = self.workspace.list_documents(&project.id)?;
                                 self.open_document(document)?;
@@ -165,6 +161,22 @@ impl StudioApp {
             if response.should_close() {
                 self.error = None;
             }
+        }
+    }
+
+    fn create_empty_manuscript(&self, project_id: &str, title: &str) -> AppResult<Document> {
+        #[cfg(feature = "editor-preview")]
+        {
+            let content =
+                craft_editor_model::Document::plain(uuid::Uuid::new_v4().to_string(), "")?
+                    .to_json()?;
+            Ok(self
+                .workspace
+                .create_rich_document(project_id, title, content)?)
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            Ok(self.workspace.create_document(project_id, title, "")?)
         }
     }
 }

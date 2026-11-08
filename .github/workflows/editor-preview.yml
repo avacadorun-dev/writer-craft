@@ -1,0 +1,199 @@
+name: Build editor engineering preview
+
+on:
+  push:
+    branches: [feature/full-editor-parity]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'assets/**'
+      - 'scripts/package-macos.sh'
+      - 'scripts/generate-notices.py'
+      - 'scripts/native-startup-smoke.py'
+      - '.github/workflows/editor-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: editor-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  MACOSX_DEPLOYMENT_TARGET: '14.0'
+  RUST_TARGET: aarch64-apple-darwin
+
+jobs:
+  resolve-lock:
+    name: Verify committed preview dependency lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      ready: ${{ steps.resolve.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare metadata compiler
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          echo "compiler=$(rustc -V | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: editor-preview-metadata-${{ runner.os }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            editor-preview-metadata-${{ runner.os }}-${{ steps.rust.outputs.compiler }}-
+      - name: Verify or resolve the lockfile on the hosted runner
+        id: resolve
+        run: |
+          mkdir -p artifacts/qualification
+          git rev-parse HEAD > artifacts/qualification/source-commit.txt
+          rustc -vV > artifacts/qualification/compiler.txt
+          ready=true
+          if ! cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-metadata.json" 2> artifacts/qualification/lock-check.log; then
+            # Preserve compatible acknowledged pins while resolving only newly required edges.
+            cargo metadata --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-resolved-metadata.json" 2> artifacts/qualification/lock-resolution.log
+            ready=false
+          fi
+          cp Cargo.lock artifacts/qualification/Cargo.lock
+          echo "$ready" > artifacts/qualification/committed-lock-ready.txt
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+      - name: Retain the small resolved lock and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-preview-lock-${{ github.sha }}
+          path: artifacts/qualification/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Require the resolved lock to be committed before a macOS build
+        if: steps.resolve.outputs.ready != 'true'
+        run: |
+          echo '::error::The committed Cargo.lock is stale. Download the editor-preview-lock artifact, commit its resolved Cargo.lock, and push again before building the preview.'
+          exit 1
+
+  macos-editor:
+    name: Native editor preview (macOS ARM64)
+    needs: [resolve-lock]
+    if: needs.resolve-lock.outputs.ready == 'true'
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Prepare native compiler
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustup target add "$RUST_TARGET"
+          test "$(uname -m)" = arm64
+          echo "compiler=$(rustc -V | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
+            ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
+      - name: Verify the committed native dependency graph and retain identity
+        run: |
+          mkdir -p artifacts/native-qualification
+          git rev-parse HEAD > artifacts/native-qualification/source-commit.txt
+          rustc -vV > artifacts/native-qualification/compiler.txt
+          cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-native-metadata.json"
+          git diff --exit-code -- Cargo.lock
+          cp Cargo.lock artifacts/native-qualification/Cargo.lock
+      - name: Retain native compiler and committed lock identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-preview-native-${{ github.sha }}
+          path: artifacts/native-qualification/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test all editor-enabled workspace features
+        run: cargo test --workspace --all-features --locked
+      - name: Check all editor-enabled targets
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Verify notice collection
+        run: python3 scripts/generate-notices.py --self-test
+      - name: Check bounded startup smoke tooling
+        run: python3 scripts/native-startup-smoke.py --self-test
+      - name: Package the isolated native editor preview
+        env:
+          WRITERCRAFT_EDITOR_PREVIEW: '1'
+        run: ./scripts/package-macos.sh --release --target "$RUST_TARGET" --output 'artifacts/WriterCraft Editor Preview.app'
+      - name: Verify preview identity and archive
+        run: |
+          codesign --verify --deep --strict 'artifacts/WriterCraft Editor Preview.app'
+          python3 - <<'PYTHON'
+          import hashlib, json, os, plistlib, subprocess
+          from pathlib import Path
+          bundle = Path('artifacts/WriterCraft Editor Preview.app')
+          with (bundle / 'Contents/Info.plist').open('rb') as stream:
+              info = plistlib.load(stream)
+          assert info['CFBundleIdentifier'] == 'app.writercraft.editor-preview'
+          assert info['CFBundleDisplayName'] == 'WriterCraft Editor Preview'
+          assert info['LSEnvironment'] == {'WRITERCRAFT_EDITOR_PREVIEW': '1'}
+          assert info['WriterCraftBuildCommit'] == os.environ['GITHUB_SHA']
+          evidence = {
+              'source_commit': os.environ['GITHUB_SHA'],
+              'version': info['WriterCraftVersion'],
+              'dependency_lock_sha256': hashlib.sha256(Path('Cargo.lock').read_bytes()).hexdigest(),
+              'resolved_lock_committed': subprocess.run(['git', 'diff', '--quiet', '--', 'Cargo.lock']).returncode == 0,
+              'channel': info['WriterCraftChannel'],
+              'target': os.environ['RUST_TARGET'],
+              'bundle_identifier': info['CFBundleIdentifier'],
+              'signing': 'ad-hoc',
+              'editor_acceptance': False,
+              'native_interaction_acceptance': False,
+              'release': False,
+          }
+          Path('artifacts/build-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          PYTHON
+          ditto -c -k --sequesterRsrc --keepParent 'artifacts/WriterCraft Editor Preview.app' artifacts/WriterCraft-Editor-Preview-macos-arm64.zip
+          cd artifacts
+          shasum -a 256 WriterCraft-Editor-Preview-macos-arm64.zip > SHA256SUMS
+          echo 'Isolated engineering preview for native editor testing. This is not alpha.2, a parity acceptance, or a signed/notarized public installer.' > PREVIEW.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WriterCraft-Editor-Preview-macos-arm64-${{ github.sha }}
+          path: |
+            artifacts/WriterCraft-Editor-Preview-macos-arm64.zip
+            artifacts/SHA256SUMS
+            artifacts/build-evidence.json
+            artifacts/PREVIEW.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Capture synthetic native review states (informational)
+        id: startup-smoke
+        continue-on-error: true
+        run: python3 scripts/native-startup-smoke.py --bundle 'artifacts/WriterCraft Editor Preview.app'
+      - name: Retain native startup captures and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-preview-startup-smoke-${{ github.sha }}
+          path: ${{ runner.temp }}/writercraft-native-startup-smoke/
+          if-no-files-found: warn
+          retention-days: 14

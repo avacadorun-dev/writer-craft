@@ -14,18 +14,48 @@ impl StudioApp {
                     .inner_margin(egui::Margin::symmetric(20, 18)),
             )
             .show(ui, |ui| {
+                let sections = [
+                    #[cfg(feature = "editor-preview")]
+                    (Inspector::Notes, "Notes"),
+                    (Inspector::Review, "Review"),
+                    (Inspector::Versions, "History"),
+                ];
+                let font = egui::TextStyle::Button.resolve(ui.style());
+                let tabs_width: f32 = sections
+                    .iter()
+                    .map(|(_, label)| {
+                        ui.painter()
+                            .layout_no_wrap(l.text(label).into(), font.clone(), t.text)
+                            .size()
+                            .x
+                            + 2.0 * ui.spacing().button_padding.x
+                            + ui.spacing().item_spacing.x
+                    })
+                    .sum();
+                let compact = tabs_width + 40.0 > ui.available_width();
                 ui.horizontal(|ui| {
-                    if ui
-                        .selectable_label(self.inspector == Inspector::Review, l.text("Review"))
-                        .clicked()
-                    {
-                        self.inspector = Inspector::Review;
-                    }
-                    if ui
-                        .selectable_label(self.inspector == Inspector::Versions, l.text("History"))
-                        .clicked()
-                    {
-                        self.inspector = Inspector::Versions;
+                    if compact {
+                        let active = sections
+                            .iter()
+                            .find(|(kind, _)| *kind == self.inspector)
+                            .map_or("Review", |(_, label)| *label);
+                        egui::ComboBox::from_id_salt("inspector-section")
+                            .selected_text(l.text(active))
+                            .width((ui.available_width() - 40.0).max(80.0))
+                            .show_ui(ui, |ui| {
+                                for (kind, label) in sections {
+                                    ui.selectable_value(&mut self.inspector, kind, l.text(label));
+                                }
+                            });
+                    } else {
+                        for (kind, label) in sections {
+                            if ui
+                                .selectable_label(self.inspector == kind, l.text(label))
+                                .clicked()
+                            {
+                                self.inspector = kind;
+                            }
+                        }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if icons::icon_button(ui, Icon::Close, l.text("Hide panel")).clicked() {
@@ -36,6 +66,11 @@ impl StudioApp {
                 ui.add_space(14.0);
                 ui.separator();
                 ui.add_space(16.0);
+                #[cfg(feature = "editor-preview")]
+                if self.inspector == Inspector::Notes {
+                    self.notes_panel(ui, t);
+                    return;
+                }
                 egui::ScrollArea::vertical()
                     .id_salt("inspector-scroll")
                     .auto_shrink([false, false])
@@ -51,6 +86,16 @@ impl StudioApp {
 
     pub(super) fn review(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
+        if self
+            .document
+            .as_ref()
+            .is_some_and(|document| document.rich_json.is_some())
+        {
+            ui.label(RichText::new(l.text("Review")).size(17.0).strong());
+            ui.add_space(10.0);
+            ui.label(RichText::new(l.text("Rich-text proposals are not available in this preview. Your document remains unchanged.")).color(t.muted));
+            return;
+        }
         ui.horizontal(|ui| {
             icons::icon(ui, Icon::Assistant, 22.0, t.accent);
             ui.label(

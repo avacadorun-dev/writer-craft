@@ -1,0 +1,21 @@
+# Build inputs have identical bytes on macOS, Windows and Linux.
+* text=auto eol=lf
+
+# Original encoded assets are never newline-filtered.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.wstudio binary
+*.zip binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary

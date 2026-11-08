@@ -4,8 +4,35 @@ All notable product and compatibility changes are recorded here. Versions follow
 
 ## [Unreleased]
 
-- Continue the verified native migration toward the complete legacy workflow inventory.
-- Close and independently retest the desktop UX findings before accepting the named release scope.
+- Alpha.3 continues complete table/clipboard parity, note/dictionary and assistant integrations, full project/Canvas/media migration, portable restore and the remaining native acceptance matrix.
+
+## [0.1.0-alpha.2] - 2026-11-08
+
+A native rich-editor engineering checkpoint. The owner approved shipping the completed implementation now and carrying unfinished large migration workstreams into alpha.3. This is not complete Writers Studio feature parity or a daily-use certification.
+
+### Added
+
+- Native rich manuscript editing with formatting, structured block insertion and property dialogs; integrated tables, image assets, Mermaid diagrams, inline/display formulas, code and callouts.
+- Syntax decoration for code and structured text, local rich revisions and recoverable drafts, and the current persistent passage-note implementation.
+- Adaptive bounded document surfaces, comfortable shared fields/modals, configurable manuscript typography and offline bundled fonts.
+- Eight UI languages, Light/Dark/System, seven non-green palettes, Lucide controls and the monk/book app identity.
+- Independent persistence acknowledgement, preserved unknown preference fields, explicit Retry/Reload and session-only error status for each preference file.
+- Local data-location/backup controls and shared core foundations for complete original-project preservation and portable exports.
+- Installable macOS ARM64 DMG, per-user Windows x64 setup executable and Debian/Ubuntu amd64 package, with checksums and same-source verification evidence.
+
+### Fixed
+
+- Images, diagrams, formulas and wrapped captions reserve their actual native flow height rather than painting over following blocks.
+- Preserve exact checkout bytes across platforms so installer source fingerprints describe the actual compiled inputs.
+- Preserve local workspace data when installing/removing program files and refuse protected-data export collisions.
+
+### Scope and installation
+
+- macOS Apple silicon on macOS 14 or newer is the primary desktop target. Windows x64 and Debian 12/Ubuntu 24.04 amd64 packages have hosted installation/removal checks; full desktop interaction on those systems remains unqualified.
+- macOS uses ad-hoc signing and is not notarized. Windows is unsigned. Automatic updates are not implemented.
+- Complete table/clipboard/IME/accessibility parity, full note/dictionary and rich assistant workflows, original-project import UI, Canvas, PDF/audio/video and canonical restore remain alpha.3 work. Current preservation APIs or a showcase do not imply completed end-user workflows.
+- The normal application uses its normal WriterCraft data directory; an isolated engineering preview uses a separate workspace. App version, SQLite schema and transfer formats remain independent.
+- Product issues remain open for their own verification and owner acceptance; shipping this checkpoint does not close them.
 
 ## [0.1.0-alpha.1] - 2026-11-08
 

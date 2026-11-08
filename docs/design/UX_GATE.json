@@ -2,48 +2,47 @@
   "schema_version": 1,
   "status": "accepted",
   "independent": true,
-  "reviewer": "independent UI/UX designer (ux_acceptance)",
-  "scope": "native-foundation",
-  "version": "0.1.0-alpha.1",
-  "source_fingerprint": "6bb777e7ced2e4559bc14312ab54beea2f28160b63ccaaf7bb770d2bffd14fd0",
+  "reviewer": "independent desktop UI/UX designer (alpha2_scoped_ux)",
+  "scope": "native-rich-editor-alpha",
+  "version": "0.1.0-alpha.2",
+  "source_fingerprint": "627547cc12f80c551c9ae84947d16d370dc9db263c80b1bcaee01864596da0c9",
+  "runtime_source_commit": "8af4233ba5e531b360ee4914e4a5d5996f7bb72e",
   "blockers": [],
   "evidence": [
     {
-      "path": "docs/images/workspace-dark.png",
-      "sha256": "1583f065b70ed40ffc93510af344d44a4e076e31a7b782377be70ee55b7b176e"
+      "path": "docs/images/alpha2/workspace-dark.png",
+      "sha256": "3bb7f7c47c9ca5145bb9d1c6edfc3cfbd0e798804250d7cc963f09afb21cf236"
     },
     {
-      "path": "docs/images/workspace-light.png",
-      "sha256": "956e809d1e817c9d85be559d8c6c51b0b7f41ee6f76095f1170fb3382085174e"
+      "path": "docs/images/alpha2/diagram-light.png",
+      "sha256": "0e065476004cae54e326606fc5417f9e8cebb3f22691612bcfaf7905b49e14ea"
     },
     {
-      "path": "docs/images/qa/compact-de.png",
-      "sha256": "3e1593208bf0c20499f99affd23c03e81043544f05afa98223779eadf56e3ac8"
+      "path": "docs/images/alpha2/image-light.png",
+      "sha256": "90e526a610c54d3bbd318d01ca2232c956481337501ed52bb24fbec237fc3fe8"
     },
     {
-      "path": "docs/images/qa/settings-compact-en.png",
-      "sha256": "a32c32f4881862236c97b2942934cb772d4b2b1fda84722ed77401a1980c2a30"
+      "path": "docs/images/alpha2/formulas-light.png",
+      "sha256": "c0411c6e7bafedbee9340e3a19580a45858c67858357e24bf1dbe2c5edeb3376"
     },
     {
-      "path": "docs/images/qa/settings-editor-en.png",
-      "sha256": "c7fdae7acb76bef114e4cba1544ef9c98bb74f70976e63c03c48e8f9c8d053d0"
+      "path": "docs/images/alpha2/settings-light.png",
+      "sha256": "c75487cdb687358a33dddb1b4f67b682af3af1bf6a4cff5a953bd6fa5033acde"
     },
     {
-      "path": "docs/images/qa/settings-en.png",
-      "sha256": "7c88c4dc23e9ff1f7543afd89cb52966661ad248c70f8bb9fc32ab9e5f39825b"
-    },
-    {
-      "path": "docs/images/qa/settings-general-en.png",
-      "sha256": "962aa121378feaa8a9baf959579d72da23cf2f0e0e4d125907daa0b81e0b7ddc"
-    },
-    {
-      "path": "docs/images/qa/settings-ja-light.png",
-      "sha256": "542f8292af578e2021fcd944839b2ce1788ffe50d593f4fab058e1cb14d29d28"
-    },
-    {
-      "path": "docs/images/qa/settings-mcp-en.png",
-      "sha256": "168a92d57636db3ba1dea093c15b5964417825c783ea812ad469999271157072"
+      "path": "docs/images/alpha2/large-caption-dark.png",
+      "sha256": "b796165c385d15ad7b438338fdfbb96d9d9f9f12b8f56fbf76dca3a78ee8b784"
     }
   ],
-  "interaction_evidence": "docs/design/UX_REVIEW_003.md"
+  "interaction_evidence": "docs/design/UX_REVIEW_ALPHA2_CHECKPOINT.md",
+  "review_date": "2026-11-08",
+  "acceptance_level": "Owner-approved implemented engineering checkpoint; not Author pilot or full parity.",
+  "full_parity_status": "Pending; historical full-editor gate retained in docs/design/UX_GATE_FULL_PARITY_PENDING.json; unfinished work continues in alpha.3.",
+  "limitations": [
+    "No daily-use, complete original editor/product migration, or product-issue closure approval.",
+    "Hosted actual normal-app captures pass20/20; requested-wide cases are constrained, and28px lower tile shows only the last image-caption line.",
+    "Native launch/create/paste/save evidence is carried from unchanged ordinary authoring source c277a3c; title automation anomaly, interrupted insertion/format/reopen and preference error/retry/AX journeys remain unqualified.",
+    "Complete tables/clipboard/IME/accessibility, notes/dictionary, rich assistant, full project/Canvas/media/import/export/canonical restore remain alpha.3.",
+    "macOS ad-hoc signing is not Developer ID/notarization; Windows/Linux installation checks do not qualify all desktop interaction."
+  ]
 }

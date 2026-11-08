@@ -1,0 +1,59 @@
+{
+  "source_commit": "8af4233ba5e531b360ee4914e4a5d5996f7bb72e",
+  "version": "0.1.0-alpha.2",
+  "bundle_identifier": "app.writercraft.desktop",
+  "executable_sha256": "72031566e901cf983f542ef6ed6b2c945d6f83f87fa4d029bc48fd4ceea44795",
+  "hosted_run": "https://github.com/avacadorun-dev/writer-craft/actions/runs/42493462622",
+  "images": [
+    {
+      "path": "docs/images/alpha2/workspace-dark.png",
+      "case": "compact-dark-en-manuscript",
+      "sha256": "3bb7f7c47c9ca5145bb9d1c6edfc3cfbd0e798804250d7cc963f09afb21cf236",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 1.0
+    },
+    {
+      "path": "docs/images/alpha2/diagram-light.png",
+      "case": "compact-light-en-flowchart",
+      "sha256": "0e065476004cae54e326606fc5417f9e8cebb3f22691612bcfaf7905b49e14ea",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 1.0
+    },
+    {
+      "path": "docs/images/alpha2/image-light.png",
+      "case": "compact-light-en-21-image",
+      "sha256": "90e526a610c54d3bbd318d01ca2232c956481337501ed52bb24fbec237fc3fe8",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 1.0
+    },
+    {
+      "path": "docs/images/alpha2/formulas-light.png",
+      "case": "compact-light-en-formula",
+      "sha256": "c0411c6e7bafedbee9340e3a19580a45858c67858357e24bf1dbe2c5edeb3376",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 1.0
+    },
+    {
+      "path": "docs/images/alpha2/settings-light.png",
+      "case": "compact-light-de-settings",
+      "sha256": "c75487cdb687358a33dddb1b4f67b682af3af1bf6a4cff5a953bd6fa5033acde",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 1.0
+    }
+  ]
+}

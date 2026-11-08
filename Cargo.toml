@@ -4,26 +4,32 @@ members = ["crates/studio-core", "crates/studio-transfer", "crates/studio-deskto
 default-members = ["crates/studio-desktop"]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value", "arbitrary_precision"] }
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 sha2 = "0.10"
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled", "backup", "blob"] }
 tempfile = "3"
 zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
 eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "accesskit", "default_fonts", "x11", "wayland"] }
 egui = "=0.36.2"
 rfd = "=0.18.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
+craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "21788bdd9e9ea8c4d2d3f4c90900633098aced7c" }
+craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "21788bdd9e9ea8c4d2d3f4c90900633098aced7c", features = ["wordcraft-canvas", "native-clipboard"] }
+craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "21788bdd9e9ea8c4d2d3f4c90900633098aced7c" }
 studio-core = { path = "crates/studio-core" }
 studio-transfer = { path = "crates/studio-transfer" }
+
+[workspace.metadata.writercraft]
+required-ux-scope = "native-rich-editor-alpha"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

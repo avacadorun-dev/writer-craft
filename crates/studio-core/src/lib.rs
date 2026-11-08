@@ -3,8 +3,45 @@
 //! Every canonical save creates a revision. Proposed replacements remain separate
 //! until explicit apply, and undo refuses to overwrite intervening changes.
 
+mod annotations;
+mod assets;
+mod assistant_selection;
+mod daily_controls;
+mod project_portability;
+mod rich;
+mod workspace_backup;
+mod workspace_paths;
+pub use annotations::{
+    AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
+    AnnotationStatus, LegacyAnchorProjection, LegacyAnchorResolution, PassageAnnotation,
+    RichRecoverySnapshot,
+};
+pub use assets::{
+    ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
+    ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages,
+    is_valid_image_reference_id, validate_image_transfers,
+};
+pub use assistant_selection::{AssistantSelectionAttachment, AssistantSelectionRange};
+pub use daily_controls::{
+    DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
+    find_first_text_match, rich_document_statistics,
+};
+pub use project_portability::{
+    EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary, ImportAssetSource,
+    ImportedProject, ImportedProjectAnnotation, MAX_EVIDENCE_METADATA_BYTES,
+    MAX_EVIDENCE_OBJECT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
+    ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo,
+    ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
+    ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
+    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
+    ValidatedEvidenceReference, ValidatedProjectImport,
+};
+pub use rich::{RichDraft, RichRevision};
+pub use workspace_backup::{WorkspaceBackup, backup_workspace};
+pub use workspace_paths::is_workspace_data_path;
+
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -14,7 +51,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 8;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -41,6 +78,14 @@ pub enum StudioError {
         draft_revision: i64,
         current_revision: i64,
     },
+    /// Another draft writer acknowledged newer unsaved work.
+    #[error(
+        "The working draft changed in another edit session; preserve this draft before retrying"
+    )]
+    DraftChanged,
+    /// A durable draft's verified attachment context no longer matches current notes.
+    #[error("draft_annotation_conflict")]
+    DraftAnnotationConflict,
     /// Imported structured content cannot safely be edited as plain text.
     #[error("Imported document {document_id} is read-only to preserve its original structure")]
     ReadOnly { document_id: String },
@@ -59,6 +104,9 @@ pub enum StudioError {
     /// Selected range no longer contains its captured literal text.
     #[error("Selected text changed; refresh the selection before preparing a replacement")]
     ExpectedTextMismatch,
+    /// Annotation metadata changed after the author opened it.
+    #[error("Annotation changed from revision {expected} to {actual}; reload before saving")]
+    AnnotationConflict { expected: i64, actual: i64 },
     /// A replacement target was not uniquely addressable.
     #[error("The exact text appears more than once; choose a longer unique phrase")]
     AmbiguousMatch,
@@ -127,6 +175,10 @@ pub struct Document {
     pub read_only: bool,
     /// Opaque original data retained without flattening its structure.
     pub source_json: Option<Value>,
+    /// Editable canonical structured content, separate from opaque imported source.
+    /// The body remains a derived projection; plain commands must not rewrite it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich_json: Option<Value>,
 }
 
 /// One immutable text revision, newest first when listed.
@@ -225,7 +277,8 @@ pub struct Proposal {
 /// and optimistic revision checks. Run synchronous commands off the render thread
 /// when accessing large projects.
 pub struct Workspace {
-    connection: Mutex<Connection>,
+    connection: Arc<Mutex<Connection>>,
+    replay_receipts: Mutex<annotations::ReplayCache>,
 }
 
 impl Workspace {
@@ -233,6 +286,7 @@ impl Workspace {
     /// Existing non-workspace databases and newer schemas are rejected unchanged.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
+        workspace_paths::validate_database_path(path)?;
         if let Some(parent) = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -249,12 +303,16 @@ impl Workspace {
 
     fn from_connection(mut connection: Connection) -> Result<Self> {
         connection.busy_timeout(Duration::from_secs(5))?;
+        // Schema identity and version are read under the same write lock as migration.
+        // Another opener may already have completed migration while we waited.
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let application_id: i64 =
-            connection.pragma_query_value(None, "application_id", |row| row.get(0))?;
+            transaction.pragma_query_value(None, "application_id", |row| row.get(0))?;
         if application_id != 0 && application_id != APPLICATION_ID {
             return Err(StudioError::NotWorkspaceDatabase);
         }
-        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        let version: i64 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version > SCHEMA_VERSION {
             return Err(StudioError::UnsupportedSchema {
                 found: version,
@@ -262,34 +320,55 @@ impl Workspace {
             });
         }
         if version == 0 {
-            let user_tables: i64 = connection.query_row(
-                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-                [], |row| row.get(0),
+            let user_tables: i64 = transaction.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", [], |row| row.get(0),
             )?;
             if user_tables != 0 {
                 return Err(StudioError::NotWorkspaceDatabase);
             }
-            let transaction =
-                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             transaction.execute_batch(include_str!("schema.sql"))?;
             transaction.execute_batch(include_str!("drafts.sql"))?;
+            transaction.execute_batch(include_str!("rich.sql"))?;
+            transaction.execute_batch(include_str!("annotations.sql"))?;
+            transaction.execute_batch(include_str!("assets.sql"))?;
+            transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
+            transaction.execute_batch(include_str!("project_portability.sql"))?;
+            transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-            transaction.commit()?;
         } else if application_id != APPLICATION_ID {
             return Err(StudioError::NotWorkspaceDatabase);
-        } else if version < 2 {
-            let transaction =
-                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            transaction.execute_batch(include_str!("drafts.sql"))?;
+        } else if version < SCHEMA_VERSION {
+            if version < 2 {
+                transaction.execute_batch(include_str!("drafts.sql"))?;
+            }
+            if version < 3 {
+                transaction.execute_batch(include_str!("rich.sql"))?;
+            }
+            if version < 4 {
+                transaction.execute_batch(include_str!("annotations.sql"))?;
+            }
+            if version < 5 {
+                transaction.execute_batch(include_str!("assets.sql"))?;
+            }
+            if version < 6 {
+                transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
+            }
+            if version < 7 {
+                transaction.execute_batch(include_str!("project_portability.sql"))?;
+            }
+            if version < 8 {
+                transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
+            }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-            transaction.commit()?;
         }
+        transaction.commit()?;
         connection.execute_batch(
             "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;",
         )?;
         Ok(Self {
-            connection: Mutex::new(connection),
+            connection: Arc::new(Mutex::new(connection)),
+            replay_receipts: Mutex::new(annotations::ReplayCache::default()),
         })
     }
 
@@ -754,6 +833,11 @@ fn require_project(connection: &Connection, id: &str) -> Result<()> {
 }
 
 fn require_editable(document: &Document) -> Result<()> {
+    if document.rich_json.is_some() {
+        return Err(StudioError::Validation(
+            "This document requires structured editing; a plain-text write would discard formatting".into(),
+        ));
+    }
     if document.read_only {
         return Err(StudioError::ReadOnly {
             document_id: document.id.clone(),
@@ -799,17 +883,18 @@ fn read_draft(connection: &Connection, id: &str) -> Result<Option<Draft>> {
 
 fn read_document(connection: &Connection, id: &str) -> Result<Document> {
     let row = connection.query_row(
-        "SELECT id,project_id,title,body,revision,read_only,source_json FROM documents WHERE id=?1", [id],
+        "SELECT d.id,d.project_id,d.title,d.body,d.revision,d.read_only,d.source_json,r.content_json FROM documents d LEFT JOIN rich_documents r ON d.id=r.document_id WHERE d.id=?1", [id],
         |row| Ok((Document {
             id: row.get(0)?, project_id: row.get(1)?, title: row.get(2)?, body: row.get(3)?,
-            revision: row.get(4)?, read_only: row.get(5)?, source_json: None,
-        }, row.get::<_, Option<String>>(6)?)),
+            revision: row.get(4)?, read_only: row.get(5)?, source_json: None, rich_json: None,
+        }, row.get::<_, Option<String>>(6)?, row.get::<_, Option<String>>(7)?)),
     ).optional()?.ok_or_else(|| StudioError::NotFound { kind: "Document", id: id.into() })?;
-    let (mut document, source_json) = row;
+    let (mut document, source_json, rich_json) = row;
     document.source_json = source_json
         .as_deref()
         .map(serde_json::from_str)
         .transpose()?;
+    document.rich_json = rich_json.as_deref().map(serde_json::from_str).transpose()?;
     Ok(document)
 }
 

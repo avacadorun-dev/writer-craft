@@ -51,10 +51,18 @@ def workspace_metadata(root: Path = ROOT):
     section = toml_section((root / "Cargo.toml").read_text(), "workspace.package")
     version = quoted_field(section, "version")
     parts = version_parts(version)
-    return {"version": version, "short_version": ".".join(parts[:3]), "license": quoted_field(section, "license")}
+    manifest = (root / "Cargo.toml").read_text()
+    required_scope = "native-foundation"
+    if "[workspace.metadata.writercraft]" in manifest:
+        required_scope = quoted_field(toml_section(manifest, "workspace.metadata.writercraft"), "required-ux-scope")
+    if required_scope not in {"native-foundation", "native-rich-editor-alpha", "full-editor-parity", "full-parity"}:
+        raise ValueError("Unknown required independent UX scope: " + required_scope)
+    return {"version": version, "short_version": ".".join(parts[:3]), "license": quoted_field(section, "license"), "required_ux_scope": required_scope}
 
 
 def source_fingerprint(root: Path = ROOT) -> str:
+    # Hash actual build bytes; .gitattributes makes tracked text LF on every host.
+    # Never hide a different compiled input by normalizing only its evidence hash.
     files = [root / "Cargo.toml", root / "Cargo.lock"]
     for name in ["DESKTOP_UX.md", "UX_ACCEPTANCE.md", "USER_FEEDBACK.md", "WORKFLOW_MAP.md"]:
         contract = root / "docs/design" / name
@@ -106,7 +114,7 @@ def review_records(root: Path):
     return [(path.relative_to(root).as_posix(), record)]
 
 
-def accepted_ux(root: Path, version: str, fingerprint: str):
+def accepted_ux(root: Path, version: str, fingerprint: str, required_scope=None):
     reasons = []
     for review_path, record in reversed(review_records(root)):
         if record.get("status") != "accepted":
@@ -118,6 +126,8 @@ def accepted_ux(root: Path, version: str, fingerprint: str):
                 raise ValueError("acceptance does not match the current version/source fingerprint")
             if not str(record.get("scope", "")).strip():
                 raise ValueError("acceptance must name its implemented scope")
+            if required_scope is not None and record.get("scope") != required_scope:
+                raise ValueError("acceptance must cover the required scope: " + required_scope)
             if record.get("blockers") != []:
                 raise ValueError("independent review still has release blockers")
             evidence = record.get("evidence")
@@ -250,7 +260,7 @@ def main(argv=None):
         issues.append("Tag must exactly match v" + metadata["version"])
     if args.require_prerelease and not version_parts(metadata["version"])[3]:
         issues.append("This workflow creates prerelease candidates only; use a SemVer prerelease version")
-    acceptance, ux_reason = accepted_ux(ROOT, metadata["version"], fingerprint)
+    acceptance, ux_reason = accepted_ux(ROOT, metadata["version"], fingerprint, metadata["required_ux_scope"])
     if args.mode == "release" and acceptance is None:
         issues.append(ux_reason)
     if args.mode == "release" and int(version_parts(metadata["version"])[0]) >= 1:
@@ -327,6 +337,20 @@ class ReleaseChecks(unittest.TestCase):
             source.write_text("changed")
             self.assertNotEqual(before, source_fingerprint(root))
 
+    def test_git_checkout_filters_preserve_exact_source_and_binary_bytes_on_windows(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True, capture_output=True)
+            (root / ".gitattributes").write_bytes((ROOT / ".gitattributes").read_bytes())
+            fixtures = {"Cargo.lock": b"version = 4\n\n[[package]]\nname = \"fixture\"\n", "crates/core.rs": b"// Native input\nfn main() {}\n", "assets/icon.png": b"binary\r\npreserve\0exact\n"}
+            for name, expected in fixtures.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(expected)
+                identity = subprocess.run(["git", "-C", str(root), "hash-object", "-w", "--no-filters", str(path)], check=True, capture_output=True, text=True).stdout.strip()
+                actual = subprocess.run(["git", "-C", str(root), "-c", "core.autocrlf=true", "cat-file", "--filters", "--path=" + name, identity], check=True, capture_output=True).stdout
+                self.assertEqual(actual, expected, name)
+
     def test_evidence_cannot_escape_repository(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(ValueError):
@@ -356,6 +380,17 @@ class ReleaseChecks(unittest.TestCase):
             acceptance, reason = accepted_ux(root, "0.1.0-alpha.1", "a" * 64)
             self.assertIsNotNone(acceptance)
             self.assertIsNone(reason)
+
+    def test_foundation_review_cannot_satisfy_selected_full_editor_scope(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, gate = self.make_review(root)
+            acceptance, reason = accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")
+            self.assertIsNone(acceptance)
+            self.assertIn("required scope: full-editor-parity", reason)
+            record["scope"] = "full-editor-parity"
+            gate.write_text(json.dumps(record))
+            self.assertIsNotNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")[0])
 
     def test_stale_blocked_and_unreviewed_scopes_do_not_pass(self):
         with tempfile.TemporaryDirectory() as folder:

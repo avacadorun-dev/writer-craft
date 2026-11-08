@@ -1,11 +1,33 @@
 //! Bounded native writer workspace: state and command orchestration.
+#[cfg(feature = "editor-preview")]
+mod clipboard_host;
+#[cfg(feature = "editor-preview")]
+mod clipboard_jobs;
 mod commands;
+mod components;
+mod daily_controls;
 mod dialogs;
 mod library;
 mod manuscript;
+mod native_capture;
+#[cfg(feature = "editor-preview")]
+mod native_services;
 mod navigator;
+#[cfg(feature = "editor-preview")]
+mod notes;
+#[cfg(feature = "editor-preview")]
+mod project_clipboard;
+#[cfg(feature = "editor-preview")]
+mod proofing;
+#[cfg(feature = "editor-preview")]
+mod recovery;
+#[cfg(feature = "editor-preview")]
+mod rendering;
 mod review;
+#[cfg(feature = "editor-preview")]
+mod rich_editor;
 mod settings;
+mod storage;
 use crate::{
     i18n::{InterfacePreferences, Language},
     icons::{self, Icon},
@@ -30,6 +52,8 @@ type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Inspector {
+    #[cfg(feature = "editor-preview")]
+    Notes,
     Review,
     Versions,
 }
@@ -45,11 +69,26 @@ struct FrozenSelection {
 pub struct StudioApp {
     workspace: Workspace,
     database: PathBuf,
+    storage: storage::StorageState,
     projects: Vec<Project>,
     project: Option<Project>,
     documents: Vec<Document>,
     document: Option<Document>,
     body: String,
+    #[cfg(feature = "editor-preview")]
+    rich: Option<rich_editor::RichState>,
+    #[cfg(feature = "editor-preview")]
+    notes: notes::NotesState,
+    #[cfg(feature = "editor-preview")]
+    recovery: Option<recovery::RecoveryDialog>,
+    #[cfg(feature = "editor-preview")]
+    clipboard_jobs: clipboard_jobs::ClipboardJobs,
+    #[cfg(feature = "editor-preview")]
+    clipboard_recovery: Option<clipboard_host::ClipboardRecovery>,
+    #[cfg(feature = "editor-preview")]
+    clipboard_intents: std::sync::Arc<craft_editor_egui::clipboard::ClipboardIntentGate>,
+    #[cfg(feature = "editor-preview")]
+    clipboard: Option<std::sync::Arc<dyn craft_editor_egui::clipboard::ClipboardProvider>>,
     dirty: Option<Instant>,
     autosave_paused: bool,
     library: bool,
@@ -65,14 +104,18 @@ pub struct StudioApp {
     error: Option<UiError>,
     language: Language,
     settings: ThemeSettings,
+    appearance_preferences: crate::preference_file::FlatPreferenceStore<ThemeSettings>,
+    interface_preferences: crate::preference_file::FlatPreferenceStore<InterfacePreferences>,
     settings_open: bool,
     settings_section: settings::Section,
     focus_manuscript: bool,
     font_size: f32,
+    editor_preferences: crate::editor_preferences::EditorPreferenceStore,
     project_dialog: bool,
     project_name: String,
     document_dialog: bool,
     document_name: String,
+    daily_controls: daily_controls::DailyControls,
     expected: String,
     replacement: String,
     focus_replacement: bool,
@@ -83,6 +126,7 @@ pub struct StudioApp {
     >,
     import_preview: Option<studio_transfer::ImportPreview>,
     capture: Option<PathBuf>,
+    capture_probe: native_capture::CaptureProbe,
     frames: u32,
 }
 
@@ -93,32 +137,95 @@ impl StudioApp {
         demo: bool,
         capture: Option<PathBuf>,
     ) -> AppResult<Self> {
-        let (preferences, preferences_error) =
-            match InterfacePreferences::load(database.with_file_name("interface.json")) {
-                Ok(preferences) => (preferences, None),
-                Err(error) => (
-                    InterfacePreferences::default(),
-                    Some(UiError {
-                        msgid: "The saved data could not be decoded.",
-                        details: error.to_string(),
-                    }),
-                ),
-            };
         let workspace = Workspace::open(&database)?;
-        let settings = std::fs::read(database.with_file_name("appearance.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
+        let mut preference_errors = Vec::new();
+        let interface_path = database.with_file_name("interface.json");
+        let interface_preferences = match crate::preference_file::FlatPreferenceStore::<
+            InterfacePreferences,
+        >::load(interface_path.clone())
+        {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("interface.json: {error}"));
+                crate::preference_file::FlatPreferenceStore::blocked(interface_path)
+            }
+        };
+        let preferences = interface_preferences.values;
+        let legacy_size = interface_preferences
+            .loaded_from_file()
+            .then_some(preferences.font_size);
+        let editor_path = database.with_file_name("editor.json");
+        let editor_preferences = match crate::editor_preferences::EditorPreferenceStore::load(
+            editor_path.clone(),
+            legacy_size,
+        ) {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("editor.json: {error}"));
+                crate::editor_preferences::EditorPreferenceStore::blocked(editor_path, legacy_size)
+            }
+        };
+        let appearance_path = database.with_file_name("appearance.json");
+        let appearance_preferences = match crate::preference_file::FlatPreferenceStore::<
+            ThemeSettings,
+        >::load(appearance_path.clone())
+        {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("appearance.json: {error}"));
+                crate::preference_file::FlatPreferenceStore::blocked(appearance_path)
+            }
+        };
+        let settings = appearance_preferences.values;
+        let preference_files_need_attention = interface_preferences.needs_attention()
+            || editor_preferences.needs_attention()
+            || appearance_preferences.needs_attention();
+        let preferences_error = (!preference_errors.is_empty()).then(|| UiError {
+            msgid: "Some saved settings could not be loaded. Their files were preserved.",
+            details: preference_errors.join("\n"),
+        });
+        #[cfg(feature = "editor-preview")]
+        native_services::manuscript_fonts()?;
+        #[cfg(all(feature = "editor-preview", not(test)))]
+        let (clipboard, clipboard_error) = match native_services::clipboard() {
+            Ok(provider) => (Some(provider), None),
+            Err(error) => (
+                None,
+                Some(UiError {
+                    msgid: "The system clipboard is unavailable. Reopen the application and try again.",
+                    details: error.to_string(),
+                }),
+            ),
+        };
+        #[cfg(all(feature = "editor-preview", test))]
+        let (clipboard, clipboard_error) = (None, None);
+        #[cfg(feature = "editor-preview")]
+        let preferences_error = preferences_error.or(clipboard_error);
         install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx, &settings);
         let mut app = Self {
             workspace,
             database,
+            storage: storage::StorageState::default(),
             projects: vec![],
             project: None,
             documents: vec![],
             document: None,
             body: String::new(),
+            #[cfg(feature = "editor-preview")]
+            rich: None,
+            #[cfg(feature = "editor-preview")]
+            notes: notes::NotesState::default(),
+            #[cfg(feature = "editor-preview")]
+            recovery: None,
+            #[cfg(feature = "editor-preview")]
+            clipboard_jobs: clipboard_jobs::ClipboardJobs::new()?,
+            #[cfg(feature = "editor-preview")]
+            clipboard_recovery: None,
+            #[cfg(feature = "editor-preview")]
+            clipboard_intents: std::sync::Arc::default(),
+            #[cfg(feature = "editor-preview")]
+            clipboard,
             dirty: None,
             autosave_paused: false,
             library: true,
@@ -130,7 +237,7 @@ impl StudioApp {
             inspector_visible: false,
             inspector: Inspector::Review,
             search: String::new(),
-            status: if preferences_error.is_some() {
+            status: if preferences_error.is_some() && !preference_files_need_attention {
                 "Attention needed"
             } else {
                 "All changes saved"
@@ -139,14 +246,18 @@ impl StudioApp {
             error: preferences_error,
             language: preferences.language,
             settings,
+            appearance_preferences,
+            interface_preferences,
             settings_open: false,
             settings_section: settings::Section::Appearance,
             focus_manuscript: false,
-            font_size: preferences.font_size,
+            font_size: editor_preferences.values.font_size,
+            editor_preferences,
             project_dialog: false,
             project_name: String::new(),
             document_dialog: false,
             document_name: String::new(),
+            daily_controls: daily_controls::DailyControls::default(),
             expected: String::new(),
             replacement: String::new(),
             focus_replacement: false,
@@ -155,6 +266,7 @@ impl StudioApp {
             import_job: None,
             import_preview: None,
             capture,
+            capture_probe: native_capture::CaptureProbe::default(),
             frames: 0,
         };
         app.projects = app.workspace.list_projects()?;
@@ -177,16 +289,54 @@ impl StudioApp {
             app.settings_section = match std::env::var("WRITERCRAFT_CAPTURE_SECTION").as_deref() {
                 Ok("general") => settings::Section::General,
                 Ok("editor") => settings::Section::Editor,
+                Ok("files") => settings::Section::Files,
                 Ok("mcp") => settings::Section::Mcp,
                 _ => app.settings_section,
             };
         }
         if demo {
+            // Synthetic capture fixtures do not depend on the application's identity.
+            // The capture runner supplies a new isolated database and explicit --demo.
+            #[cfg(feature = "editor-preview")]
+            let rich_demo = crate::editor_preview_requested() || app.capture.is_some();
             if app.projects.is_empty() {
+                #[cfg(feature = "editor-preview")]
+                if rich_demo {
+                    app.create_editor_example()?;
+                } else {
+                    app.create_example()?;
+                }
+                #[cfg(not(feature = "editor-preview"))]
                 app.create_example()?;
             }
             if let Some(project) = app.projects.first().cloned() {
+                #[cfg(feature = "editor-preview")]
+                let showcase = if rich_demo {
+                    Some(app.ensure_editor_showcase(&project)?)
+                } else {
+                    None
+                };
                 app.open_project(project)?;
+                #[cfg(feature = "editor-preview")]
+                if let Some(showcase) = showcase {
+                    app.open_document(showcase)?;
+                }
+            }
+        }
+        // These read-only presentation overrides belong only to explicitly requested captures.
+        if app.capture.is_some() {
+            if std::env::args().any(|argument| argument == "--capture-focus") {
+                app.focus_mode = true;
+            }
+            if std::env::args().any(|argument| argument == "--capture-max-text") {
+                app.font_size = 28.0;
+                app.editor_preferences.values.font_size = 28.0;
+            }
+            #[cfg(feature = "editor-preview")]
+            if std::env::args().any(|argument| argument == "--capture-notes") {
+                app.inspector = Inspector::Notes;
+                app.inspector_visible = true;
+                app.prefer_inspector = true;
             }
         }
         if app.capture.is_some() && std::env::args().any(|argument| argument == "--capture-review")
@@ -197,6 +347,9 @@ impl StudioApp {
             app.inspector_visible = true;
             app.prefer_inspector = true;
             app.stage()?;
+        }
+        if app.capture.is_some() {
+            app.initialize_capture(demo)?;
         }
         Ok(app)
     }
@@ -212,28 +365,90 @@ impl StudioApp {
     }
 
     fn open_project(&mut self, project: Project) -> AppResult<()> {
+        self.commit_title_edit()?;
+        #[cfg(feature = "editor-preview")]
+        self.cancel_clipboard_work();
         self.save()?;
-        self.documents = self.workspace.list_documents(&project.id)?;
-        self.project = Some(project);
-        self.document = None;
-        self.body.clear();
-        self.library = false;
-        if let Some(document) = self.documents.first().cloned() {
+        let documents = self.workspace.list_documents(&project.id)?;
+        if let Some(document) = documents.first().cloned() {
+            // The old project/context remains intact if opening needs an explicit
+            // recovery choice. Never display an empty project after a guarded refusal.
             self.open_document(document)?;
+            #[cfg(feature = "editor-preview")]
+            if self.recovery.is_some() {
+                return Ok(());
+            }
+        } else {
+            self.document = None;
+            self.body.clear();
+            #[cfg(feature = "editor-preview")]
+            {
+                self.rich = None;
+                self.notes.clear();
+            }
+            self.daily_controls.document_changed();
         }
+        self.documents = documents;
+        self.project = Some(project);
+        self.library = false;
         Ok(())
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        self.commit_title_edit()?;
+        #[cfg(feature = "editor-preview")]
+        self.cancel_clipboard_work();
         self.save()?;
         let document = self.workspace.document(&document.id)?;
+        #[cfg(feature = "editor-preview")]
+        let (document, recovered_checkpoint) = if let Some(draft) =
+            self.workspace.rich_draft(&document.id)?
+            && draft.has_annotation_checkpoint
+        {
+            // Recovery checks the exact durable binding before a new session or
+            // decoration source can observe guessed or stale attachments.
+            match self.workspace.recover_rich_editor_draft(
+                &document.id,
+                document.revision,
+                &draft.version,
+            ) {
+                Ok(recovered) => (recovered, true),
+                Err(error) => {
+                    self.show_recovery_conflict(&document.id, &error)?;
+                    return Ok(());
+                }
+            }
+        } else {
+            (document, false)
+        };
+        #[cfg(feature = "editor-preview")]
+        let mut rich = rich_editor::RichState::open(&self.workspace, &document)?;
+        #[cfg(feature = "editor-preview")]
+        if let Some(state) = &mut rich {
+            state.session.set_clipboard_provider(self.clipboard.clone());
+            state
+                .session
+                .set_clipboard_mode(craft_editor_egui::clipboard::ClipboardMode::Deferred)?;
+            state
+                .session
+                .set_clipboard_intent_gate(self.clipboard_intents.clone())?;
+        }
+        #[cfg(feature = "editor-preview")]
+        {
+            // Note metadata must not prevent the writer from opening preserved prose.
+            // NotesState hides stale context and caches the failed acquisition until retry.
+            let result = self.notes.prepare(&self.workspace, &document);
+            self.record_error(result);
+        }
         self.body.clone_from(&document.body);
         self.dirty = None;
         self.autosave_paused = false;
         if self.error.is_none() {
             self.status = "All changes saved".into();
         }
-        if let Some(draft) = self.workspace.draft(&document.id)? {
+        if document.rich_json.is_none()
+            && let Some(draft) = self.workspace.draft(&document.id)?
+        {
             if draft.base_revision == document.revision && draft.body != document.body {
                 self.body = draft.body;
                 self.dirty = Some(Instant::now());
@@ -244,8 +459,24 @@ impl StudioApp {
                 self.status = "Unsaved text recovered as a separate document".into();
             }
         }
+        #[cfg(feature = "editor-preview")]
+        {
+            if rich.as_ref().is_some_and(|state| state.recovered) {
+                self.dirty = Some(Instant::now());
+                self.status = "Unsaved text recovered".into();
+            }
+            if let Some(state) = &rich {
+                self.body = state.session.document().plain_text();
+            }
+            self.rich = rich;
+        }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
+        self.daily_controls.document_changed();
+        #[cfg(feature = "editor-preview")]
+        if recovered_checkpoint {
+            self.status = "Unsaved text recovered".into();
+        }
         self.expected.clear();
         self.frozen_selection = None;
         self.replacement.clear();
@@ -258,9 +489,18 @@ impl StudioApp {
         result
     }
 
+    fn save_explicit(&mut self) -> AppResult<()> {
+        self.commit_title_edit()?;
+        self.save()
+    }
+
     fn save_dirty_document(&mut self) -> AppResult<()> {
         if self.dirty.is_none() {
             return Ok(());
+        }
+        #[cfg(feature = "editor-preview")]
+        if self.rich.is_some() {
+            return self.save_rich_editor();
         }
         if let Some(document) = self.document.as_ref() {
             let saved =
@@ -376,7 +616,7 @@ impl StudioApp {
             .add_filter(l.text("Plain text"), &["txt"])
             .save_file()
         {
-            let result = atomic_write(&path, self.body.as_bytes());
+            let result = self.export_text_to_path(&path);
             if result.is_ok() {
                 self.status = "Text exported".into();
             }
@@ -384,9 +624,19 @@ impl StudioApp {
         }
     }
 
+    fn export_text_to_path(&self, path: &std::path::Path) -> AppResult<()> {
+        if studio_core::is_workspace_data_path(path, &self.database)? {
+            return Err(studio_core::StudioError::Validation(
+                "protected_workspace_export_path".into(),
+            )
+            .into());
+        }
+        atomic_write(path, self.body.as_bytes())
+    }
+
     fn navigator_width(&self, ctx: &egui::Context) -> f32 {
         egui::containers::panel::PanelState::load(ctx, egui::Id::new("navigator"))
-            .map_or(280.0, |state| state.outer_rect.width().clamp(210.0, 340.0))
+            .map_or(264.0, |state| state.outer_rect.width().clamp(210.0, 340.0))
     }
     fn effective_panes(&self, ctx: &egui::Context) -> (bool, bool) {
         let nav = self.navigator_width(ctx);
@@ -402,6 +652,48 @@ impl StudioApp {
             self.focus_mode,
         )
     }
+    fn can_edit_manuscript(&self) -> bool {
+        let Some(document) = &self.document else {
+            return false;
+        };
+        if document.read_only {
+            return false;
+        }
+        #[cfg(feature = "editor-preview")]
+        if let Some(rich) = &self.rich {
+            return !rich.is_read_only();
+        }
+        document.rich_json.is_none()
+    }
+
+    fn is_recovery_read_only(&self) -> bool {
+        #[cfg(feature = "editor-preview")]
+        {
+            self.rich
+                .as_ref()
+                .is_some_and(rich_editor::RichState::is_recovery_read_only)
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            false
+        }
+    }
+
+    fn rich_modal_open(&self) -> bool {
+        #[cfg(feature = "editor-preview")]
+        {
+            self.notes.modal_open()
+                || self.recovery.is_some()
+                || self
+                    .rich
+                    .as_ref()
+                    .is_some_and(rich_editor::RichState::dialog_open)
+        }
+        #[cfg(not(feature = "editor-preview"))]
+        {
+            false
+        }
+    }
     fn modal_open(&self) -> bool {
         self.settings_open
             || self.project_dialog
@@ -409,6 +701,9 @@ impl StudioApp {
             || self.import_preview.is_some()
             || self.error.is_some()
             || self.full_review.is_some()
+            || self.rich_modal_open()
+            || self.daily_controls.modal_open()
+            || self.storage.modal_open()
     }
 }
 
@@ -416,6 +711,9 @@ impl eframe::App for StudioApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let t = theme::tokens(&ctx);
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_frame_start(&ctx);
+        self.poll_storage(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
         }
@@ -430,12 +728,32 @@ impl eframe::App for StudioApp {
         if (self.dirty.is_some() && !self.autosave_paused) || self.import_job.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
-        if ctx.input(|i| i.viewport().close_requested()) {
-            let result = self.save();
-            if result.is_err() {
+        if ctx.input(|i| i.viewport().close_requested()) && self.storage.modal_open() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        } else if ctx.input(|i| i.viewport().close_requested()) {
+            let title_result = self.commit_title_edit();
+            if title_result.is_err() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.record_error(title_result);
+            } else {
+                #[cfg(feature = "editor-preview")]
+                let note_drafts_pending = self.notes.has_unsaved_drafts();
+                #[cfg(not(feature = "editor-preview"))]
+                let note_drafts_pending = false;
+                if note_drafts_pending {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    #[cfg(feature = "editor-preview")]
+                    if !self.notes.close_confirmation_open() {
+                        self.notes.request_close_confirmation();
+                    }
+                } else {
+                    let result = self.save();
+                    if result.is_err() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    }
+                    self.record_error(result);
+                }
             }
-            self.record_error(result);
         }
         if let Some(receiver) = &self.import_job {
             let received = receiver.try_recv();
@@ -459,8 +777,11 @@ impl eframe::App for StudioApp {
                 self.import_job = None;
             }
         }
+        self.prepare_capture_frame();
         self.toolbar(ui, t);
         self.status_bar(ui, t);
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_recovery_actions(ui);
         let (show_navigator, show_inspector) = self.effective_panes(&ctx);
         if self.library || show_navigator {
             self.navigation(ui, t);
@@ -476,6 +797,12 @@ impl eframe::App for StudioApp {
         let had_modal = self.modal_open();
         self.full_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
+        self.daily_control_dialogs(&ctx, t);
+        self.storage_dialog(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.notes_dialogs(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.recovery_dialogs(&ctx, t);
         if had_modal && !self.modal_open() {
             // The next manuscript may not have been emitted in this frame yet.
             // Focus only after its TextEdit has registered an accessibility node.
@@ -483,55 +810,36 @@ impl eframe::App for StudioApp {
             ctx.request_repaint();
         }
 
-        self.frames += 1;
-        if self.capture.is_some() && self.frames >= 8 {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
-        }
-        let screenshots = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|event| {
-                    if let egui::Event::Screenshot { image, .. } = event {
-                        Some(image.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        });
-        if !screenshots.is_empty()
-            && let Some(path) = self.capture.take()
-            && let Some(image) = screenshots.first()
-        {
-            let result = image::save_buffer(
-                &path,
-                image.as_raw(),
-                image.width() as u32,
-                image.height() as u32,
-                image::ColorType::Rgba8,
-            )
-            .map_err(Into::into);
-            let saved = result.is_ok();
-            self.record_error(result);
-            if saved {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-        }
-        if self.capture.is_some() {
-            ctx.request_repaint();
-        }
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_frame_end(&ctx);
+
+        self.advance_capture(&ctx);
     }
 }
 
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    #[cfg(feature = "editor-preview")]
+    if error.is::<recovery::ReadOnlyRecoveryView>() {
+        return "Recovery preview is read only. Preserved note drafts remain available.";
+    }
     if let Some(error) = error.downcast_ref::<studio_core::StudioError>() {
         use studio_core::StudioError;
         return match error {
+            StudioError::Validation(message) if message == "protected_workspace_export_path" => {
+                "Choose an export file outside the workspace database and settings files."
+            }
             StudioError::Validation(_) | StudioError::InvalidTextRange { .. } => {
                 "Check the entered values and try again."
             }
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
+            }
+            StudioError::AnnotationConflict { .. } => "The note changed. Reload it before editing.",
+            StudioError::DraftAnnotationConflict => {
+                "The draft and notes are preserved. Review their attachments before recovering this document."
+            }
+            StudioError::DraftChanged => {
+                "The working draft changed. Preserve your changes before retrying."
             }
             StudioError::DraftConflict { .. } => {
                 "Recover the unsaved draft from another revision first."
@@ -567,6 +875,12 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             }
             StudioError::Json(_) => "The saved data could not be decoded.",
         };
+    }
+    #[cfg(feature = "editor-preview")]
+    if let Some(craft_editor_egui::Error::Clipboard(error)) =
+        error.downcast_ref::<craft_editor_egui::Error>()
+    {
+        return clipboard_host::message(error);
     }
     if error.is::<studio_transfer::TransferError>() {
         return "The archive could not be checked. The original project was not changed.";
@@ -635,43 +949,7 @@ fn modal(
     width: f32,
     body: impl FnOnce(&mut egui::Ui),
 ) -> egui::ModalResponse<()> {
-    egui::Modal::new(egui::Id::new(id)).show(ctx, |ui| {
-        let width = width.min(ctx.content_rect().width() - 64.0);
-        ui.set_width(width);
-        let header = ui
-            .allocate_exact_size(Vec2::new(width, 44.0), egui::Sense::hover())
-            .0;
-        let title_rect = egui::Rect::from_min_max(
-            header.min + egui::vec2(12.0, 0.0),
-            header.max - egui::vec2(48.0, 0.0),
-        );
-        ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(title_rect)
-                .layout(Layout::left_to_right(Align::Center)),
-            |ui| {
-                ui.set_clip_rect(title_rect);
-                ui.add(egui::Label::new(RichText::new(title).size(20.0).strong()).truncate());
-            },
-        );
-        let close_rect = egui::Rect::from_center_size(
-            egui::pos2(header.right() - 24.0, header.center().y),
-            Vec2::new(36.0, 36.0),
-        );
-        ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(close_rect)
-                .layout(Layout::left_to_right(Align::Center)),
-            |ui| {
-                if icons::icon_button(ui, Icon::Close, language.text("Close")).clicked() {
-                    ui.close();
-                }
-            },
-        );
-        ui.separator();
-        ui.add_space(12.0);
-        body(ui);
-    })
+    components::modal(ctx, language, id, title, width, body)
 }
 
 fn install_fonts(ctx: &egui::Context) {
@@ -735,23 +1013,22 @@ fn nav_row(
     t: Tokens,
 ) -> egui::Response {
     let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), egui::Sense::click());
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), egui::Sense::click());
     if selected || response.hovered() {
         ui.painter()
             .rect_filled(rect, 5.0, if selected { t.accent_soft } else { t.surface });
     }
     let mut child = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(rect.shrink2(Vec2::new(10.0, 3.0)))
+            .max_rect(rect.shrink2(Vec2::new(8.0, 3.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
     icons::icon(
         &mut child,
         icon,
-        17.0,
+        20.0,
         if selected { t.accent } else { t.muted },
     );
-    child.add_space(4.0);
     child.add(
         egui::Label::new(RichText::new(label).size(14.0).color(if selected {
             t.text
@@ -926,6 +1203,54 @@ mod ux_regressions {
             .create_document(&project.id, "A chapter", "🪶 echo, echo.")?;
         app.open_project(project)?;
         Ok((directory, app))
+    }
+
+    #[test]
+    fn text_export_cannot_replace_a_custom_txt_database_sidecars_or_aliases() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context);
+        let database = directory.path().join("active.txt");
+        let mut app = StudioApp::new(&creation, database.clone(), false, None)?;
+        let project = app
+            .workspace
+            .create_project("Synthetic export protection")?;
+        let document =
+            app.workspace
+                .create_document(&project.id, "Chapter", "Keep the original database")?;
+        app.open_project(project)?;
+        let original = std::fs::read(&database)?;
+        let hardlink = directory.path().join("alias.txt");
+        std::fs::hard_link(&database, &hardlink)?;
+        let mut paths = vec![
+            database.clone(),
+            hardlink,
+            directory.path().join("active.TXT"),
+        ];
+        for suffix in ["-wal", "-shm"] {
+            let mut path = database.as_os_str().to_owned();
+            path.push(suffix);
+            paths.push(path.into());
+        }
+        paths.extend(
+            ["appearance.json", "interface.json", "editor.json"]
+                .map(|name| directory.path().join(name)),
+        );
+        #[cfg(unix)]
+        {
+            let symlink = directory.path().join("symlink.txt");
+            std::os::unix::fs::symlink(&database, &symlink)?;
+            paths.push(symlink);
+        }
+        for path in paths {
+            assert!(app.export_text_to_path(&path).is_err());
+        }
+        assert_eq!(std::fs::read(&database)?, original);
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        let output = directory.path().join("safe.txt");
+        app.export_text_to_path(&output)?;
+        assert_eq!(std::fs::read_to_string(&output)?, document.body);
+        Ok(())
     }
 
     #[test]
@@ -1243,6 +1568,14 @@ mod catalog_source_checks {
             include_str!("app/review.rs"),
             include_str!("app/dialogs.rs"),
             include_str!("app/settings.rs"),
+            include_str!("app/components.rs"),
+            include_str!("app/authoring.rs"),
+            include_str!("app/rich_editor.rs"),
+            include_str!("app/notes.rs"),
+            include_str!("app/clipboard_host.rs"),
+            include_str!("app/rendering.rs"),
+            include_str!("app/daily_controls.rs"),
+            include_str!("app/recovery.rs"),
         ];
         for source in sources {
             for marker in [".text(", ".format("] {

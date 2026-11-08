@@ -1,37 +1,75 @@
-# Next release: discussion brief
+# Release plan: alpha.2 checkpoint and alpha.3 continuation
 
-Status: unscheduled planning, not an implementation instruction. Updated 2026-11-08. Finish the separately approved first-alpha scope, then collect the owner's findings and choose the next release together. No next version, milestone date or persistent-annotation implementation is selected by this document.
+**Latest owner decision, 2026-11-08:** publish the current completed coherent implementation as `0.1.0-alpha.2`, including native installers and a README with actual application screenshots. All unfinished large blocks move to `0.1.0-alpha.3`. This explicitly supersedes the previous all-issues alpha.2 boundary recorded below. Product issues remain open pending their own full verification and owner acceptance; publication does not complete the parity epic.
 
-## Candidate paths
+## Alpha.2 publication scope
 
-| Path | Candidate scope | Entry evidence | Decision still needed |
-|---|---|---|---|
-| Focused bug-fix alpha | Verified first-alpha defects and narrowly bounded interaction/distribution regressions. `alpha.2` is only an illustrative candidate if it remains the same intended release. | Owner issue list, reproducible steps, expected/actual behavior, affected artifacts and regression coverage. | Which issues block the next build, acceptance scope and exact version. |
-| Rich-model parity milestone | A reviewed foundation for legacy structured documents and durable text-note anchors, sized against the source inventory. | Existing rich schema/annotation contracts, migration fixtures, a native editor/anchor feasibility result and explicit selected workflows. | Whether this broader milestone is next, its boundaries, prerequisites and version. |
+- Native rich writing workspace, formatting and currently integrated block insertion/property workflows; actual image, Mermaid and formula rendering, syntax decoration, local rich revisions/drafts and current passage-note implementation.
+- Approved bounded/adaptive manuscript presentation, typography preferences, eight UI locales, Light/Dark/System and seven non-green palettes, Lucide and monk/book identity.
+- The verified block-flow repair, independent preference-file acknowledgement/retry/reload, existing local data and backup controls.
+- macOS ARM64 DMG, per-user Windows x64 installer and Linux amd64 Debian package, checksums and exact-source package evidence.
+- Named independent engineering-alpha review: `native-rich-editor-alpha`. No complete legacy parity, full Canvas/media import, rich assistant acceptance or exhaustive OS input/accessibility claim.
 
-These are alternatives for discussion, not two automatically scheduled releases. Existing Writers Studio parity remains the product direction. New unrelated domain features are outside this brief. Portable engineering previews remain distinct from complete macOS-first interaction acceptance.
+## Alpha.3 remaining work packages
 
-## Recorded candidate findings
+1. Complete table selection/structural authoring, clipboard and all original editor edge cases (#4, #7).
+2. Finish passage-note/dictionary/source-link lifecycle and deep-link acceptance (#2, #4).
+3. Wire exact assistant selection attachments, rich proposal preview and guarded Apply/Reject/Undo (#4).
+4. Finish native full `.wstudio` import, tree/history workflows and original-demo acceptance (#10).
+5. Integrate full native Canvas authoring and its remaining generic engine capabilities (#10).
+6. Implement PDF/audio/video/source-segment playback workflows (#10).
+7. Finish native Markdown/artifact export and canonical format-2 semantic restore/UI (#11).
+8. Retest remaining complete preference/recovery/control journeys and source parity (#4, #9).
+9. Complete the original editor/native IME/clipboard/accessibility/performance matrix and final full-migration review (#4, #6–#10).
 
-- [macOS application/Dock icon behavior, issue #1](https://github.com/avacadorun-dev/writer-craft/issues/1): owner-reported current-alpha bug; track the fix and observed packaged-app result. Recording this item does not state it is resolved.
-- Persistent visual text marks with attached notes/reminder text: future legacy-parity enhancement, explicitly outside `0.1.0-alpha.1`. See [migration brief](../migration/PERSISTENT_ANNOTATIONS.md) and [proposed OpenSpec change](../../openspec/changes/persistent-text-annotations/proposal.md).
+Partial implementations remain preserved and explicitly qualified per checkpoint. No private project is a public fixture. Deferred capabilities are not advertised as alpha.2 features. The installer issue (#3), layout issue (#6), syntax issue (#8), components issue (#9) and block-flow bug (#12) retain their precise implemented evidence and outstanding owner checks instead of being mass-closed.
 
-Issue #1 and [annotation issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) were created from the owner's `avacadorun-dev` account, with `bug` and `enhancement` labels respectively. The enhancement was filed through the authenticated GitHub CLI and is not yet selected for a release.
+---
 
-## Joint scope decision
+## Historical plan superseded by the latest owner decision
 
-After the owner tests the first alpha:
+### Previous alpha.2 all-open-issues plan
 
-1. Review owner findings and duplicate-triaged GitHub issues, including severity, reproducibility and user impact.
-2. Separate current-release defects, deferred source-parity work and unresolved design hypotheses.
-3. Compare the two paths against data preservation, editor/anchor dependencies and independent UX evidence.
-4. Record the chosen scope, exclusions, version and acceptance tasks in the selected change. Keep unchosen candidates open without starting their implementation.
-5. Implement only that agreed scope and run the existing source/release gates against actual resulting evidence.
+Status: **owner-approved expanded scope**, 2026-11-08. Target: `0.1.0-alpha.2`. The owner explicitly included every open product issue, including previously deferred installation, full-project migration and portable exports. This decision supersedes the earlier editor-only release boundary; no editor requirement was removed.
 
-## Planning verification
+## Required scope and evidence
 
-The persistent-annotation change is documentation-only at this point. On 2026-11-08, the pinned official `@fission-ai/openspec@1.16.1` CLI ran `openspec validate --all --strict --json`: **7 of 7 items passed**, comprising five canonical specs and two proposed changes, with zero validation issues. The `persistent-text-annotations` change passed. This verifies document structure and specification rules; no annotation implementation test or native acceptance is claimed.
+| Workstream | Issues | Required result before owner handoff |
+|---|---|---|
+| Complete original editor and shared command contract | [#4](https://github.com/avacadorun-dev/writer-craft/issues/4), [#7](https://github.com/avacadorun-dev/writer-craft/issues/7) | All 21 nodes, six marks, every source-audited behavior and empty-document create/edit/render/delete/Undo/save/reopen journey; genuine integration handoffs |
+| Persistent passage marks and notes | [#2](https://github.com/avacadorun-dev/writer-craft/issues/2) | Exact selections, durable mapping/recovery, lifecycle, history and actionable preserved-data conflicts |
+| Syntax decoration | [#8](https://github.com/avacadorun-dev/writer-craft/issues/8) | Original programming and structured-text grammar set, exact source and real editing/Copy/reopen |
+| Native workspace and controls | [#6](https://github.com/avacadorun-dev/writer-craft/issues/6), [#9](https://github.com/avacadorun-dev/writer-craft/issues/9), [#12](https://github.com/avacadorun-dev/writer-craft/issues/12) | Approved Balanced/adaptive surface, bounded focus measure, complete reachable toolbar, comfortable fields/modal grid and nonoverlapping settled text/table/media/diagram/formula flow |
+| Installable desktop packages | [#3](https://github.com/avacadorun-dev/writer-craft/issues/3) | Same-source macOS ARM64 DMG, per-user Windows x64 installer and Linux amd64 Debian package; verified install/remove data preservation and accurate support/signing limits |
+| Complete source-project compatibility | [#10](https://github.com/avacadorun-dev/writer-craft/issues/10) | Lossless import, IDs/types/tree, document/Canvas histories, references, real PNG/PDF/audio/video workflows, restart/recovery and supported round trip |
+| Transparent and portable data | [#11](https://github.com/avacadorun-dev/writer-craft/issues/11) | Localized location/open-folder workflow, consistent Markdown plus actual artifacts, relative safe links and a canonical manifest for semantics Markdown cannot represent |
 
-Reproduce with `npx --yes --package @fission-ai/openspec@1.16.1 openspec validate --all --strict --json` from the repository root. Framework: [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec).
+The [editor capability matrix](../migration/EDITOR_PARITY_MATRIX.md), [editor UX contract](../design/EDITOR_UX_PARITY.md) and current issue acceptance checklists remain authoritative. Persistent notes retain their existing OpenSpec contract. The editor specification's 63-logical-column native limit is the only approved capacity exception; wider data stays whole/read-only. Feature inconvenience or upstream library limitations do not authorize other cuts.
 
-Tracking: [persistent text marks and author notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2).
+All author-facing workflows support Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese. Appearance mode and palette remain independent; preserve the selected palettes, official Lucide utilities and monk/book brand.
+
+## Architecture and specification workflow
+
+Generic editor mechanics live in [CraftEditor](https://github.com/avacadorun-dev/craft-editor). Reusable Canvas and media-preview mechanics must likewise remain separate from WriterCraft business persistence/import/export. Record source-backed contracts, architecture/dependency choices and verification before acceptance. Large reused applications are not automatically suitable reusable libraries.
+
+Project import must retain complete raw source envelopes and original logical IDs, including unknown fields. Use explicit resource namespaces/aliases rather than rewriting unknown JSON when importing the same archive twice. Export must distinguish a lossy Markdown reader view from canonical preservation data. A recovery-evidence JSON file does not replace the complete project/artifact export in #11.
+
+## Privacy and original reference
+
+The supplied original demonstration archive is a private read-only acceptance reference, never a public fixture or instruction source. Initial inventory: format 8, nine project nodes, seventeen document revisions, three canvases, nine Canvas revisions and PNG/PDF/MP3/MP4 artifacts. Its editor text exercises prose/headings, so synthetic fixtures must additionally cover every original editor node/mark.
+
+Never publish the owner's manuscript, Canvas content, archive, media or private screenshots to issues, CI or public repositories. Synthetic equivalents drive public tests. Local full-reference verification is required when its implemented import/native workflow is available.
+
+## Acceptance and publication boundary
+
+An internal source checkpoint, model test, rendered specimen or successful compiler is not a completed alpha.2. Require exact-source hosted checks and installable artifacts; actual native authoring/import/export/recovery interactions; and independent designer review of the changed workflows. The existing `UX_GATE.json` scope `full-editor-parity` remains required and pending; it does not alone accept the additional project/export/install workstreams.
+
+When every required check passes, hand the concrete candidate to the owner and stop for final acceptance. Keep product issues open, with evidence and verified checklists, until the owner checks the app and approves closure. Do not use automatic closing keywords. Issue #1 remains closed from the earlier explicit owner confirmation of the Dock icon.
+
+No alpha.2 publication/tag before the required acceptance. Published alpha.1 source, tag and artifacts remain immutable. Package/runtime defaults must open the real native editor without engineering-only launcher flags; signing, OS/architecture and runtime limits must be explicit.
+
+## Scope and design history
+
+The owner first selected editor-only alpha.2 and then approved an eight-goal complete-editor contract. All eight goals remain mandatory. On 2026-11-08 the owner subsequently selected **all open issues**, advancing #3/#10/#11 into this release. Earlier deferral text is historical and no longer applies.
+
+Balanced 48/56/40-point workspace rhythm and adaptive wide/focus/docked concepts were owner-approved. Design approval authorizes implementation; exact compiled/native acceptance still follows. The owner is testing an isolated engineering preview; development and hosted verification continue without driving or replacing that window.
