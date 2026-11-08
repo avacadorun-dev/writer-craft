@@ -54,3 +54,10 @@ staleness, structured multi-block edits, notes inside/outside changed text, unkn
 resource isolation, over-capacity tables, failed atomic publication, Reject, compensating Undo,
 post-Apply note edits, restart and imported-evidence quarantine. Then exercise the real compiled
 context menu, chip, source preview, Apply/Reject/Undo, keyboard/IME and designer acceptance.
+
+
+## Alpha.3 implementation boundaries
+
+Use additive schema9 `rich_proposals` records, with scoped content-light cursor pages and explicit selected-record loading. The complete typed command batch is bounded to1,000 operations/16MiB and the reason to4,000 Unicode scalars. Core commands accept a fixed project scope separately from the record identity; deserialized proposal/attachment fields never establish project authority. Preparation and Apply enforce the current63-column native table bound and project-owned image references. An unresolved rich or plain working draft blocks canonical Apply/Undo; the UI must acknowledge its normal save first. A no-op proposal is refused rather than manufacturing an applied revision.
+
+The native composer continues to identify local manual proposals accurately; provider connectivity is separate existing migration work. Detached engine preparation does not enter the live session's manual Undo stack. Apply/Undo must rebase or replace the native session only after the canonical transaction succeeds, invalidate stale attachment chips and refresh exact note context. Full native history behavior remains a required acceptance case.
