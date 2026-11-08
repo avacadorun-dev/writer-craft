@@ -295,9 +295,13 @@ impl StudioApp {
             };
         }
         if demo {
+            // Synthetic capture fixtures do not depend on the application's identity.
+            // The capture runner supplies a new isolated database and explicit --demo.
+            #[cfg(feature = "editor-preview")]
+            let rich_demo = crate::editor_preview_requested() || app.capture.is_some();
             if app.projects.is_empty() {
                 #[cfg(feature = "editor-preview")]
-                if crate::editor_preview_requested() {
+                if rich_demo {
                     app.create_editor_example()?;
                 } else {
                     app.create_example()?;
@@ -307,7 +311,7 @@ impl StudioApp {
             }
             if let Some(project) = app.projects.first().cloned() {
                 #[cfg(feature = "editor-preview")]
-                let showcase = if crate::editor_preview_requested() {
+                let showcase = if rich_demo {
                     Some(app.ensure_editor_showcase(&project)?)
                 } else {
                     None
@@ -320,7 +324,7 @@ impl StudioApp {
             }
         }
         // These read-only presentation overrides belong only to explicitly requested captures.
-        if app.capture.is_some() && crate::editor_preview_requested() {
+        if app.capture.is_some() {
             if std::env::args().any(|argument| argument == "--capture-focus") {
                 app.focus_mode = true;
             }
