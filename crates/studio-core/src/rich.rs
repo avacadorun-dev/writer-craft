@@ -23,6 +23,9 @@ pub struct RichDraft {
     pub version: String,
     /// Complete structured content; never a flattened display projection.
     pub content: Value,
+    /// Whether this exact draft has a private, proof-derived attachment checkpoint.
+    #[serde(default)]
+    pub has_annotation_checkpoint: bool,
 }
 
 /// One complete historical structured document snapshot.
@@ -211,11 +214,16 @@ impl Workspace {
         }
         let version = uuid::Uuid::new_v4().to_string();
         transaction.execute("INSERT INTO rich_working_drafts(document_id,base_revision,version,content_json) VALUES(?1,?2,?3,?4) ON CONFLICT(document_id) DO UPDATE SET base_revision=excluded.base_revision,version=excluded.version,content_json=excluded.content_json", params![id, expected_revision, version, encoded])?;
+        transaction.execute(
+            "DELETE FROM rich_draft_annotations WHERE document_id=?1",
+            [id],
+        )?;
         transaction.commit()?;
         Ok(RichDraft {
             base_revision: expected_revision,
             version,
             content,
+            has_annotation_checkpoint: false,
         })
     }
 
@@ -223,14 +231,17 @@ impl Workspace {
     pub fn rich_draft(&self, id: &str) -> Result<Option<RichDraft>> {
         let connection = self.connection()?;
         read_document(&connection, id)?;
-        let row = connection.query_row("SELECT base_revision,version,content_json FROM rich_working_drafts WHERE document_id=?1", [id], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))).optional()?;
-        row.map(|(base_revision, version, encoded)| {
-            Ok(RichDraft {
-                base_revision,
-                version,
-                content: serde_json::from_str(&encoded)?,
-            })
-        })
+        let row = connection.query_row("SELECT base_revision,version,content_json,EXISTS(SELECT 1 FROM rich_draft_annotations a WHERE a.document_id=rich_working_drafts.document_id AND a.draft_version=rich_working_drafts.version) FROM rich_working_drafts WHERE document_id=?1", [id], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, bool>(3)?))).optional()?;
+        row.map(
+            |(base_revision, version, encoded, has_annotation_checkpoint)| {
+                Ok(RichDraft {
+                    base_revision,
+                    version,
+                    content: serde_json::from_str(&encoded)?,
+                    has_annotation_checkpoint,
+                })
+            },
+        )
         .transpose()
     }
 

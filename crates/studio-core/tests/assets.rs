@@ -415,8 +415,10 @@ fn schema_four_migration_preserves_existing_rich_notes_drafts_and_history() {
         (saved, annotation, draft)
     };
     let raw = rusqlite::Connection::open(&path).unwrap();
-    raw.execute_batch("DROP TABLE project_assets; PRAGMA user_version=4;")
-        .unwrap();
+    raw.execute_batch(
+        "DROP TABLE rich_draft_annotations; DROP TABLE project_assets; PRAGMA user_version=4;",
+    )
+    .unwrap();
     drop(raw);
     let workspace = Workspace::open(&path).unwrap();
     assert_eq!(workspace.document(&saved.id).unwrap(), saved);
@@ -431,7 +433,7 @@ fn schema_four_migration_preserves_existing_rich_notes_drafts_and_history() {
     assert_eq!(
         raw.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        5
+        6
     );
 }
 

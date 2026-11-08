@@ -4,6 +4,7 @@
 //! different contract. No command locates a note by searching for matching text.
 
 mod legacy;
+mod recovery;
 pub use legacy::{LegacyAnchorProjection, LegacyAnchorResolution};
 
 use std::collections::HashMap;

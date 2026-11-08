@@ -5,6 +5,7 @@
 
 mod annotations;
 mod assets;
+mod daily_controls;
 mod rich;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
@@ -13,6 +14,10 @@ pub use annotations::{
 pub use assets::{
     ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
     ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages, validate_image_transfers,
+};
+pub use daily_controls::{
+    DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
+    find_first_text_match,
 };
 pub use rich::{RichDraft, RichRevision};
 
@@ -27,7 +32,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -59,6 +64,9 @@ pub enum StudioError {
         "The working draft changed in another edit session; preserve this draft before retrying"
     )]
     DraftChanged,
+    /// A durable draft's verified attachment context no longer matches current notes.
+    #[error("draft_annotation_conflict")]
+    DraftAnnotationConflict,
     /// Imported structured content cannot safely be edited as plain text.
     #[error("Imported document {document_id} is read-only to preserve its original structure")]
     ReadOnly { document_id: String },
@@ -303,6 +311,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("rich.sql"))?;
             transaction.execute_batch(include_str!("annotations.sql"))?;
             transaction.execute_batch(include_str!("assets.sql"))?;
+            transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -317,7 +326,12 @@ impl Workspace {
             if version < 4 {
                 transaction.execute_batch(include_str!("annotations.sql"))?;
             }
-            transaction.execute_batch(include_str!("assets.sql"))?;
+            if version < 5 {
+                transaction.execute_batch(include_str!("assets.sql"))?;
+            }
+            if version < 6 {
+                transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
+            }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         transaction.commit()?;
