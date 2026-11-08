@@ -148,6 +148,7 @@ def main(bundle: Path) -> int:
         save()
         targets = {
             "compact-light-en-image": "showcase-image",
+            "compact-light-en-21-image": "showcase-image",
             "compact-dark-en-image": "showcase-image",
             "compact-light-en-flowchart": "showcase-flowchart",
             "compact-dark-en-sequence": "showcase-sequence",
@@ -158,6 +159,7 @@ def main(bundle: Path) -> int:
             "wide-light-en-small-inter-flowchart": "showcase-flowchart",
         }
         profiles = {
+            "compact-light-en-21-image": {"font_family": "sofia", "font_size": 21.0, "line_height": 1.5, "paragraph_spacing": 0.65, "list_item_spacing": 0.25, "manuscript_width": 70},
             "compact-dark-en-large-serif-image": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
             "compact-dark-en-large-serif-image-bottom": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
             "wide-light-en-small-inter-flowchart": {"font_family": "inter", "font_size": 17.0, "line_height": 1.5, "paragraph_spacing": 0.65, "list_item_spacing": 0.0, "manuscript_width": 80},
@@ -174,6 +176,7 @@ def main(bundle: Path) -> int:
             ("compact-dark-de-notes", "de", None, True, ["--capture-notes"]),
             ("wide-dark-en-editor", "en", "editor", False, ["--settings"]),
             ("compact-light-en-image", "en", None, True, ["--light"]),
+            ("compact-light-en-21-image", "en", None, True, ["--light"]),
             ("compact-dark-en-image", "en", None, True, []),
             ("compact-light-en-flowchart", "en", None, True, ["--light"]),
             ("compact-dark-en-sequence", "en", None, True, []),

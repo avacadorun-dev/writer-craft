@@ -235,7 +235,7 @@ fn unacknowledged_draft_and_foreign_project_are_refused_without_mutating_either_
             .is_err()
     );
     let content = document.rich_json.clone().ok_or("rich fixture")?;
-    workspace.save_rich_draft(&document.id, 1, content)?;
+    workspace.save_rich_draft(&document.id, 1, None, content)?;
     let draft = workspace.rich_draft(&document.id)?;
     assert!(
         workspace
