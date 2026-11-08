@@ -63,3 +63,9 @@ The native rich session SHALL support a guarded whole-table node selection disti
 #### Scenario: A captured selected table becomes stale
 - **WHEN** a command or clipboard acknowledgement references an older revision, a different session or a changed table snapshot
 - **THEN** it refuses mutation and preserves the current document, selection and history
+
+### Capture-only wide table qualification fixture
+
+The hosted native acceptance harness may select `WRITERCRAFT_CAPTURE_DOCUMENT=wide-tables` only with literal `--demo` and `--capture` flags and an isolated startup workspace under `RUNNER_TEMP`. It must reject a simultaneous nonempty `WRITERCRAFT_CAPTURE_SCENARIO`. Unknown selectors fail rather than silently loading a different document. Ordinary launches and the owner's running preview remain unchanged.
+
+The synthetic document includes a 63-column table and nested tables with canonical widths plus surrounding bounded prose. Final-cell capture targets are `wide-cell-62` and `nested-cell-2`. Actual visible text is counted independently from opaque media. Captures must establish current target identity, nonzero local table scroll offset, bounded viewport/clip and unmodified canonical source; loaded fixture/model tests alone cannot satisfy native UI acceptance.

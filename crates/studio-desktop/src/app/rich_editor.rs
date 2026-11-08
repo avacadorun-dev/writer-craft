@@ -115,6 +115,8 @@ impl RichState {
             )
         {
             state.target_visible = self.capture_text_visible;
+            state.target_is_text = true;
+            state.visible_text_targets = usize::from(self.capture_text_visible);
         }
         state
     }
@@ -278,6 +280,41 @@ impl StudioApp {
     }
 
     pub(super) fn ensure_editor_showcase(&mut self, project: &Project) -> AppResult<Document> {
+        if let Ok(selector) = std::env::var("WRITERCRAFT_CAPTURE_DOCUMENT")
+            && !selector.is_empty()
+        {
+            if selector != "wide-tables" {
+                return Err("unknown_capture_document".into());
+            }
+            let runner = PathBuf::from(
+                std::env::var_os("RUNNER_TEMP")
+                    .ok_or("wide_table_capture_requires_hosted_runner")?,
+            )
+            .canonicalize()?;
+            let parent = self
+                .database
+                .parent()
+                .ok_or("wide_table_capture_database_parent_missing")?
+                .canonicalize()?;
+            if self.capture.is_none()
+                || !std::env::args().any(|argument| argument == "--demo")
+                || !std::env::args().any(|argument| argument == "--capture")
+                || std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true")
+                || !parent.starts_with(&runner)
+                || !parent.file_name().is_some_and(|name| {
+                    name.to_string_lossy()
+                        .starts_with("writercraft-startup-workspace-")
+                })
+            {
+                return Err("wide_table_capture_requires_fresh_hosted_synthetic_workspace".into());
+            }
+            if std::env::var("WRITERCRAFT_CAPTURE_SCENARIO")
+                .is_ok_and(|scenario| !scenario.is_empty())
+            {
+                return Err("capture_document_and_connected_scenario_are_exclusive".into());
+            }
+            return self.ensure_wide_table_capture(project);
+        }
         if let Some(document) = self
             .workspace
             .list_documents(&project.id)?
@@ -327,6 +364,29 @@ impl StudioApp {
         Ok(self
             .workspace
             .create_rich_document(&project.id, "00. All editor blocks", content)?)
+    }
+
+    fn ensure_wide_table_capture(&mut self, project: &Project) -> AppResult<Document> {
+        if let Some(document) = self
+            .workspace
+            .list_documents(&project.id)?
+            .into_iter()
+            .find(|document| {
+                document
+                    .rich_json
+                    .as_ref()
+                    .and_then(|value| value.get("writerCraftWideTableCapture"))
+                    .and_then(serde_json::Value::as_u64)
+                    == Some(1)
+            })
+        {
+            return Ok(document);
+        }
+        Ok(self.workspace.create_rich_document(
+            &project.id,
+            "Synthetic wide and nested tables",
+            serde_json::from_str(include_str!("editor_wide_tables.json"))?,
+        )?)
     }
 
     pub(super) fn save_rich_editor(&mut self) -> AppResult<()> {
@@ -1308,6 +1368,43 @@ mod tests {
             &catalog,
         )?;
         assert!(geometry.extent().is_some());
+        assert_eq!(document.to_json()?, source);
+        Ok(())
+    }
+
+    #[test]
+    fn wide_table_fixture_retains_final_cell_and_nested_component_widths() -> AppResult<()> {
+        let source: serde_json::Value =
+            serde_json::from_str(include_str!("editor_wide_tables.json"))?;
+        let document = RichDocument::from_json(source.clone())?;
+        let wide = find_path(document.root(), "wide-table", NodePath::root())
+            .ok_or("missing wide capture table")?;
+        let inner = find_path(document.root(), "nested-inner", NodePath::root())
+            .ok_or("missing nested capture table")?;
+        let grid = TableGrid::new(document.node(&wide)?)?;
+        assert_eq!(grid.columns, 63);
+        assert_eq!(grid.column_widths.get(&62), Some(&80));
+        assert_eq!(TableGrid::new(document.node(&inner)?)?.columns, 3);
+        let mut geometry = craft_editor_egui::layout::FlowGeometry::new(&document, 550.0)?;
+        for id in ["wide-cell-62", "nested-cell-2"] {
+            let target = DocPoint {
+                block_id: id.into(),
+                offset: ScalarOffset(0),
+            };
+            geometry.reveal_caret(&target)?;
+            assert!(geometry.caret(&target)?.is_some());
+        }
+        let viewports = geometry.table_viewports();
+        assert!(
+            viewports
+                .iter()
+                .any(|viewport| { viewport.table_path == wide && viewport.offset > 0.0 })
+        );
+        assert!(
+            viewports
+                .iter()
+                .any(|viewport| { viewport.table_path == inner && viewport.offset > 0.0 })
+        );
         assert_eq!(document.to_json()?, source);
         Ok(())
     }
