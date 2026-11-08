@@ -4,6 +4,7 @@
 
 ## Execution and acceptance
 
+- Project types/templates, editable project hierarchy, dictionary links and guide/memory/context are complete source-backed workflows, not satisfied by retaining their imported JSON. Keep these explicit under #4/#10 and the migration inventory while their native UI/commands are unfinished.
 - Complete source parity rather than a second reduced checkpoint: all 21 canonical nodes, six marks and audited original commands/workflows remain required. Only the already approved 63-logical-column native table capacity exception applies, with wider data preserved and refused before mutation.
 - Run independent workstreams for table/clipboard authoring (#4/#7), notes/dictionary/review integration (#2/#4), full project/Canvas/media compatibility (#10), portable Markdown/artifacts/canonical restore (#11), and the remaining actual native layout/syntax/control/flow matrix (#6/#8/#9/#12).
 - Keep proposals, specifications, implementation and verification linked to the existing issues. Check off only verified criteria, close completed issues with exact source/build and retest evidence, and retain incomplete issues without duplicate reports.

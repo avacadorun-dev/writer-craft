@@ -62,7 +62,11 @@ impl StudioApp {
                     |ui| {
                         ui.set_clip_rect(commands);
                         if icons::icon_button(ui, Icon::Home, l.text("Project library")).clicked() {
-                            let result = self.save_explicit();
+                            let result = (|| -> AppResult<()> {
+                                #[cfg(feature = "editor-preview")]
+                                self.ensure_canvas_navigation()?;
+                                self.save_explicit()
+                            })();
                             if result.is_ok() {
                                 self.library = true;
                             }
