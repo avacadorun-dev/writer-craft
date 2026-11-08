@@ -873,6 +873,10 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
             }
+            StudioError::ProjectStructureConflict { .. }
+            | StudioError::ProjectNodeChanged { .. } => {
+                "The project structure changed. Refresh the project before continuing."
+            }
             StudioError::AnnotationConflict { .. } => "The note changed. Reload it before editing.",
             StudioError::DraftAnnotationConflict => {
                 "The draft and notes are preserved. Review their attachments before recovering this document."
