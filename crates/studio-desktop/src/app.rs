@@ -24,6 +24,7 @@ mod review;
 #[cfg(feature = "editor-preview")]
 mod rich_editor;
 mod settings;
+mod storage;
 use crate::{
     i18n::{InterfacePreferences, Language},
     icons::{self, Icon},
@@ -65,6 +66,7 @@ struct FrozenSelection {
 pub struct StudioApp {
     workspace: Workspace,
     database: PathBuf,
+    storage: storage::StorageState,
     projects: Vec<Project>,
     project: Option<Project>,
     documents: Vec<Document>,
@@ -166,6 +168,7 @@ impl StudioApp {
         let mut app = Self {
             workspace,
             database,
+            storage: storage::StorageState::default(),
             projects: vec![],
             project: None,
             documents: vec![],
@@ -624,6 +627,7 @@ impl StudioApp {
             || self.full_review.is_some()
             || self.rich_modal_open()
             || self.daily_controls.modal_open()
+            || self.storage.modal_open()
     }
 }
 
@@ -633,6 +637,7 @@ impl eframe::App for StudioApp {
         let t = theme::tokens(&ctx);
         #[cfg(feature = "editor-preview")]
         self.clipboard_frame_start(&ctx);
+        self.poll_storage(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
         }
@@ -647,7 +652,9 @@ impl eframe::App for StudioApp {
         if (self.dirty.is_some() && !self.autosave_paused) || self.import_job.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
-        if ctx.input(|i| i.viewport().close_requested()) {
+        if ctx.input(|i| i.viewport().close_requested()) && self.storage.modal_open() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        } else if ctx.input(|i| i.viewport().close_requested()) {
             let title_result = self.commit_title_edit();
             if title_result.is_err() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -714,6 +721,7 @@ impl eframe::App for StudioApp {
         self.full_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
+        self.storage_dialog(&ctx, t);
         #[cfg(feature = "editor-preview")]
         self.notes_dialogs(&ctx, t);
         #[cfg(feature = "editor-preview")]

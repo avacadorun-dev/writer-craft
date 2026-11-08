@@ -28,6 +28,15 @@ Export one revision-consistent database/asset snapshot. Write into a staging des
 
 ## Mandatory migration reference
 
-The owner supplied an original format-8 demonstration project as a private read-only reference: [issue #10](https://github.com/avacadorun-dev/writer-craft/issues/10). Initial structural inventory: 9 project nodes, 17 document revisions, 3 canvases, 9 canvas revisions and four attachments (PNG/PDF/MP3/MP4). The editor portion contains prose/headings; synthetic fixtures still cover all 21 nodes and six marks. The eventual complete application must open and exercise the whole project without lost references, histories or assets. Deferred Canvas/media workflows remain required and explicitly tracked.
+The owner supplied an original format-8 demonstration project as a private read-only reference: [issue #10](https://github.com/avacadorun-dev/writer-craft/issues/10). Initial structural inventory: 9 project nodes, 17 document revisions, 3 canvases, 9 canvas revisions and four attachments (PNG/PDF/MP3/MP4). The editor portion contains prose/headings; synthetic fixtures still cover all 21 nodes and six marks. The eventual complete application must open and exercise the whole project without lost references, histories or assets. Canvas/media workflows are mandatory alpha.2 scope after the owner approved all open issues.
 
 Never commit the private archive, manuscript text, screenshots, media, absolute owner paths or credentials. Public CI uses synthetic equivalent structures and artifacts. Local reference validation records outcomes without publishing private content.
+
+
+## Whole-workspace backup implementation checkpoint
+
+`backup_workspace` uses a dedicated read-only source connection and the incremental [SQLite online backup API](https://www.sqlite.org/backup.html), through the already pinned rusqlite `backup` feature. It captures live WAL content without copying a main database file. All tables, histories, private recovery checkpoints and immutable artifact blobs are copied, including future opaque tables. It is a full private workspace backup, distinct from a portable project export.
+
+The worker writes a private, exclusively created sibling temporary file, checks SQLite integrity and application identity, finalizes a standalone journal, syncs and hashes the complete output, then publishes through [tempfile `persist_noclobber`](https://docs.rs/tempfile/3.27.0/tempfile/struct.NamedTempFile.html#method.persist_noclobber). Existing output, source aliases and symlinks are never replaced. Cancellation and a bounded lock/step deadline leave no advertised backup; success requires a complete publication receipt. Private checkpoints remain within an explicitly requested full backup and do not become trusted through an external project import.
+
+Source implementation is pending hosted tests and native settings acceptance; it is not yet a qualified backup UI. Synthetic acceptance cases cover WAL-only writes, complete histories/notes/recovery/opaque blob retention, post-snapshot source edits, existing destination and source aliases, cancellation and foreign database rejection.

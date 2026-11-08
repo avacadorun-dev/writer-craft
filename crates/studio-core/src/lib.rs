@@ -7,6 +7,7 @@ mod annotations;
 mod assets;
 mod daily_controls;
 mod rich;
+mod workspace_backup;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
     AnnotationStatus, LegacyAnchorProjection, LegacyAnchorResolution, PassageAnnotation,
@@ -21,6 +22,7 @@ pub use daily_controls::{
     find_first_text_match, rich_document_statistics,
 };
 pub use rich::{RichDraft, RichRevision};
+pub use workspace_backup::{WorkspaceBackup, backup_workspace};
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
