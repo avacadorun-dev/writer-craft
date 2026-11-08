@@ -53,6 +53,156 @@ impl ImageAsset {
     }
 }
 
+/// Exact verified bytes and metadata transferred through a project-scoped media command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageTransfer {
+    /// Original reference key. It is a mapping key, never access authority.
+    pub source_id: String,
+    /// Display-only original name.
+    pub original_name: String,
+    /// Header-derived MIME type.
+    pub media_type: String,
+    /// SHA-256 of the exact encoded bytes.
+    pub sha256: String,
+    /// Declared encoded byte length, validated before import.
+    pub byte_size: u64,
+    /// Header width.
+    pub width: u32,
+    /// Header height.
+    pub height: u32,
+    /// Exact original encoded bytes, not decoded pixels or a filesystem path.
+    pub bytes: Vec<u8>,
+}
+/// Result of one validated bulk import, preserving the caller's reference mapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedImage {
+    /// Original mapping key, including when the destination assigned a fresh identity.
+    pub source_id: String,
+    /// Durable destination-owned image.
+    pub asset: ImageAsset,
+}
+/// Cloneable, fixed-project media capability for bounded background jobs.
+///
+/// This shares only the connection and scope, not Workspace replay/session state. Every command
+/// rechecks project ownership. A foreign source ID never authorizes a global database lookup.
+#[derive(Clone)]
+pub struct ProjectImages {
+    connection: Arc<Mutex<Connection>>,
+    project_id: String,
+}
+impl ProjectImages {
+    /// Fixed owning project; clipboard origin hints cannot change this scope.
+    pub fn project_id(&self) -> &str {
+        &self.project_id
+    }
+    /// Read only explicitly selected identities, with exact header/checksum verification.
+    pub fn export_images(&self, ids: &[String], max_bytes: usize) -> Result<Vec<ImageTransfer>> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StudioError::LockUnavailable)?;
+        require_project(&connection, &self.project_id)?;
+        let mut seen = HashSet::new();
+        let mut total = 0usize;
+        let mut output = Vec::with_capacity(ids.len());
+        for id in ids {
+            if !seen.insert(id) {
+                continue;
+            }
+            let metadata = read_image_metadata(&connection, &self.project_id, id)?;
+            total = total
+                .checked_add(usize::try_from(metadata.byte_size).map_err(|_| transfer_invalid())?)
+                .filter(|total| *total <= max_bytes)
+                .ok_or_else(transfer_invalid)?;
+            let (asset, bytes) = read_verified_image(&connection, &self.project_id, id)?;
+            output.push(ImageTransfer {
+                source_id: asset.id,
+                original_name: asset.original_name,
+                media_type: asset.media_type,
+                sha256: asset.sha256,
+                byte_size: asset.byte_size,
+                width: asset.width,
+                height: asset.height,
+                bytes,
+            });
+        }
+        Ok(output)
+    }
+    /// Validate every descriptor/header before any mutation, then import one atomic batch.
+    ///
+    /// An existing identity is reused only inside the destination project and only for identical
+    /// verified bytes. Cross-project transfers receive fresh IDs; existing assets are immutable.
+    /// A stale document guard can leave unreferenced durable resources, but cannot change writing.
+    pub fn import_images(
+        &self,
+        images: &[ImageTransfer],
+        max_bytes: usize,
+    ) -> Result<Vec<ImportedImage>> {
+        let mut seen = HashSet::new();
+        let mut total = 0usize;
+        for image in images {
+            if uuid::Uuid::parse_str(&image.source_id).is_err() || !seen.insert(&image.source_id) {
+                return Err(transfer_invalid());
+            }
+            total = total
+                .checked_add(image.bytes.len())
+                .filter(|total| *total <= max_bytes)
+                .ok_or_else(transfer_invalid)?;
+            let inspection = inspect_image(&image.bytes)?;
+            if image.byte_size != image.bytes.len() as u64
+                || image.sha256 != checksum(&image.bytes)
+                || image.media_type != inspection.media_type
+                || image.width != inspection.width
+                || image.height != inspection.height
+            {
+                return Err(transfer_invalid());
+            }
+        }
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StudioError::LockUnavailable)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        require_project(&transaction, &self.project_id)?;
+        let mut output = Vec::with_capacity(images.len());
+        for image in images {
+            let existing =
+                match read_verified_image(&transaction, &self.project_id, &image.source_id) {
+                    Ok((asset, bytes)) if bytes == image.bytes => Some(asset),
+                    Ok(_) | Err(StudioError::NotFound { .. }) => None,
+                    Err(error) => return Err(error),
+                };
+            let asset = if let Some(asset) = existing {
+                asset
+            } else {
+                let id = uuid::Uuid::new_v4().to_string();
+                let extension = match image.media_type.as_str() {
+                    "image/png" => ".png",
+                    "image/jpeg" => ".jpg",
+                    "image/gif" => ".gif",
+                    _ => ".webp",
+                };
+                let filename = safe_filename(&image.original_name, extension);
+                let byte_size = i64::try_from(image.byte_size).map_err(|_| transfer_invalid())?;
+                transaction.execute("INSERT INTO project_assets(id,project_id,media_type,original_name,sha256,byte_size,width,height,data) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                    params![id, self.project_id, image.media_type, filename, image.sha256, byte_size, image.width, image.height, image.bytes])?;
+                read_image_metadata(&transaction, &self.project_id, &id)?
+            };
+            output.push(ImportedImage {
+                source_id: image.source_id.clone(),
+                asset,
+            });
+        }
+        transaction.commit()?;
+        Ok(output)
+    }
+}
+fn transfer_invalid() -> StudioError {
+    StudioError::Validation(
+        "Image transfer descriptors, encoded bytes or total byte budget are invalid".into(),
+    )
+}
+
 /// Why a preserved canonical image cannot currently resolve in a snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageAssetFailureKind {
@@ -116,6 +266,16 @@ impl ImageAssetSnapshot {
 }
 
 impl Workspace {
+    /// Create a fixed-project media handle for background clipboard/import work.
+    pub fn project_images(&self, project_id: &str) -> Result<ProjectImages> {
+        let connection = self.connection()?;
+        require_project(&connection, project_id)?;
+        Ok(ProjectImages {
+            connection: self.connection.clone(),
+            project_id: project_id.into(),
+        })
+    }
+
     /// Import exact PNG/JPEG/GIF/WebP bytes. The image is durable before any
     /// document insertion; importing alone never changes canonical writing.
     /// Header inspection matches the original DecodeConfig contract, and does

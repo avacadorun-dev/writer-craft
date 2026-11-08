@@ -11,8 +11,8 @@ pub use annotations::{
     AnnotationStatus, PassageAnnotation,
 };
 pub use assets::{
-    ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, MAX_IMAGE_BYTES,
-    MAX_IMAGE_DIMENSION,
+    ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
+    ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages,
 };
 pub use rich::{RichDraft, RichRevision};
 
