@@ -380,17 +380,16 @@ fn validate_notes(
         {
             return invalid("Native notes repeat a stable scoped identity");
         }
-        if let Some(id) = &logical_id {
-            if !validation::array(manifest, "documentAnnotations")?
+        if let Some(id) = &logical_id
+            && !validation::array(manifest, "documentAnnotations")?
                 .iter()
                 .any(|note| {
                     note["id"].as_str() == Some(id)
                         && note["nodeId"].as_str() == Some(logical_document)
                         && note["kind"].as_str() == Some("note")
                 })
-            {
-                return invalid("Native note overlay does not match a source note in its document");
-            }
+        {
+            return invalid("Native note overlay does not match a source note in its document");
         }
         let state = validate_state(
             &record["state"],
