@@ -1,4 +1,22 @@
-# Release plan: alpha.2 checkpoint and alpha.3 continuation
+# Active release: 0.1.0-alpha.3
+
+**Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. Published alpha.1/alpha.2 are immutable.
+
+## Execution and acceptance
+
+- Complete source parity rather than a second reduced checkpoint: all 21 canonical nodes, six marks and audited original commands/workflows remain required. Only the already approved 63-logical-column native table capacity exception applies, with wider data preserved and refused before mutation.
+- Run independent workstreams for table/clipboard authoring (#4/#7), notes/dictionary/review integration (#2/#4), full project/Canvas/media compatibility (#10), portable Markdown/artifacts/canonical restore (#11), and the remaining actual native layout/syntax/control/flow matrix (#6/#8/#9/#12).
+- Keep proposals, specifications, implementation and verification linked to the existing issues. Check off only verified criteria, close completed issues with exact source/build and retest evidence, and retain incomplete issues without duplicate reports.
+- The independent designer controls a fresh `full-editor-parity` gate for alpha.3. Historical alpha.2 acceptance does not qualify changed source. Native interactions must include normal authoring, cancellation, stale and failure cases, save/reopen, exact selections and Undo, in addition to screenshots.
+- Builds and native installers run on GitHub. Do not consume local disk for Cargo builds. Do not alter the original application, supplied reference archive, user projects or currently running previews.
+- Root owns integration/release policy and reviewed rich-edit authority. Delegated table work owns the editor adapter and generic-engine qualification. Delegated portability work owns semantic archive validation/restore. A separate designer audits and reviews the resulting compiled workflows.
+
+The nine work packages below remain the implementation inventory. Every unfinished item retains its source-backed requirement; no schedule update claims implementation. README screenshots and package/version/signing evidence must match the final alpha.3 candidate.
+
+---
+
+## Historical alpha.2 release plan
+
 
 **Latest owner decision, 2026-11-08:** publish the current completed coherent implementation as `0.1.0-alpha.2`, including native installers and a README with actual application screenshots. All unfinished large blocks move to `0.1.0-alpha.3`. This explicitly supersedes the previous all-issues alpha.2 boundary recorded below. Product issues remain open pending their own full verification and owner acceptance; publication does not complete the parity epic.
 

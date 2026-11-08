@@ -54,6 +54,13 @@ The alpha.2 named independent scope is `native-rich-editor-alpha`, an engineerin
 
 The complete source-backed editor contract, all 21 nodes/six marks, integration journeys, source-project/Canvas/media compatibility and portable restore remain required migration work; their unfinished parts move to alpha.3, rather than becoming implemented or being removed. The sole approved native table capacity exception remains 63 logical columns with lossless wider-data preservation and refusal before mutation.
 
-Freeze new feature integration while finalizing this release. Do not repin unqualified editor/Canvas foundations or restart the owner's preview. Use only synthetic public CI fixtures; original manuscripts, archives and media remain private/read-only. Specialized generic mechanics remain in separate repositories.
+The alpha.2 freeze was lifted by the subsequent alpha.3 authorization below. Do not repin unqualified editor/Canvas foundations or restart the owner's preview. Use only synthetic public CI fixtures; original manuscripts, archives and media remain private/read-only. Specialized generic mechanics remain in separate repositories.
 
 Routine administrative edits (license changes, repository About/topics, release housekeeping and tool setup) do not require separate issues unless the owner explicitly requests one. Track actual owner-reported bugs and product enhancements; do not turn every instruction into an issue.
+
+
+## Current owner authorization — alpha.3 execution
+
+On 2026-11-08, after testing the published alpha.2 on macOS and confirming it functional, the owner explicitly authorized closing issues whose complete criteria were satisfied by that release, then implementing alpha.3 and closing the remaining issues as their complete acceptance is established. This supersedes the alpha.2 freeze and the requirement to request the same owner approval again for verified alpha.2 completions. It does not waive any unmet technical or independent UX criterion, establish untested Windows/Linux GUI behavior, or permit mass closure of partial issues.
+
+Develop alpha.3 against the complete existing source-backed scope in `docs/governance/NEXT_RELEASE.md`. Preserve published alpha.1/alpha.2 tags and assets. Use `feature/alpha3-parity`, focused commits, exact-source hosted checks and independent actual native acceptance. Keep the alpha.2 accepted gate as historical evidence; alpha.3 requires its own current `full-editor-parity` gate. Continue issue audits after each completed slice and record the precise evidence when closing a finished issue. Do not create new product features to satisfy the plan.

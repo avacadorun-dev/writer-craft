@@ -166,3 +166,8 @@ Regression evidence: actual compiled captures must reach the affected blocks aft
 ## F-38 — publish the completed checkpoint and continue parity in alpha.3
 
 Date: 2026-11-08. The owner requested finalizing the completed coherent application as alpha.2 now, publishing native installers including a macOS DMG, and moving unfinished large blocks to alpha.3. The owner also explicitly requested updating README with real current application screenshots. This supersedes the earlier all-open-issues alpha.2 scheduling decision; it does not waive data preservation, create full-parity evidence, close unfinished issues or authorize additional features. Regression/release checks: the installer must launch the current native rich editor under the normal application identity, screenshot claims must match a real compiled build, published alpha.1 stays immutable, and deferred work remains visible in issues and the alpha.3 plan.
+
+
+## F-39 — owner-tested alpha.2 and complete alpha.3 execution
+
+Date: 2026-11-08. The owner tested the published alpha.2 on macOS, confirmed it functional, and instructed the team to close issues whose complete criteria were met in that release. The continuing goal is to implement alpha.3 and close all remaining issues on complete verification. This lifts the checkpoint release freeze and supplies owner acceptance for already verified alpha.2 completions; it does not waive unfinished technical/native criteria or certify untested platforms. Reviewers must distinguish the closed installer request from remaining editor, workflow and compatibility gaps, preserve prior release evidence, and review alpha.3 independently against its exact compiled source.

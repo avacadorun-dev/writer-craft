@@ -875,7 +875,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-egui"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=21788bdd9e9ea8c4d2d3f4c90900633098aced7c#21788bdd9e9ea8c4d2d3f4c90900633098aced7c"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=91607a3d9b173feffd060db9e0c2af16ae2b5312#91607a3d9b173feffd060db9e0c2af16ae2b5312"
 dependencies = [
  "clipboard-rs",
  "craft-editor-model",
@@ -899,7 +899,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=21788bdd9e9ea8c4d2d3f4c90900633098aced7c#21788bdd9e9ea8c4d2d3f4c90900633098aced7c"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=91607a3d9b173feffd060db9e0c2af16ae2b5312#91607a3d9b173feffd060db9e0c2af16ae2b5312"
 dependencies = [
  "prosemirror",
  "serde",
@@ -910,7 +910,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-render"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=21788bdd9e9ea8c4d2d3f4c90900633098aced7c#21788bdd9e9ea8c4d2d3f4c90900633098aced7c"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=91607a3d9b173feffd060db9e0c2af16ae2b5312#91607a3d9b173feffd060db9e0c2af16ae2b5312"
 dependencies = [
  "craft-editor-egui",
  "craft-editor-model",
@@ -4638,7 +4638,7 @@ dependencies = [
 
 [[package]]
 name = "studio-cli"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "serde_json",
  "studio-core",
@@ -4647,7 +4647,7 @@ dependencies = [
 
 [[package]]
 name = "studio-core"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "craft-editor-model",
  "image",
@@ -4663,7 +4663,7 @@ dependencies = [
 
 [[package]]
 name = "studio-desktop"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "base64 0.23.1",
  "craft-editor-egui",
@@ -4688,7 +4688,7 @@ dependencies = [
 
 [[package]]
 name = "studio-transfer"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "craft-editor-model",
  "serde",
