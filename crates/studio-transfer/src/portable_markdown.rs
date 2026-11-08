@@ -657,17 +657,83 @@ pub(super) fn rewrite_canvas_resources(
 ) -> Result<()> {
     if let Some(items) = content["nodes"].as_array_mut() {
         for node in items {
-            if node["type"].as_str() == Some("file")
-                && let Some(resource) = node["x-writers-studio"]
+            if node["type"].as_str() == Some("file") {
+                if let Some(resource) = node["x-writers-studio"]
                     .get("resource")
                     .filter(|value| !value.is_null())
-            {
-                let target = resource_path(resource, nodes, canvases, assets)?;
-                node["file"] = Value::String(relative_file_path(current, target)?);
+                {
+                    let target = resource_path(resource, nodes, canvases, assets)?;
+                    let resource = json!({"kind":resource["kind"],"id":resource["id"]});
+                    node["file"] = Value::String(relative_file_path(current, target)?);
+                    // Only a scoped resource identifier belongs to the reader extension. Authored
+                    // private/unknown payloads and source paths remain solely canonical objects.
+                    node["x-writers-studio"] = json!({"resource":resource});
+                } else {
+                    reading_placeholder(
+                        node,
+                        "Unresolved file reference. The original is retained in the WriterCraft canonical companion.",
+                    );
+                }
+            } else {
+                if let Some(fields) = node.as_object_mut() {
+                    fields.remove("x-writers-studio");
+                }
+                let kind = node["type"].as_str().unwrap_or("");
+                if !matches!(kind, "text" | "link" | "group")
+                    || (kind == "link"
+                        && !node["url"].as_str().is_some_and(|url| {
+                            url.starts_with("https://") || url.starts_with("http://")
+                        }))
+                {
+                    reading_placeholder(
+                        node,
+                        "Unsupported Canvas item. The original is retained in the WriterCraft canonical companion.",
+                    );
+                }
+            }
+            let kind = node["type"].as_str().unwrap_or("").to_owned();
+            if let Some(fields) = node.as_object_mut() {
+                fields.retain(|key, _| {
+                    ["id", "type", "x", "y", "width", "height", "color"].contains(&key.as_str())
+                        || match kind.as_str() {
+                            "file" => {
+                                ["file", "subpath", "x-writers-studio"].contains(&key.as_str())
+                            }
+                            "text" => key == "text",
+                            "link" => key == "url",
+                            "group" => key == "label",
+                            _ => false,
+                        }
+                });
             }
         }
     }
+    if let Some(edges) = content["edges"].as_array_mut() {
+        for edge in edges {
+            if let Some(fields) = edge.as_object_mut() {
+                fields.retain(|key, _| {
+                    [
+                        "id", "fromNode", "fromSide", "toNode", "toSide", "fromEnd", "toEnd",
+                        "color", "label",
+                    ]
+                    .contains(&key.as_str())
+                });
+            }
+        }
+    }
+    if let Some(fields) = content.as_object_mut() {
+        fields.retain(|key, _| matches!(key.as_str(), "nodes" | "edges"));
+    }
     Ok(())
+}
+fn reading_placeholder(node: &mut Value, message: &str) {
+    if let Some(fields) = node.as_object_mut() {
+        for key in ["file", "subpath", "url", "x-writers-studio"] {
+            fields.remove(key);
+        }
+    }
+    node["type"] = json!("text");
+    node["text"] = json!(message);
 }
 pub(super) fn resource_path<'a>(
     resource: &Value,

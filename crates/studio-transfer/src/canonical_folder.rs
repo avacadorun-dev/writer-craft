@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, File, OpenOptions};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,8 @@ use super::{Result, TransferError};
 const COMPLETION: &str = ".writercraft/export.json";
 const CANONICAL: &str = ".writercraft/project.json";
 const INCOMPLETE: &str = ".incomplete";
+const MARKER_BYTES: &[u8] =
+    b"WriterCraft export is incomplete. Do not restore it as a completed backup.\n";
 
 /// A completed, independently verified native folder export; no whole-project file array.
 #[derive(Debug, Serialize)]
@@ -31,8 +34,10 @@ pub struct CanonicalFolderReceipt {
     pub destination: PathBuf,
     /// Captured scope; selected scope cannot silently expand to a full project.
     pub scope: String,
-    /// Actual physical members, including bounded control pages and completion root.
+    /// Regular output files, including controls; the removed staging marker is excluded.
     pub file_count: u64,
+    /// Relative output directories, independently bounded from regular file members.
+    pub directory_count: u64,
     /// Actual total physical encoded bytes; shared object bytes are not double-counted magically.
     pub byte_size: u64,
     /// Reported reading-view differences, retained separately from canonical semantics.
@@ -76,8 +81,19 @@ struct ObjectMember {
 struct Budget {
     members: u64,
     bytes: u64,
+    directories: u64,
 }
 impl Budget {
+    fn directory(&mut self) -> Result<()> {
+        self.directories = self
+            .directories
+            .checked_add(1)
+            .filter(|count| *count <= MAX_PORTABLE_MEMBERS)
+            .ok_or_else(|| {
+                TransferError::Invalid("Portable folder directory count exceeds its bound".into())
+            })?;
+        Ok(())
+    }
     fn charge(&mut self, size: u64) -> Result<()> {
         self.members = self
             .members
@@ -156,6 +172,7 @@ struct FolderOutput {
     root: Dir,
     budget: Budget,
     paths: HashSet<String>,
+    directories: HashSet<String>,
     cancel: ProjectTransferCancellation,
 }
 impl FolderOutput {
@@ -188,14 +205,15 @@ impl FolderOutput {
         }
         let mut marker =
             root.open_with(INCOMPLETE, OpenOptions::new().write(true).create_new(true))?;
-        marker.write_all(
-            b"WriterCraft export is incomplete. Do not restore it as a completed backup.\n",
-        )?;
+        marker.write_all(MARKER_BYTES)?;
         marker.sync_all()?;
+        let mut budget = Budget::default();
+        budget.charge(MARKER_BYTES.len() as u64)?;
         Ok(Self {
             root,
-            budget: Budget::default(),
+            budget,
             paths: HashSet::new(),
+            directories: HashSet::new(),
             cancel: cancel.clone(),
         })
     }
@@ -209,11 +227,19 @@ impl FolderOutput {
         if !self.paths.insert(path.into()) {
             return invalid("Portable output member path is duplicated");
         }
-        if let Some(parent) = Path::new(path)
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-        {
-            self.root.create_dir_all(parent)?;
+        if self.budget.members >= MAX_PORTABLE_MEMBERS {
+            return invalid("Portable folder file budget exhausted");
+        }
+        let mut parent = String::new();
+        for component in path.split('/').take(path.split('/').count() - 1) {
+            if !parent.is_empty() {
+                parent.push('/');
+            }
+            parent.push_str(component);
+            if self.directories.insert(parent.clone()) {
+                self.budget.directory()?;
+                self.root.create_dir(&parent)?;
+            }
         }
         let file = self
             .root
@@ -378,8 +404,9 @@ pub fn export_canonical_project_folder(
     Ok(CanonicalFolderReceipt {
         destination: destination.into(),
         scope: plan.scope,
-        file_count: output.budget.members,
-        byte_size: output.budget.bytes,
+        file_count: output.budget.members - 1,
+        directory_count: output.budget.directories,
+        byte_size: output.budget.bytes - MARKER_BYTES.len() as u64,
         conversion_count,
     })
 }
@@ -448,6 +475,9 @@ impl CanonicalProjectFolder {
         let mut all_control = HashSet::from([COMPLETION.to_owned()]);
         let mut inventory_count = 0_u64;
         let mut declared_budget = Budget::default();
+        if allow_incomplete {
+            declared_budget.charge(MARKER_BYTES.len() as u64)?;
+        }
         for page in &completion.inventory {
             validate_control(page, "inventory", &mut all_control)?;
             declared_budget.charge(page.member.byte_size)?;
@@ -614,8 +644,25 @@ impl CanonicalProjectFolder {
         }
         let mut budget = Budget::default();
         let mut found = HashSet::new();
-        scan(&self.root, "", 0, &mut budget, &mut found, &self.cancel)?;
-        if found != expected {
+        let mut directories = HashSet::new();
+        scan(
+            &self.root,
+            "",
+            0,
+            &mut budget,
+            &mut found,
+            &mut directories,
+            &self.cancel,
+        )?;
+        let mut expected_directories = HashSet::new();
+        for path in &expected {
+            let mut cursor = Path::new(path).parent();
+            while let Some(parent) = cursor.filter(|path| !path.as_os_str().is_empty()) {
+                expected_directories.insert(parent.to_string_lossy().replace('\\', "/"));
+                cursor = parent.parent();
+            }
+        }
+        if found != expected || directories != expected_directories {
             return invalid(
                 "Portable folder has missing or unexpected files; reading edits are not an unchanged canonical backup",
             );
@@ -647,8 +694,9 @@ impl PortableObjectSource for CanonicalProjectFolder {
             .ok_or_else(|| {
                 std::io::Error::other("Object is outside this canonical folder capability")
             })?;
-        regular(&self.root, &member.path).map_err(std::io::Error::other)?;
-        Ok(Box::new(self.root.open(&member.path)?))
+        Ok(Box::new(
+            open_regular(&self.root, &member.path, &self.cancel).map_err(std::io::Error::other)?,
+        ))
     }
 }
 fn validate_control(page: &Page, kind: &str, seen: &mut HashSet<String>) -> Result<()> {
@@ -717,12 +765,19 @@ fn exists(root: &Dir, path: &str) -> Result<bool> {
         Err(error) => Err(error.into()),
     }
 }
-fn regular(root: &Dir, path: &str) -> Result<()> {
+// Path metadata is diagnostic only. Nonblocking/no-follow open prevents FIFO/symlink
+// substitution from blocking before cancellation; the returned handle must itself be regular.
+fn open_regular(root: &Dir, path: &str, cancel: &ProjectTransferCancellation) -> Result<File> {
+    check_cancel(cancel)?;
     validate_path(path)?;
-    if !root.symlink_metadata(path)?.is_file() {
-        return invalid("Portable folder member is not a regular file");
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No).nonblock(true);
+    let file = root.open_with(path, &options)?;
+    if !file.metadata()?.is_file() {
+        return invalid("Portable folder member is not an opened regular file");
     }
-    Ok(())
+    check_cancel(cancel)?;
+    Ok(file)
 }
 fn read_small(
     root: &Dir,
@@ -730,9 +785,7 @@ fn read_small(
     limit: usize,
     cancel: &ProjectTransferCancellation,
 ) -> Result<Vec<u8>> {
-    regular(root, path)?;
-    check_cancel(cancel)?;
-    let file = root.open(path)?;
+    let file = open_regular(root, path, cancel)?;
     if file.metadata()?.len() > limit as u64 {
         return invalid("Portable folder control exceeds its byte limit");
     }
@@ -746,8 +799,7 @@ fn read_small(
 }
 fn verify_member(root: &Dir, member: &Member, cancel: &ProjectTransferCancellation) -> Result<()> {
     validate_member(member)?;
-    regular(root, &member.path)?;
-    let mut file = root.open(&member.path)?;
+    let mut file = open_regular(root, &member.path, cancel)?;
     if file.metadata()?.len() != member.byte_size {
         return invalid("Portable reading or canonical file size changed; restore cancelled");
     }
@@ -775,6 +827,7 @@ fn scan(
     depth: usize,
     budget: &mut Budget,
     files: &mut HashSet<String>,
+    directories: &mut HashSet<String>,
     cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
     if depth > 512 {
@@ -794,17 +847,20 @@ fn scan(
         validate_path(&path)?;
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            budget.charge(0)?;
+            budget.directory()?;
+            directories.insert(path.clone());
             scan(
                 &root.open_dir(&name)?,
                 &path,
                 depth + 1,
                 budget,
                 files,
+                directories,
                 cancel,
             )?;
         } else if file_type.is_file() {
-            budget.charge(entry.metadata()?.len())?;
+            let opened = open_regular(root, &name, cancel)?;
+            budget.charge(opened.metadata()?.len())?;
             files.insert(path);
         } else {
             return invalid("Portable folder contains an inner symlink or special file");
@@ -823,4 +879,144 @@ fn core_error(error: studio_core::StudioError) -> TransferError {
 }
 fn invalid<T>(message: &str) -> Result<T> {
     Err(TransferError::Invalid(message.into()))
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "Synthetic directory-capability bounds must fail immediately"
+)]
+mod tests {
+    use super::*;
+    #[cfg(unix)]
+    use std::time::Duration;
+    #[test]
+    fn writer_and_scanner_should_count_regular_files_and_marker_identically_without_charging_directories_as_files()
+     {
+        let temporary = tempfile::tempdir().unwrap();
+        let database = temporary.path().join("workspace.sqlite");
+        studio_core::Workspace::open(&database).unwrap();
+        let mut output = FolderOutput::create(
+            &database,
+            &temporary.path().join("Export"),
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+        output
+            .bytes("documents/container/child/chapter.md", b"Saved writing")
+            .unwrap();
+        let mut scan_budget = Budget::default();
+        let mut files = HashSet::new();
+        let mut directories = HashSet::new();
+        scan(
+            &output.root,
+            "",
+            0,
+            &mut scan_budget,
+            &mut files,
+            &mut directories,
+            &output.cancel,
+        )
+        .unwrap();
+        assert_eq!(scan_budget.members, output.budget.members);
+        assert_eq!(scan_budget.bytes, output.budget.bytes);
+        assert_eq!(scan_budget.directories, output.budget.directories);
+        assert_eq!(scan_budget.members, 2);
+        assert_eq!(scan_budget.directories, 3);
+        output.root.remove_file(INCOMPLETE).unwrap();
+        let mut complete = Budget::default();
+        scan(
+            &output.root,
+            "",
+            0,
+            &mut complete,
+            &mut HashSet::new(),
+            &mut HashSet::new(),
+            &output.cancel,
+        )
+        .unwrap();
+        assert_eq!(complete.members, output.budget.members - 1);
+        assert_eq!(
+            complete.bytes,
+            output.budget.bytes - MARKER_BYTES.len() as u64
+        );
+    }
+    #[test]
+    fn staging_overhead_and_last_member_should_refuse_before_extra_member_creation() {
+        let temporary = tempfile::tempdir().unwrap();
+        let database = temporary.path().join("workspace.sqlite");
+        studio_core::Workspace::open(&database).unwrap();
+        let destination = temporary.path().join("Export");
+        let mut output = FolderOutput::create(
+            &database,
+            &destination,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(output.budget.members, 1);
+        assert_eq!(output.budget.bytes, MARKER_BYTES.len() as u64);
+        output.budget.members = MAX_PORTABLE_MEMBERS;
+        assert!(output.bytes("extra.md", b"extra").is_err());
+        assert!(!destination.join("extra.md").exists());
+        assert!(destination.join(INCOMPLETE).is_file());
+        let mut boundary = Budget::default();
+        boundary
+            .charge(MAX_PORTABLE_TRANSPORT_BYTES - MARKER_BYTES.len() as u64)
+            .unwrap();
+        boundary.charge(MARKER_BYTES.len() as u64).unwrap();
+        assert!(boundary.charge(1).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn a_previously_regular_control_replaced_by_fifo_should_refuse_without_waiting_for_a_writer() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("control.json");
+        std::fs::write(&path, b"old").unwrap();
+        let root = Dir::open_ambient_dir(temporary.path(), ambient_authority()).unwrap();
+        assert!(root.symlink_metadata("control.json").unwrap().is_file());
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let result = read_small(
+                &root,
+                "control.json",
+                1024,
+                &ProjectTransferCancellation::default(),
+            );
+            let _ = sender.send(result.is_err());
+        });
+        let result = receiver.recv_timeout(Duration::from_secs(2));
+        // A blocked regression fails on the bounded receiver timeout; do not perform another
+        // potentially blocking open on the test thread to try to release it.
+        let refused = result.unwrap();
+        handle.join().unwrap();
+        assert!(refused);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn cancelled_fifo_or_replaced_symlink_should_never_begin_a_blocking_control_read() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("pipe");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let root = Dir::open_ambient_dir(temporary.path(), ambient_authority()).unwrap();
+        let cancel = ProjectTransferCancellation::default();
+        cancel.cancel();
+        assert!(read_small(&root, "pipe", 1024, &cancel).is_err());
+        std::fs::write(temporary.path().join("regular"), b"same").unwrap();
+        std::os::unix::fs::symlink("regular", temporary.path().join("link")).unwrap();
+        assert!(open_regular(&root, "link", &ProjectTransferCancellation::default()).is_err());
+    }
 }

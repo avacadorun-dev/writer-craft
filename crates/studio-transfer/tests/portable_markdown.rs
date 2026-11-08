@@ -293,7 +293,7 @@ fn complete_export_should_keep_rich_reading_views_original_artifacts_and_canonic
         .as_array()
         .unwrap()
         .iter()
-        .filter(|card| !card["x-writers-studio"]["resource"].is_null())
+        .filter(|card| card["type"].as_str() == Some("file"))
     {
         let file = card["file"].as_str().unwrap();
         assert!(
@@ -804,5 +804,80 @@ fn native_folder_should_refuse_inner_symlink_even_when_target_bytes_match() {
         reader
             .preflight(&ProjectTransferCancellation::default())
             .is_err()
+    );
+}
+
+#[test]
+fn native_reading_canvas_should_not_activate_unresolved_paths_or_copy_private_extension_payloads() {
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (mut manifest, mut assets) = fixture();
+    let original = &mut manifest["canvasRevisions"][0]["content"];
+    original["nodes"][2]["file"] = json!("../../outside.md");
+    original["nodes"][0]["x-writers-studio"]["private"] = json!("PRIVATE_EXTENSION_ONLY_CANONICAL");
+    original["unknown"] = json!({"private":"PRIVATE_EXTENSION_ONLY_CANONICAL"});
+    let original = original.clone();
+    let source = ValidatedProjectImport::parse(&serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let mut imported = ProjectImportWorker::open(&database).unwrap();
+    let project = imported
+        .import(
+            &source,
+            &mut assets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let captured = ProjectPortableExportWorker::open(&database)
+        .unwrap()
+        .prepare(&project.project_id, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Export");
+    export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let canvas_path = std::fs::read_dir(output.join("canvases"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "canvas"))
+        .unwrap();
+    let raw = std::fs::read_to_string(&canvas_path).unwrap();
+    assert!(!raw.contains("PRIVATE_EXTENSION_ONLY_CANONICAL"));
+    assert!(!raw.contains("../../outside.md"));
+    let graph: Value = serde_json::from_str(&raw).unwrap();
+    let placeholder = &graph["nodes"][2];
+    assert_eq!(placeholder["type"], "text");
+    assert!(placeholder.get("file").is_none());
+    for node in graph["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|node| node["type"] == "file")
+    {
+        assert!(
+            canvas_path
+                .parent()
+                .unwrap()
+                .join(node["file"].as_str().unwrap())
+                .is_file()
+        );
+    }
+    let mut restored = ProjectImportWorker::memory().unwrap();
+    let result = CanonicalProjectFolder::open(&output)
+        .unwrap()
+        .restore(&mut restored, &ProjectTransferCancellation::default())
+        .unwrap();
+    assert_eq!(
+        restored
+            .workspace()
+            .project_canvas(&result.project_id, "board")
+            .unwrap()
+            .revision
+            .content,
+        original
     );
 }
