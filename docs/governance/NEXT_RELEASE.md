@@ -1,6 +1,6 @@
 # Active release: 0.1.0-alpha.3
 
-**Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. Published alpha.1/alpha.2 are immutable.
+**Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. New #14 adds researched formatting needs and direct object sizing with backward-compatible Studio migration. Published alpha.1/alpha.2 are immutable.
 
 ## Execution and acceptance
 

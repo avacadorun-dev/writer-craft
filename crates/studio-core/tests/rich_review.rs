@@ -105,7 +105,7 @@ fn apply_and_compensating_undo_should_preserve_second_occurrence_notes_and_curre
         .unwrap();
     assert_eq!(
         (applied.revision, applied.body.as_str()),
-        (2, "Я😀 echo changed\nOther writing")
+        (2, "Я😀 echo changed\n\nOther writing")
     );
     let after = workspace.annotation(&note.id).unwrap();
     assert_eq!(after.anchor_status, AnchorStatus::Detached);

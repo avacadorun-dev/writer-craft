@@ -90,7 +90,8 @@ fn resources(connection: &Connection, project: &str, tree: &RichTree) -> Result<
         if node.node_type == "imageBlock" {
             let asset = node
                 .attrs
-                .get("assetId")
+                .as_ref()
+                .and_then(|attrs| attrs.get("assetId"))
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid("A proposal image requires a project-owned asset"))?;
             let available: bool = connection.query_row(
@@ -258,7 +259,8 @@ impl Workspace {
     }
     /// Load only a selected proposal inside the caller's fixed project capability.
     pub fn rich_proposal(&self, project: &str, id: &str) -> Result<RichProposal> {
-        read_proposal(&self.connection()?, project, id)
+        let connection = self.connection()?;
+        read_proposal(&connection, project, id)
     }
     /// Replay and atomically publish a current proposal with exact note position maps.
     pub fn apply_rich_proposal(&self, project: &str, id: &str) -> Result<Document> {

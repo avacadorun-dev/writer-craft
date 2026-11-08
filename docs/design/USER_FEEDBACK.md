@@ -171,3 +171,10 @@ Date: 2026-11-08. The owner requested finalizing the completed coherent applicat
 ## F-39 — owner-tested alpha.2 and complete alpha.3 execution
 
 Date: 2026-11-08. The owner tested the published alpha.2 on macOS, confirmed it functional, and instructed the team to close issues whose complete criteria were met in that release. The continuing goal is to implement alpha.3 and close all remaining issues on complete verification. This lifts the checkpoint release freeze and supplies owner acceptance for already verified alpha.2 completions; it does not waive unfinished technical/native criteria or certify untested platforms. Reviewers must distinguish the closed installer request from remaining editor, workflow and compatibility gaps, preserve prior release evidence, and review alpha.3 independently against its exact compiled source.
+
+
+## F-40 — researched manuscript formatting and direct issue prose
+
+Date: 2026-11-08. Add research and resulting concrete formatting improvements for screenwriters, editors and writers in issue #14, starting with resizing images, rich visual blocks and tables directly on the native working surface. Distinguish object dimensions from workspace zoom, manuscript flow from free Canvas placement, and discovered needs from unselected competitor features. Issues should describe the requirement directly, without `Owner report` or repetitive attribution.
+
+Existing Studio format compatibility is mandatory: current `.wstudio` archives must import and work, with additive schema extensions/defaults/migration and exact preservation of existing content, unknown fields and original media. New formatting requires old-project import plus native persistence/export/restore regressions. This clarifies the compatibility contract; it does not authorize flattening old content or abandoning the supplied private reference acceptance.
