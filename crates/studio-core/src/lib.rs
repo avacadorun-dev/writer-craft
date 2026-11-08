@@ -46,7 +46,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -328,6 +328,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("assets.sql"))?;
             transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
             transaction.execute_batch(include_str!("project_portability.sql"))?;
+            transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -350,6 +351,9 @@ impl Workspace {
             }
             if version < 7 {
                 transaction.execute_batch(include_str!("project_portability.sql"))?;
+            }
+            if version < 8 {
+                transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
             }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }

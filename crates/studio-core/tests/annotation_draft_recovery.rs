@@ -347,7 +347,7 @@ fn schema_five_migrates_without_recreating_existing_asset_tables() {
         document.id
     };
     let raw = rusqlite::Connection::open(&path).unwrap();
-    raw.execute_batch("DROP TABLE project_annotation_projections; DROP TABLE project_quarantined_recovery; DROP TABLE project_canvas_drafts; DROP TABLE project_canvas_revisions; DROP TABLE project_canvases; DROP TABLE project_asset_metadata; DROP TABLE project_source_records; DROP TABLE project_nodes; DROP TABLE project_resource_aliases; DROP TABLE project_portability; DROP TABLE rich_draft_annotations; PRAGMA user_version=5;")
+    raw.execute_batch("DROP TABLE project_evidence_references; DROP TABLE project_evidence_objects; DROP TABLE project_annotation_projections; DROP TABLE project_quarantined_recovery; DROP TABLE project_canvas_drafts; DROP TABLE project_canvas_revisions; DROP TABLE project_canvases; DROP TABLE project_asset_metadata; DROP TABLE project_source_records; DROP TABLE project_nodes; DROP TABLE project_resource_aliases; DROP TABLE project_portability; DROP TABLE rich_draft_annotations; PRAGMA user_version=5;")
         .unwrap();
     drop(raw);
     let workspace = Workspace::open(&path).unwrap();
@@ -356,7 +356,7 @@ fn schema_five_migrates_without_recreating_existing_asset_tables() {
     let version: i64 = raw
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     let tables:i64=raw.query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('project_assets','rich_draft_annotations')",[],|row|row.get(0)).unwrap();
     assert_eq!(tables, 2);
 }
