@@ -55,7 +55,7 @@ def workspace_metadata(root: Path = ROOT):
     required_scope = "native-foundation"
     if "[workspace.metadata.writercraft]" in manifest:
         required_scope = quoted_field(toml_section(manifest, "workspace.metadata.writercraft"), "required-ux-scope")
-    if required_scope not in {"native-foundation", "full-editor-parity", "full-parity"}:
+    if required_scope not in {"native-foundation", "native-rich-editor-alpha", "full-editor-parity", "full-parity"}:
         raise ValueError("Unknown required independent UX scope: " + required_scope)
     return {"version": version, "short_version": ".".join(parts[:3]), "license": quoted_field(section, "license"), "required_ux_scope": required_scope}
 

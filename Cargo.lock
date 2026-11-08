@@ -4638,7 +4638,7 @@ dependencies = [
 
 [[package]]
 name = "studio-cli"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "serde_json",
  "studio-core",
@@ -4647,7 +4647,7 @@ dependencies = [
 
 [[package]]
 name = "studio-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "craft-editor-model",
  "image",
@@ -4663,7 +4663,7 @@ dependencies = [
 
 [[package]]
 name = "studio-desktop"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.23.1",
  "craft-editor-egui",
@@ -4688,7 +4688,7 @@ dependencies = [
 
 [[package]]
 name = "studio-transfer"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "craft-editor-model",
  "serde",

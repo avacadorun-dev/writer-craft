@@ -88,3 +88,8 @@ Routine changes to the project license, repository About/topics, release houseke
 The owner explicitly included all open product issues on 2026-11-08, superseding prior deferrals. The editor epic #4 remains complete, with #7 authoring, #8 syntax, #9 controls, #6 layout and #2 notes. Alpha.2 now also includes #3 installers, #10 complete source-project/Canvas/media compatibility and #11 transparent data/portable Markdown plus artifacts. Issue #1 was already closed after direct owner confirmation of the Dock icon. See [NEXT_RELEASE.md](NEXT_RELEASE.md).
 
 Keep every remaining product issue open until owner acceptance of the complete candidate, even after independent verification makes it ready to close. Continue updating exact source/build evidence and acceptance checklists. Routine administrative work still does not require a separate issue.
+
+
+## Latest scheduling decision — checkpoint alpha.2, remaining work alpha.3
+
+The owner subsequently authorized publishing the completed coherent checkpoint as alpha.2 and moving all unfinished large blocks to alpha.3. This supersedes the earlier scheduling statements above. Preserve original issue requirements and progress; use milestones and a current status note rather than claiming missing work is complete. In particular, keep the full-editor epic and incomplete project/media/Canvas/restore work open for alpha.3. Publishing alpha.2 alone never satisfies an issue or grants final owner acceptance.

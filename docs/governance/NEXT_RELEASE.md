@@ -1,4 +1,34 @@
-# Next release: alpha.2, all open issues
+# Release plan: alpha.2 checkpoint and alpha.3 continuation
+
+**Latest owner decision, 2026-11-08:** publish the current completed coherent implementation as `0.1.0-alpha.2`, including native installers and a README with actual application screenshots. All unfinished large blocks move to `0.1.0-alpha.3`. This explicitly supersedes the previous all-issues alpha.2 boundary recorded below. Product issues remain open pending their own full verification and owner acceptance; publication does not complete the parity epic.
+
+## Alpha.2 publication scope
+
+- Native rich writing workspace, formatting and currently integrated block insertion/property workflows; actual image, Mermaid and formula rendering, syntax decoration, local rich revisions/drafts and current passage-note implementation.
+- Approved bounded/adaptive manuscript presentation, typography preferences, eight UI locales, Light/Dark/System and seven non-green palettes, Lucide and monk/book identity.
+- The verified block-flow repair, independent preference-file acknowledgement/retry/reload, existing local data and backup controls.
+- macOS ARM64 DMG, per-user Windows x64 installer and Linux amd64 Debian package, checksums and exact-source package evidence.
+- Named independent engineering-alpha review: `native-rich-editor-alpha`. No complete legacy parity, full Canvas/media import, rich assistant acceptance or exhaustive OS input/accessibility claim.
+
+## Alpha.3 remaining work packages
+
+1. Complete table selection/structural authoring, clipboard and all original editor edge cases (#4, #7).
+2. Finish passage-note/dictionary/source-link lifecycle and deep-link acceptance (#2, #4).
+3. Wire exact assistant selection attachments, rich proposal preview and guarded Apply/Reject/Undo (#4).
+4. Finish native full `.wstudio` import, tree/history workflows and original-demo acceptance (#10).
+5. Integrate full native Canvas authoring and its remaining generic engine capabilities (#10).
+6. Implement PDF/audio/video/source-segment playback workflows (#10).
+7. Finish native Markdown/artifact export and canonical format-2 semantic restore/UI (#11).
+8. Retest remaining complete preference/recovery/control journeys and source parity (#4, #9).
+9. Complete the original editor/native IME/clipboard/accessibility/performance matrix and final full-migration review (#4, #6–#10).
+
+Partial implementations remain preserved and explicitly qualified per checkpoint. No private project is a public fixture. Deferred capabilities are not advertised as alpha.2 features. The installer issue (#3), layout issue (#6), syntax issue (#8), components issue (#9) and block-flow bug (#12) retain their precise implemented evidence and outstanding owner checks instead of being mass-closed.
+
+---
+
+## Historical plan superseded by the latest owner decision
+
+### Previous alpha.2 all-open-issues plan
 
 Status: **owner-approved expanded scope**, 2026-11-08. Target: `0.1.0-alpha.2`. The owner explicitly included every open product issue, including previously deferred installation, full-project migration and portable exports. This decision supersedes the earlier editor-only release boundary; no editor requirement was removed.
 

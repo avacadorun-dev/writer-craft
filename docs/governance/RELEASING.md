@@ -1,5 +1,9 @@
 # Versioning and releases
 
+## Current alpha.2 decision
+
+The latest owner instruction authorizes publication of the completed coherent checkpoint as `0.1.0-alpha.2` under the independent scope `native-rich-editor-alpha`. Unfinished full-parity work moves to alpha.3. Earlier all-issues alpha.2 and editor-first deferral statements below are historical and superseded. Preserve published alpha.1 unchanged. The final installer release path must ship the editor-enabled **normal app identity**, use the verified DMG/per-user setup/Debian packages rather than old portable default-editor archives, retain engineering evidence unchanged and add separate exact-source scoped release acceptance. All package generation remains hosted. README uses actual compiled captures and direct release downloads. Product issues require separate final owner acceptance.
+
 WriterCraft ships source through Git and distribution builds through GitHub Actions. Do not commit `target/`, app bundles, ZIPs, databases or local build artifacts. Local packaging defaults to debug; optimized `--release` packaging is reserved for GitHub Actions.
 
 ## Version contract

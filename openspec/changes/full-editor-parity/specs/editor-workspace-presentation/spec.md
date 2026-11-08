@@ -66,7 +66,7 @@ Image, diagram, block-formula and inline-formula paint, captions and status plac
 
 ### Requirement: Acknowledged settings files and explicit recovery
 
-Appearance, interface and editor preferences SHALL share bounded acknowledgement/publication rules while retaining their existing formats and migration semantics. A failed save SHALL retain each group's desired runtime choices independently, expose session-only state and permit explicit retry without another value change. Unreadable, malformed, oversized, unsupported or externally changed files SHALL remain preserved. Known edits SHALL retain unknown valid fields. A group reload SHALL validate first and replace only that group's runtime choices without writing a file or changing manuscript content/history.
+Appearance, interface and editor preferences SHALL use bounded acknowledged publication while retaining their formats and migration semantics. Failed saves SHALL retain each group's runtime choices independently, report session-only state and permit retry without another value change. Invalid or changed source files and unknown valid fields SHALL be preserved. Reload SHALL validate and replace only its group's runtime choices, without writing files or changing manuscript history.
 
 #### Scenario: One settings group cannot be saved
 - **WHEN** an author changes multiple settings groups and one publication fails
