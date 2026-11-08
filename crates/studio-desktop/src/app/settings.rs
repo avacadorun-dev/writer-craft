@@ -1,5 +1,6 @@
 //! Categorized native preferences; incomplete parity sections never expose fake controls.
 use super::*;
+use crate::editor_preferences::{ManuscriptFont, ToolbarMode};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) enum Section {
@@ -157,13 +158,7 @@ impl StudioApp {
                     });
                 }
             }
-            Section::Editor => {
-                ui.label(RichText::new(l.text("Manuscript text size")).strong());
-                ui.add(
-                    egui::Slider::new(&mut self.font_size, 16.0..=28.0)
-                        .suffix(format!(" {}", l.text("px"))),
-                );
-            }
+            Section::Editor => self.editor_settings(ui, t),
             Section::Files => self.storage_settings(ui, t),
             Section::Keyboard => {
                 ui.label(RichText::new(l.text("⌘S — save     ⌘N — new project     ⌘O — open archive\n⌘⇧A — review panel     ⌘⇧F — focus mode     ⌘, — settings")).size(14.0).color(t.text));
@@ -182,9 +177,115 @@ impl StudioApp {
         }
     }
 
+    fn editor_settings(&mut self, ui: &mut egui::Ui, t: Tokens) {
+        let l = self.language;
+        if !self.editor_preferences.writable() {
+            ui.label(RichText::new(l.text(
+                "The saved editor settings are preserved. Repair the file and reopen the application before saving changes.",
+            )).color(t.warning));
+            ui.add_space(16.0);
+        }
+        ui.add_enabled_ui(self.editor_preferences.writable(), |ui| {
+            ui.spacing_mut().interact_size.y = 40.0;
+            ui.spacing_mut().item_spacing.y = 16.0;
+            let preferences = &mut self.editor_preferences.values;
+            ui.label(RichText::new(l.text("Typography")).strong());
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.0;
+                ui.label(l.text("Manuscript font"));
+                egui::ComboBox::from_id_salt("manuscript-font-family")
+                    .selected_text(preferences.font_family.family())
+                    .width(ui.available_width())
+                    .show_ui(ui, |ui| {
+                        for family in ManuscriptFont::ALL {
+                            ui.selectable_value(
+                                &mut preferences.font_family,
+                                family,
+                                family.family(),
+                            );
+                        }
+                    });
+            });
+            if ![17.0, 19.0, 21.0].contains(&preferences.font_size) {
+                ui.label(format!("{} {}", preferences.font_size, l.text("px")));
+            }
+            preference_choices(
+                ui,
+                l.text("Manuscript text size"),
+                &mut preferences.font_size,
+                &[(17.0, "17 px"), (19.0, "19 px"), (21.0, "21 px")],
+            );
+            preference_choices(
+                ui,
+                l.text("Line spacing"),
+                &mut preferences.line_height,
+                &[(1.5, "1.5"), (1.75, "1.75"), (2.0, "2")],
+            );
+            preference_choices(
+                ui,
+                l.text("Paragraph spacing"),
+                &mut preferences.paragraph_spacing,
+                &[(0.65, "0.65 em"), (0.9, "0.9 em"), (1.1, "1.1 em")],
+            );
+            preference_choices(
+                ui,
+                l.text("List item spacing"),
+                &mut preferences.list_item_spacing,
+                &[(0.0, "0 em"), (0.25, "0.25 em"), (0.5, "0.5 em")],
+            );
+            ui.add_space(8.0);
+            ui.separator();
+            preference_choices(
+                ui,
+                l.text("Manuscript width"),
+                &mut preferences.manuscript_width,
+                &[(60, "60 ch"), (70, "70 ch"), (80, "80 ch")],
+            );
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.0;
+                ui.label(l.text("Formatting toolbar"));
+                let width = (ui.available_width() - 16.0) / 3.0;
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    for mode in ToolbarMode::ALL {
+                        if ui
+                            .add_sized(
+                                [width, 40.0],
+                                egui::Button::new(l.text(mode.label()))
+                                    .selected(preferences.toolbar_mode == mode),
+                            )
+                            .clicked()
+                        {
+                            preferences.toolbar_mode = mode;
+                        }
+                    }
+                });
+            });
+            ui.add_space(8.0);
+            ui.separator();
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.0;
+                ui.label(l.text("Word goal"));
+                ui.add_sized(
+                    [ui.available_width(), 40.0],
+                    egui::DragValue::new(&mut preferences.word_goal)
+                        .range(0..=1_000_000)
+                        .speed(100),
+                );
+                ui.label(
+                    RichText::new(l.text("0 disables the word goal."))
+                        .size(13.0)
+                        .color(t.muted),
+                );
+            });
+        });
+        self.font_size = self.editor_preferences.values.font_size;
+    }
+
     pub(super) fn settings_dialog(&mut self, ctx: &egui::Context, t: Tokens) {
         let l = self.language;
         let previous = self.settings;
+        let previous_editor = self.editor_preferences.values.clone();
         let previous_interface = InterfacePreferences {
             language: self.language,
             font_size: self.font_size,
@@ -365,10 +466,43 @@ impl StudioApp {
             });
             self.status = "Attention needed".into();
         }
+        if self.editor_preferences.values != previous_editor {
+            let result = self.editor_preferences.save().map_err(Into::into);
+            self.record_error(result);
+        }
         if response.should_close() {
             self.settings_open = false;
         }
     }
+}
+
+/// One label/control inset and minimum target geometry for each reading preference.
+fn preference_choices<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut T,
+    choices: &[(T, &str)],
+) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 8.0;
+        ui.label(label);
+        let width = (ui.available_width() - 8.0 * (choices.len().saturating_sub(1)) as f32)
+            / choices.len().max(1) as f32;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            for &(choice, text) in choices {
+                if ui
+                    .add_sized(
+                        [width, 40.0],
+                        egui::Button::new(text).selected(*value == choice),
+                    )
+                    .clicked()
+                {
+                    *value = choice;
+                }
+            }
+        });
+    });
 }
 
 #[derive(Clone, Copy)]
