@@ -55,6 +55,7 @@ impl RichState {
             .as_ref()
             .is_some_and(|draft| &draft.content != content);
         let mut session = EditorSession::new(tree, Revision(0));
+        session.set_table_column_limit(Some(63))?;
         session.options.id = egui::Id::new(("rich-manuscript", &document.id));
         Ok(Some(Self {
             session,
@@ -147,6 +148,7 @@ impl RichState {
             .ok_or("missing_saved_rich_document")?;
         let mut session =
             EditorSession::new(RichDocument::from_json(content.clone())?, Revision(0));
+        session.set_table_column_limit(Some(63))?;
         session.options.id = egui::Id::new(("rich-manuscript", &document.id));
         Ok(Self {
             session,
@@ -651,58 +653,12 @@ fn find_path(node: &Node, id: &str, path: NodePath) -> Option<NodePath> {
 }
 
 fn set_block_kind(session: &mut EditorSession, level: u8) -> AppResult<()> {
-    fn text_blocks(node: &Node, ids: &mut Vec<String>) {
-        if matches!(
-            node.node_type.as_str(),
-            "paragraph" | "heading" | "codeBlock"
-        ) {
-            if let Some(id) = node.block_id() {
-                ids.push(id.to_owned());
-            }
-        } else {
-            for child in node.children() {
-                text_blocks(child, ids);
-            }
-        }
-    }
-    let selection = session.selection().ok_or("No selection")?;
-    let mut ids = vec![];
-    text_blocks(session.document().root(), &mut ids);
-    let a = ids
-        .iter()
-        .position(|id| id == &selection.anchor.block_id)
-        .ok_or("Missing anchor")?;
-    let b = ids
-        .iter()
-        .position(|id| id == &selection.head.block_id)
-        .ok_or("Missing caret")?;
-    let mut staged =
-        craft_editor_model::Editor::new(session.document().clone(), session.revision());
-    let mut commands = vec![];
-    for id in &ids[a.min(b)..=a.max(b)] {
-        let path = find_path(staged.document().root(), id, NodePath::root())
-            .ok_or("Missing text block")?;
-        let target = staged.document().node_ref(&path)?;
-        let mut replacement = target.expected.as_ref().clone();
-        replacement.node_type = if level == 0 { "paragraph" } else { "heading" }.into();
-        if level == 0 {
-            if let Some(attrs) = &mut replacement.attrs {
-                attrs.remove("level");
-            }
-        } else {
-            replacement
-                .attrs
-                .get_or_insert_default()
-                .insert("level".into(), json!(level));
-        }
-        let command = staged.document().replace_node(&target, replacement)?;
-        staged.apply(craft_editor_model::Transaction {
-            base_revision: staged.revision(),
-            commands: vec![command.clone()],
-        })?;
-        commands.push(command);
-    }
-    session.apply_commands(commands)?;
+    let kind = if level == 0 {
+        craft_editor_egui::TextBlockKind::Paragraph
+    } else {
+        craft_editor_egui::TextBlockKind::Heading { level }
+    };
+    session.set_text_block_kind(kind)?;
     Ok(())
 }
 
@@ -766,6 +722,9 @@ struct TableContext {
 impl TableContext {
     fn at(session: &EditorSession, block_id: &str) -> Option<(NodePath, usize, usize)> {
         let path = find_path(session.document().root(), block_id, NodePath::root())?;
+        Self::at_path(session, &path)
+    }
+    fn at_path(session: &EditorSession, path: &NodePath) -> Option<(NodePath, usize, usize)> {
         for length in (0..path.0.len()).rev() {
             let ancestor = NodePath(path.0[..length].to_vec());
             if session.document().node(&ancestor).ok()?.node_type == "table" {
@@ -775,8 +734,25 @@ impl TableContext {
         None
     }
     fn current(session: &EditorSession) -> Option<Self> {
-        let selection = session.selection()?;
-        let (path, row, cell_index) = Self::at(session, &selection.head.block_id)?;
+        if let Some(selection) = session.cell_selection() {
+            let target = session.document().node_ref(&selection.table_path).ok()?;
+            let grid = TableGrid::new(&target.expected).ok()?;
+            let cell = grid
+                .cell_at(selection.head.row, selection.head.column)?
+                .clone();
+            let selected = Some(selection.rectangle(session.document()).ok()?);
+            return Some(Self {
+                target,
+                grid,
+                cell,
+                selected,
+            });
+        }
+        let (path, row, cell_index) = if let Some(reference) = session.node_selection() {
+            Self::at_path(session, &reference.path)?
+        } else {
+            Self::at(session, &session.selection()?.head.block_id)?
+        };
         let target = session.document().node_ref(&path).ok()?;
         let grid = TableGrid::new(&target.expected).ok()?;
         let cell = grid
@@ -784,8 +760,10 @@ impl TableContext {
             .iter()
             .find(|cell| cell.row == row && cell.cell_index == cell_index)?
             .clone();
-        let selected =
-            Self::at(session, &selection.anchor.block_id).and_then(|(anchor, row, index)| {
+        let selected = session
+            .selection()
+            .and_then(|selection| Self::at(session, &selection.anchor.block_id))
+            .and_then(|(anchor, row, index)| {
                 if anchor != path {
                     return None;
                 }
@@ -1543,6 +1521,31 @@ mod tests {
         assert_eq!(app.workspace.document(&target.id)?, target);
         assert_eq!(app.workspace.rich_draft(&target.id)?.as_ref(), Some(&draft));
         assert_eq!(app.workspace.annotation(&note.id)?, note);
+        Ok(())
+    }
+
+    #[test]
+    fn rectangular_native_selection_formats_once_and_restores_direction() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let session = &mut app.rich.as_mut().ok_or("Missing session")?.session;
+        assert_eq!(session.table_column_limit(), Some(63));
+        let path = TableContext::at(session, "right").ok_or("Missing table")?.0;
+        let cells = craft_editor_egui::TableSelection {
+            table_path: path,
+            anchor: craft_editor_egui::CellPoint { row: 1, column: 1 },
+            head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+        };
+        session.set_cell_selection(cells.clone())?;
+        let before = session.document().to_json()?;
+        set_block_kind(session, 2)?;
+        assert_eq!(session.cell_selection(), Some(&cells));
+        let context = TableContext::current(session).ok_or("Missing selected table")?;
+        assert_eq!(context.selected, Some(cells.rectangle(session.document())?));
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert_eq!(session.cell_selection(), Some(&cells));
+        session.redo()?;
+        assert_eq!(session.cell_selection(), Some(&cells));
         Ok(())
     }
 }

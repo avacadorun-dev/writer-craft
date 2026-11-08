@@ -1,0 +1,25 @@
+## ADDED Requirements
+
+### Requirement: Revision-bound native table editing
+
+The native editor SHALL expose every source table command through the one rich session, including rectangular selection, formatting, row/column changes, table deletion, clipboard and width changes. Source dialogs SHALL retain the exact cell/text/node selection and reject stale or foreign session bookmarks before mutation. Every operation SHALL preserve retained rich content, attributes, provenance and one coherent Undo/Redo entry.
+
+#### Scenario: A selected cell rectangle is formatted and undone
+- **WHEN** an author selects cells in reverse direction and applies a supported mark or heading style
+- **THEN** every selected eligible block changes in one transaction, unselected content remains exact, and Undo restores the original tree and directional selection
+
+#### Scenario: A source dialog loses its original target
+- **WHEN** the dialog belongs to a different native session or its revision is stale
+- **THEN** confirmation returns an actionable error and preserves canonical data, history and current selection
+
+#### Scenario: A table column is resized
+- **WHEN** an author drags a measured column boundary and releases it
+- **THEN** native tracks and persisted widths change coherently once, including cells spanning that column, and Undo/save/reopen preserve the corresponding exact tree
+
+#### Scenario: The last selected rows or columns are removed
+- **WHEN** row or column deletion covers the whole table
+- **THEN** the table is removed atomically, the surrounding document remains valid and a nearby insertion target survives with reversible history
+
+#### Scenario: Native table capacity would be exceeded
+- **WHEN** any insertion, widening, paste or other guarded command would exceed 63 logical columns
+- **THEN** it fails before mutation without truncating preserved wider canonical data
