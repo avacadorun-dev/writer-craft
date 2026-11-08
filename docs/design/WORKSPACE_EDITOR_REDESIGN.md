@@ -1,8 +1,8 @@
 # Editor workspace concepts: Comfort and Balanced
 
-Status: **awaiting owner selection before implementation**, 2026-11-08. This is the independent designer's response to [owner finding #6](https://github.com/avacadorun-dev/writer-craft/issues/6) and F-31. No host layout change or acceptance is authorized by the sketches alone.
+Status: **Balanced selected by the owner for implementation**, 2026-11-08. This is the independent designer's response to [owner finding #6](https://github.com/avacadorun-dev/writer-craft/issues/6) and F-31. The owner explicitly chose Balanced after viewing the concept PNG. This approves the design direction and geometry for implementation, not native UX acceptance or issue closure.
 
-The owner rejected excessive empty space above the manuscript and the current formatting strip, then clarified that the workspace must retain visual air and avoid cramming controls together. Show these finished concepts for comparison first. Do not implement a preferred layout until the owner chooses it.
+The owner rejected excessive empty space above the manuscript and the current formatting strip, then clarified that the workspace must retain visual air and avoid cramming controls together. The finished concepts were presented before implementation; the owner chose **Balanced**. Implement its 48 px global bar, 56 px document identity, 40 px flat formatting row and 28 px initial manuscript gutter, with a 264 px default navigator and the same comfortable control/body spacing shown. Preserve the existing pane resize and compact-visibility behavior.
 
 ![Comfort workspace design concept](assets/workspace-comfort.svg)
 
@@ -27,7 +27,7 @@ Both illustrations are **nonfunctional SVG design concepts, not native applicati
 
 The current implementation consumes 202 px in fixed top bars (48 + 110 + 44), followed by a 24 px manuscript gutter. Comfort changes that combined pre-content area from 226 to 202 px; Balanced changes it to 172 px. These are design geometry calculations, not measured compiled results. Neither option tries to maximize density. Both retain substantial manuscript margins, readable 20 px body text, comfortable block separation and 42–44 px navigation rows.
 
-The designer recommends **Balanced as the starting comparison candidate**, because it removes redundant hero spacing while keeping separate identity and formatting rows. Comfort is equally viable if the owner prefers more separation. This recommendation is not an owner decision. Do not implement both layouts or introduce another preference solely because two concepts are shown. A focus-only layout is omitted from the comparison so pane visibility does not bias the perceived space.
+The designer recommended Balanced because it removes redundant hero spacing while keeping separate identity and formatting rows; the owner then explicitly selected it. Comfort remains a comparison artifact, not a second layout requirement. Do not implement both or introduce another preference solely because two concepts are shown. A focus-only layout was omitted so pane visibility did not bias the perceived space. The approved concept was shown as a nonfunctional PNG at an external temporary path; it is not native evidence.
 
 ## Shared composition
 
@@ -75,7 +75,7 @@ The concepts are not that demo. Their diagrams, formulas and notes are illustrat
 
 | Check | Required evidence |
 |---|---|
-| Owner choice | Record the selected concept or requested combination before changing host layout. Update F-31 and the implementation plan without claiming acceptance. |
+| Owner choice | Completed: the owner explicitly selected Balanced before host layout changes. Implement its named geometry; preserve this decision separately from pending native acceptance. |
 | Vertical rhythm | Same-size actual rebuilt frame with measured global/identity/format rectangles and initial content origin matching the selected option. No hero-sized blank zone, cramped controls or compensating blank content. |
 | Pane geometry | 1440 × 940 and 1000 × 680; navigator shown/hidden/resized; inspector requested/shown and Focus exit. Shared boundaries stay collinear and every action has an independent reachable target. |
 | Format interaction | Pointer and keyboard across normal/reverse/mixed/cross-cell selections; open/cancel contextual and overflow menus. Exact selection, pending marks, caret, focus and Undo survive. Active/mixed/disabled states report real state. |
