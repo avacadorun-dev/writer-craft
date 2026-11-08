@@ -7,8 +7,8 @@ mod annotations;
 mod assets;
 mod rich;
 pub use annotations::{
-    AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationStatus,
-    PassageAnnotation,
+    AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
+    AnnotationStatus, PassageAnnotation,
 };
 pub use assets::{
     ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, MAX_IMAGE_BYTES,

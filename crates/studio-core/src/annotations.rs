@@ -114,6 +114,57 @@ pub(super) struct CachedReceipt {
 }
 pub(super) type ReplayCache = HashMap<HistoryReceipt, CachedReceipt>;
 
+/// Immutable, core-owned attachment context captured from one consistent workspace state.
+///
+/// Private fields prevent callers from supplying arbitrary note snapshots or receipt maps.
+/// This value is not a serialized authority token; refreshed metadata still uses live guards.
+#[derive(Clone)]
+pub struct AnnotationPreviewSnapshot {
+    document: Document,
+    notes: Vec<PassageAnnotation>,
+    receipts: ReplayCache,
+}
+impl AnnotationPreviewSnapshot {
+    /// Canonical document whose note metadata was captured.
+    pub fn document_id(&self) -> &str {
+        &self.document.id
+    }
+    /// Durable document revision used for the immutable base.
+    pub fn base_revision(&self) -> i64 {
+        self.document.revision
+    }
+    /// Stored metadata before pending input, including resolved and detached notes.
+    pub fn stored_notes(&self) -> &[PassageAnnotation] {
+        &self.notes
+    }
+    /// Pure in-memory replay of exact attachments for the supplied current rich state.
+    ///
+    /// No SQLite, filesystem, network or shared receipt-cache access occurs here.
+    /// Metadata revision fields remain stored optimistic guards; flush native writing
+    /// and refresh the context before committing note lifecycle/text changes.
+    pub fn preview(
+        &self,
+        proofs: &[ReplayProof],
+        expected_content: serde_json::Value,
+    ) -> Result<Vec<PassageAnnotation>> {
+        if proofs.len() > 1_000 {
+            return Err(StudioError::Validation(
+                "Native edit batch exceeds 1000 changes".into(),
+            ));
+        }
+        let (expected_content, _, _) = super::rich::validate_tree(expected_content)?;
+        let (notes, _) = preview_replay_annotations(
+            &self.document,
+            self.document.revision,
+            proofs,
+            &expected_content,
+            self.notes.clone(),
+            &self.receipts,
+        )?;
+        Ok(notes)
+    }
+}
+
 impl Workspace {
     /// Persist one debounced native edit batch using sealed engine provenance.
     /// Forward commands are replayed against the guarded canonical base; public
@@ -139,116 +190,19 @@ impl Workspace {
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current = read_document(&transaction, document_id)?;
         require_revision(&current, expected_revision)?;
-        let mut tree = rich_tree(&current)?;
         let original_notes = list_annotations(&transaction, document_id)?;
-        let mut notes = original_notes.clone();
         let mut receipts = self
             .replay_receipts
             .lock()
             .map_err(|_| StudioError::LockUnavailable)?;
-        let mut candidate_receipts = receipts.clone();
-        // The original and candidate maps each hold one reference. The engine's
-        // live history/pending proofs retain any still reachable target receipt.
-        candidate_receipts.retain(|receipt, _| receipt.reference_count() > 2);
-        if let Some(first) = proofs.first()
-            && candidate_receipts
-                .get(first.before())
-                .is_some_and(|entry| entry.acknowledged_revision != Some(expected_revision))
-        {
-            return Err(StudioError::Validation("Native history base changed outside this session; preserve the draft before reloading".into()));
-        }
-        if let Some(first) = proofs.first()
-            && first.action() != ReplayAction::Apply
-            && let Some(cached) = candidate_receipts.get(first.before())
-            && attachment_states(&notes).iter().any(|(id, snapshot)| {
-                cached
-                    .attachments
-                    .get(id)
-                    .is_some_and(|previous| previous != snapshot)
-            })
-        {
-            return Err(StudioError::Validation("Annotation attachments changed after this history checkpoint; preserve the current note before undoing".into()));
-        }
-        let mut prior_receipt = None;
-        for proof in proofs {
-            if prior_receipt.is_some_and(|previous| previous != proof.before()) {
-                return Err(StudioError::Validation(
-                    "Native edit journal is not contiguous".into(),
-                ));
-            }
-            if candidate_receipts
-                .get(proof.before())
-                .is_some_and(|entry| entry.document_id != document_id)
-            {
-                return Err(StudioError::Validation(
-                    "Native history belongs to another document".into(),
-                ));
-            }
-            let (updated, maps) = proof.verify(&tree).map_err(|error| {
-                StudioError::Validation(format!("Native edit replay failed: {error}"))
-            })?;
-            candidate_receipts.insert(
-                proof.before().clone(),
-                CachedReceipt {
-                    document_id: document_id.into(),
-                    attachments: attachment_states(&notes),
-                    acknowledged_revision: None,
-                },
-            );
-            let restored = if proof.action() == ReplayAction::Apply {
-                None
-            } else {
-                Some(candidate_receipts.get(proof.after()).filter(|entry| entry.document_id == document_id).ok_or_else(|| StudioError::Validation("Native Undo/Redo attachment receipt is unavailable; retain this draft and reload history".into()))?.attachments.clone())
-            };
-            for annotation in &mut notes {
-                if let Some(snapshot) = restored
-                    .as_ref()
-                    .and_then(|states| states.get(&annotation.id))
-                {
-                    annotation.anchor = snapshot.anchor.clone();
-                    annotation.anchor_status = snapshot.status;
-                } else if annotation.anchor_status == AnchorStatus::Attached {
-                    let before_anchor = annotation.anchor.clone();
-                    let mapped = verified_anchor(&tree, &annotation.anchor).is_ok()
-                        && map_anchor(
-                            &mut annotation.anchor,
-                            if restored.is_some() {
-                                None
-                            } else {
-                                Some(&maps)
-                            },
-                            &tree,
-                            &updated,
-                        );
-                    if !mapped {
-                        annotation.anchor = before_anchor;
-                        annotation.anchor_status = AnchorStatus::Detached;
-                    }
-                }
-                if annotation.anchor_status == AnchorStatus::Attached {
-                    match verified_anchor(&updated, &annotation.anchor) {
-                        Ok(anchor) => annotation.anchor = anchor,
-                        Err(_) => annotation.anchor_status = AnchorStatus::Detached,
-                    }
-                }
-            }
-            candidate_receipts.insert(
-                proof.after().clone(),
-                CachedReceipt {
-                    document_id: document_id.into(),
-                    attachments: attachment_states(&notes),
-                    acknowledged_revision: None,
-                },
-            );
-            tree = updated;
-            prior_receipt = Some(proof.after());
-        }
-        if tree.to_json().map_err(|error| {
-            StudioError::Validation(format!("Native result cannot be encoded: {error}"))
-        })? != expected_content
-        {
-            return Err(StudioError::Validation("Native edit journal does not produce the acknowledged content; preserve the continued draft".into()));
-        }
+        let (mut notes, mut candidate_receipts) = preview_replay_annotations(
+            &current,
+            expected_revision,
+            proofs,
+            &expected_content,
+            original_notes.clone(),
+            &receipts,
+        )?;
         let changed = proofs.iter().any(|proof| proof.before() != proof.after());
         let result = if changed {
             let saved = super::write_revision(&transaction, &current, &body, "manual")?;
@@ -281,6 +235,50 @@ impl Workspace {
         }
         *receipts = candidate_receipts;
         Ok(result)
+    }
+
+    /// Capture a consistent, immutable note/receipt context before entering native paint.
+    ///
+    /// Refresh after canonical save, note metadata changes, document switch or an
+    /// external-update notification. Future previews are pure in-memory checks.
+    pub fn annotation_preview_snapshot(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+    ) -> Result<AnnotationPreviewSnapshot> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Deferred)?;
+        let document = read_document(&transaction, document_id)?;
+        require_revision(&document, expected_revision)?;
+        rich_tree(&document)?;
+        let notes = list_annotations(&transaction, document_id)?;
+        let mut receipts = self
+            .replay_receipts
+            .lock()
+            .map_err(|_| StudioError::LockUnavailable)?
+            .clone();
+        receipts.retain(|receipt, _| receipt.reference_count() > 2);
+        transaction.commit()?;
+        Ok(AnnotationPreviewSnapshot {
+            document,
+            notes,
+            receipts,
+        })
+    }
+
+    /// Convenience preview outside paint; native render sources should retain a snapshot.
+    ///
+    /// The snapshot and save paths share exact sealed replay, stale-history, document
+    /// ownership and Undo/Redo checks. Nothing persists candidate receipts or notes.
+    pub fn preview_rich_editor_annotations(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+        proofs: &[ReplayProof],
+        expected_content: serde_json::Value,
+    ) -> Result<Vec<PassageAnnotation>> {
+        self.annotation_preview_snapshot(document_id, expected_revision)?
+            .preview(proofs, expected_content)
     }
 
     /// Capture an exact nonempty selection at a current revision. Callers pass
@@ -478,6 +476,125 @@ impl Workspace {
         transaction.commit()?;
         Ok(after)
     }
+}
+
+fn preview_replay_annotations(
+    current: &Document,
+    expected_revision: i64,
+    proofs: &[ReplayProof],
+    expected_content: &serde_json::Value,
+    mut notes: Vec<PassageAnnotation>,
+    receipts: &ReplayCache,
+) -> Result<(Vec<PassageAnnotation>, ReplayCache)> {
+    let document_id = current.id.as_str();
+    let mut tree = rich_tree(current)?;
+    let mut candidate_receipts = receipts.clone();
+    // The original and candidate maps each hold one reference. The engine's
+    // live history/pending proofs retain any still reachable target receipt.
+    candidate_receipts.retain(|receipt, _| receipt.reference_count() > 2);
+    if let Some(first) = proofs.first()
+        && candidate_receipts
+            .get(first.before())
+            .is_some_and(|entry| entry.acknowledged_revision != Some(expected_revision))
+    {
+        return Err(StudioError::Validation(
+            "Native history base changed outside this session; preserve the draft before reloading"
+                .into(),
+        ));
+    }
+    if let Some(first) = proofs.first()
+        && first.action() != ReplayAction::Apply
+        && let Some(cached) = candidate_receipts.get(first.before())
+        && attachment_states(&notes).iter().any(|(id, snapshot)| {
+            cached
+                .attachments
+                .get(id)
+                .is_some_and(|previous| previous != snapshot)
+        })
+    {
+        return Err(StudioError::Validation("Annotation attachments changed after this history checkpoint; preserve the current note before undoing".into()));
+    }
+    let mut prior_receipt = None;
+    for proof in proofs {
+        if prior_receipt.is_some_and(|previous| previous != proof.before()) {
+            return Err(StudioError::Validation(
+                "Native edit journal is not contiguous".into(),
+            ));
+        }
+        if candidate_receipts
+            .get(proof.before())
+            .is_some_and(|entry| entry.document_id != document_id)
+        {
+            return Err(StudioError::Validation(
+                "Native history belongs to another document".into(),
+            ));
+        }
+        let (updated, maps) = proof.verify(&tree).map_err(|error| {
+            StudioError::Validation(format!("Native edit replay failed: {error}"))
+        })?;
+        candidate_receipts.insert(
+            proof.before().clone(),
+            CachedReceipt {
+                document_id: document_id.into(),
+                attachments: attachment_states(&notes),
+                acknowledged_revision: None,
+            },
+        );
+        let restored = if proof.action() == ReplayAction::Apply {
+            None
+        } else {
+            Some(candidate_receipts.get(proof.after()).filter(|entry| entry.document_id == document_id).ok_or_else(|| StudioError::Validation("Native Undo/Redo attachment receipt is unavailable; retain this draft and reload history".into()))?.attachments.clone())
+        };
+        for annotation in &mut notes {
+            if let Some(snapshot) = restored
+                .as_ref()
+                .and_then(|states| states.get(&annotation.id))
+            {
+                annotation.anchor = snapshot.anchor.clone();
+                annotation.anchor_status = snapshot.status;
+            } else if annotation.anchor_status == AnchorStatus::Attached {
+                let before_anchor = annotation.anchor.clone();
+                let mapped = verified_anchor(&tree, &annotation.anchor).is_ok()
+                    && map_anchor(
+                        &mut annotation.anchor,
+                        if restored.is_some() {
+                            None
+                        } else {
+                            Some(&maps)
+                        },
+                        &tree,
+                        &updated,
+                    );
+                if !mapped {
+                    annotation.anchor = before_anchor;
+                    annotation.anchor_status = AnchorStatus::Detached;
+                }
+            }
+            if annotation.anchor_status == AnchorStatus::Attached {
+                match verified_anchor(&updated, &annotation.anchor) {
+                    Ok(anchor) => annotation.anchor = anchor,
+                    Err(_) => annotation.anchor_status = AnchorStatus::Detached,
+                }
+            }
+        }
+        candidate_receipts.insert(
+            proof.after().clone(),
+            CachedReceipt {
+                document_id: document_id.into(),
+                attachments: attachment_states(&notes),
+                acknowledged_revision: None,
+            },
+        );
+        tree = updated;
+        prior_receipt = Some(proof.after());
+    }
+    if tree.to_json().map_err(|error| {
+        StudioError::Validation(format!("Native result cannot be encoded: {error}"))
+    })? != *expected_content
+    {
+        return Err(StudioError::Validation("Native edit journal does not produce the acknowledged content; preserve the continued draft".into()));
+    }
+    Ok((notes, candidate_receipts))
 }
 
 fn attachment_states(notes: &[PassageAnnotation]) -> HashMap<String, AttachmentSnapshot> {
