@@ -285,6 +285,14 @@ impl ProjectOutline {
                                         .frame(false)
                                         .min_size(egui::vec2(32.0, 40.0)),
                                 );
+                                #[cfg(feature = "editor-preview")]
+                                if super::capture_connected_writing::enabled(ui.ctx()) {
+                                    super::capture_connected_writing::control(
+                                        ui.ctx(),
+                                        &format!("hierarchy.disclosure.{}", node.logical_id),
+                                        response.rect,
+                                    );
+                                }
                                 response.widget_info(|| {
                                     egui::WidgetInfo::labeled(
                                         egui::WidgetType::Button,
@@ -321,6 +329,16 @@ impl ProjectOutline {
                                 active,
                                 t,
                             );
+                            #[cfg(feature = "editor-preview")]
+                            if let Some(document) = &node.document_id
+                                && super::capture_connected_writing::enabled(ui.ctx())
+                            {
+                                super::capture_connected_writing::control(
+                                    ui.ctx(),
+                                    &format!("hierarchy.document.{document}"),
+                                    response.rect,
+                                );
+                            }
                             let right = response.has_focus()
                                 && ui.input(|input| input.key_pressed(egui::Key::ArrowRight));
                             let left = response.has_focus()
@@ -363,6 +381,20 @@ impl ProjectOutline {
             self.toggle(index);
             self.dirty = true;
             ui.ctx().request_repaint();
+        }
+        #[cfg(feature = "editor-preview")]
+        if super::capture_connected_writing::enabled(ui.ctx()) {
+            super::capture_connected_writing::observe(
+                ui.ctx(),
+                "hierarchy",
+                serde_json::json!({
+                    "project_id":self.project_id,"query":self.query,"selected_document":selected,
+                    "visible":self.visible.iter().map(|&(index,depth)| {
+                        let node=&self.nodes[index];
+                        serde_json::json!({"logical_id":node.logical_id,"document_id":node.document_id,"title":node.title,"depth":depth,"expanded":!(if self.query.is_empty(){&self.collapsed}else{&self.search_collapsed}).contains(&index)})
+                    }).collect::<Vec<_>>()
+                }),
+            );
         }
         chosen
     }

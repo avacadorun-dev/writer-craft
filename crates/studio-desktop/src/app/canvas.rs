@@ -508,9 +508,14 @@ impl CanvasState {
                             && !self.modal_open()
                             && self.text_editor.is_none(),
                         |ui| {
-                            if icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false)
-                                .clicked()
-                            {
+                            let add =
+                                icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false);
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.add_text",
+                                add.rect,
+                            );
+                            if add.clicked() {
                                 let result = self.add_text(database, self.view.camera().center());
                                 self.set_failure(result);
                             }
@@ -546,22 +551,28 @@ impl CanvasState {
                         ui.separator();
                         ui.label(l.text("Editing text card"));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if ui
-                                .add_enabled(
-                                    !self.text_composing,
-                                    egui::Button::new(l.text("Done")),
-                                )
-                                .clicked()
-                            {
+                            let done = ui.add_enabled(
+                                !self.text_composing,
+                                egui::Button::new(l.text("Done")),
+                            );
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.done",
+                                done.rect,
+                            );
+                            if done.clicked() {
                                 self.text_done = true;
                             }
-                            if ui
-                                .add_enabled(
-                                    !self.text_composing,
-                                    egui::Button::new(l.text("Cancel")),
-                                )
-                                .clicked()
-                            {
+                            let cancel = ui.add_enabled(
+                                !self.text_composing,
+                                egui::Button::new(l.text("Cancel")),
+                            );
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.cancel",
+                                cancel.rect,
+                            );
+                            if cancel.clicked() {
                                 self.text_cancel = true;
                             }
                         });
@@ -716,6 +727,25 @@ impl CanvasState {
         if self.text_editor.is_some() {
             let result = self.drive_inline(database, ui.ctx());
             self.set_failure(result);
+        }
+        if super::capture_connected_writing::enabled(ui.ctx()) {
+            let rect = |rect: egui::Rect| [rect.min.x, rect.min.y, rect.max.x, rect.max.y];
+            let camera = self.view.camera();
+            super::capture_connected_writing::observe(
+                ui.ctx(),
+                "canvas",
+                serde_json::json!({
+                    "project_id":self.project_id, "board_id":self.snapshot.canvas.id,
+                    "revision":self.snapshot.revision.info.revision, "canonical":self.snapshot.revision.content,
+                    "pending":self.pending.is_some(), "failed":self.failed.is_some() || self.failure.is_some() || self.text_save_error,
+                    "recovery":self.snapshot.draft.is_some(), "navigation_blocked":self.blocks_navigation(), "status":self.durability_status(),
+                    "editor":self.text_editor.as_ref().map(|editor| serde_json::json!({"node_id":editor.node_id(), "text":editor.text(), "dirty":editor.dirty(), "submitted":editor.has_submission(), "composing":self.text_composing})),
+                    "selected_nodes":self.view.selection().nodes,
+                    "camera":{"center":[camera.center().x,camera.center().y],"zoom":camera.zoom()},
+                    "viewport":rect(output.viewport),
+                    "visible_nodes":output.nodes.iter().map(|node|serde_json::json!({"node_id":node.node_id,"reserved":rect(node.reserved),"body_clip":rect(node.body_clip)})).collect::<Vec<_>>()
+                }),
+            );
         }
     }
     fn finish_inline(&mut self) {

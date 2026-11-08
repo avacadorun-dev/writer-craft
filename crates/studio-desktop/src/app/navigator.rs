@@ -71,7 +71,16 @@ impl StudioApp {
                 } else {
                     #[cfg(feature = "editor-preview")]
                     self.canvas_navigation(ui, t);
-                    components::singleline(ui, &mut self.search, l.text("Find a document…"));
+                    let search =
+                        components::singleline(ui, &mut self.search, l.text("Find a document…"));
+                    #[cfg(feature = "editor-preview")]
+                    super::capture_connected_writing::control(
+                        ui.ctx(),
+                        "navigator.search",
+                        search.rect,
+                    );
+                    #[cfg(not(feature = "editor-preview"))]
+                    let _ = search;
                     ui.add_space(14.0);
                     ui.horizontal(|ui| {
                         ui.add_space(8.0);
