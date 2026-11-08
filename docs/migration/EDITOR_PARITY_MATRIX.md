@@ -29,6 +29,12 @@ The companion [editor UX matrix](../design/EDITOR_UX_PARITY.md) owns independent
 | S15 | `legacy:internal/projectmedia/image.go:18–76`; `legacy:src/features/editor/model/image-drop.ts:1–25` — image integrity, limits and actual frontend/backend media differences |
 | S16 | `legacy:internal/assistantapp/native_code_roundtrip_test.go`; `native_rich_blocks_roundtrip_test.go`; `backend_test.go`; `legacy:src/features/editor/model/*.test.*`; `legacy:src/widgets/manuscript-editor/model/selection-context-menu.test.ts` — existing regression examples to adapt |
 
+## Owner-approved native capacity exception
+
+On 2026-11-08 the owner accepted 63 logical table columns for foreseeable alpha.2 writing scenarios; see F-30 and the UX contract. Do not fork a layout dependency solely to increase this limit. All table operations and all other editor requirements remain required within that capacity. Count logical grid columns, including merged spans, rather than cell count or pixel width.
+
+The original canonical contract remains span 1–100 with no new 63-column parser clamp. Preserve wider existing JSON/history/media exactly, expose a clear read-only capacity state, and reject UI/MCP creation/widening/paste beyond the active limit before mutation. Never truncate, clamp, drop cells or silently downgrade data to meet a renderer limit. This is the single explicitly approved native capacity exception, not permission to reduce unrelated editor functionality. E06 native acceptance and associated corpus cases use this recorded exception; canonical preservation still tests wide structures.
+
 ## Canonical node and attribute inventory
 
 The canonical wire shape is `Node { type, attrs?, marks?, text?, content? }`, with arbitrary JSON-valued `attrs`; `Mark { type, attrs? }`. There are **21 allowed node names and six mark names**. This is a tree, not Markdown or a flattened text buffer. Attribute absence, `null`, empty arrays and declared values must be handled deliberately; importing must not rewrite historical snapshots just to materialize defaults.

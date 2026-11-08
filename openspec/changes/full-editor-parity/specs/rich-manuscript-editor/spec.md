@@ -39,3 +39,15 @@ An independent reviewer SHALL accept `full-editor-parity` only against the exact
 #### Scenario: A model-only milestone passes
 - **WHEN** structured round-trip and transform tests pass but required native interactions remain unobserved
 - **THEN** the milestone is recorded as internal model evidence and the full-editor release gate stays pending
+
+### Requirement: Approved table capacity without data loss
+
+The native alpha.2 editor MAY limit editing to 63 logical table columns, as explicitly approved by the owner. Every table operation within that capacity SHALL remain available. The canonical parser SHALL preserve valid wider tables and span values 1–100 without truncation or clamping. UI and MCP adapters SHALL reject creation, widening or paste beyond the runtime capacity before mutation and SHALL identify preserved wider documents as read only.
+
+#### Scenario: A preserved table exceeds runtime capacity
+- **WHEN** an existing table exceeds 63 logical columns
+- **THEN** its complete canonical data/history remain intact, the editor explains its read-only capacity state, and no cells or spans are silently removed or rewritten
+
+#### Scenario: A command would exceed table capacity
+- **WHEN** a UI or MCP operation would create or widen a table beyond 63 logical columns
+- **THEN** it returns a capacity error without partially changing document, history or annotations
