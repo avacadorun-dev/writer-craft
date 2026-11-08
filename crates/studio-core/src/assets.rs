@@ -756,7 +756,7 @@ mod alias_tests {
         assert!(
             workspace
                 .project_images(&first.id)?
-                .export_images(&[asset.id.clone()], MAX_IMAGE_BYTES)
+                .export_images(std::slice::from_ref(&asset.id), MAX_IMAGE_BYTES)
                 .is_err()
         );
         let mut forged = tree("image")?.to_json()?;
