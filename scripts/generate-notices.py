@@ -147,6 +147,8 @@ def main():
     parser.add_argument("--target", help="Rust target triple; defaults to rustc's host")
     parser.add_argument("--manifest-path", type=Path, default=ROOT / "Cargo.toml")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--features", action="append", default=[],
+                        help="Cargo feature selection used by the packaged binary; repeatable")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
@@ -157,9 +159,11 @@ def main():
     target = args.target or host_target()
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", target):
         raise ValueError("Target must be a Rust target triple")
-    metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--locked", "--filter-platform", target, "--format-version", "1",
-         "--manifest-path", str(args.manifest_path)], text=True))
+    metadata_command = ["cargo", "metadata", "--locked", "--filter-platform", target,
+                        "--format-version", "1", "--manifest-path", str(args.manifest_path)]
+    for features in args.features:
+        metadata_command.extend(["--features", features])
+    metadata = json.loads(subprocess.check_output(metadata_command, text=True))
     report, warnings = render_notices(metadata, target)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(report.encode("utf-8"))
