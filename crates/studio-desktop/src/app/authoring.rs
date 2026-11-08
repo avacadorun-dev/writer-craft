@@ -594,6 +594,9 @@ pub(super) fn toolbar(
                             Some(1) => l.text("Heading 1"),
                             Some(2) => l.text("Heading 2"),
                             Some(3) => l.text("Heading 3"),
+                            Some(4) => l.text("Heading 4"),
+                            Some(5) => l.text("Heading 5"),
+                            Some(6) => l.text("Heading 6"),
                             _ => l.text("Heading"),
                         }
                     } else {
@@ -607,6 +610,9 @@ pub(super) fn toolbar(
                             ("Heading 1", 1),
                             ("Heading 2", 2),
                             ("Heading 3", 3),
+                            ("Heading 4", 4),
+                            ("Heading 5", 5),
+                            ("Heading 6", 6),
                         ] {
                             if ui.button(l.text(msgid)).clicked() {
                                 capture(set_block_kind(&mut rich.session, level), &mut error);
@@ -1157,6 +1163,35 @@ mod tests {
             anchor: point.clone(),
             head: point,
         })?;
+        Ok(())
+    }
+
+    #[test]
+    fn every_heading_level_keeps_the_exact_unicode_range_and_undo() -> AppResult<()> {
+        for level in 1..=6 {
+            let tree = RichDocument::plain("seed", "Я😀 echo echo")?;
+            let mut session = EditorSession::new(tree, Revision(0));
+            let selection = Selection {
+                anchor: DocPoint {
+                    block_id: "seed".into(),
+                    offset: ScalarOffset(8),
+                },
+                head: DocPoint {
+                    block_id: "seed".into(),
+                    offset: ScalarOffset(12),
+                },
+            };
+            session.set_selection(selection.clone())?;
+            let before = session.document().to_json()?;
+            set_block_kind(&mut session, level)?;
+            let after = session.document().to_json()?;
+            assert_eq!(after["content"][0]["attrs"]["level"], json!(level));
+            assert_eq!(session.selection(), Some(&selection));
+            session.undo()?;
+            assert_eq!(session.document().to_json()?, before);
+            session.redo()?;
+            assert_eq!(session.document().to_json()?, after);
+        }
         Ok(())
     }
 

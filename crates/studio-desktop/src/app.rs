@@ -17,6 +17,8 @@ mod notes;
 #[cfg(feature = "editor-preview")]
 mod project_clipboard;
 #[cfg(feature = "editor-preview")]
+mod proofing;
+#[cfg(feature = "editor-preview")]
 mod recovery;
 #[cfg(feature = "editor-preview")]
 mod rendering;

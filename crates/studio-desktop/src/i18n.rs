@@ -181,6 +181,84 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Possible spelling mistake",
+        [
+            "Возможная орфографическая ошибка",
+            "Possible spelling mistake",
+            "Möglicher Rechtschreibfehler",
+            "Faute d’orthographe possible",
+            "Posible error ortográfico",
+            "Possível erro ortográfico",
+            "可能的拼写错误",
+            "スペルミスの可能性",
+        ],
+    ),
+    (
+        "Spellcheck is unavailable on this system.",
+        [
+            "Проверка орфографии недоступна в этой системе.",
+            "Spellcheck is unavailable on this system.",
+            "Die Rechtschreibprüfung ist auf diesem System nicht verfügbar.",
+            "La correction orthographique n’est pas disponible sur ce système.",
+            "La revisión ortográfica no está disponible en este sistema.",
+            "A verificação ortográfica não está disponível neste sistema.",
+            "此系统上无法使用拼写检查。",
+            "このシステムではスペルチェックを利用できません。",
+        ],
+    ),
+    (
+        "Uses your system spelling languages. No automatic corrections.",
+        [
+            "Используются языки проверки орфографии из системы. Автоматических исправлений нет.",
+            "Uses your system spelling languages. No automatic corrections.",
+            "Verwendet die Rechtschreibsprachen des Systems. Keine automatischen Korrekturen.",
+            "Utilise les langues de correction du système. Aucune correction automatique.",
+            "Utiliza los idiomas de revisión del sistema. Sin correcciones automáticas.",
+            "Usa os idiomas de verificação do sistema. Sem correções automáticas.",
+            "使用系统的拼写检查语言，不会自动更正文本。",
+            "システムのスペルチェック言語を使用します。自動修正は行いません。",
+        ],
+    ),
+    (
+        "Heading 4",
+        [
+            "Заголовок 4",
+            "Heading 4",
+            "Überschrift 4",
+            "Titre 4",
+            "Encabezado 4",
+            "Título 4",
+            "标题 4",
+            "見出し 4",
+        ],
+    ),
+    (
+        "Heading 5",
+        [
+            "Заголовок 5",
+            "Heading 5",
+            "Überschrift 5",
+            "Titre 5",
+            "Encabezado 5",
+            "Título 5",
+            "标题 5",
+            "見出し 5",
+        ],
+    ),
+    (
+        "Heading 6",
+        [
+            "Заголовок 6",
+            "Heading 6",
+            "Überschrift 6",
+            "Titre 6",
+            "Encabezado 6",
+            "Título 6",
+            "标题 6",
+            "見出し 6",
+        ],
+    ),
+    (
         "The saved editor settings are preserved. Repair the file and reopen the application before saving changes.",
         [
             "Сохранённые настройки редактора оставлены без изменений. Исправьте файл и откройте приложение заново, чтобы сохранять изменения.",

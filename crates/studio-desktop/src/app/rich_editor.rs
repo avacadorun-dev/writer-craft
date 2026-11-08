@@ -16,6 +16,7 @@ pub(super) struct RichState {
     draft_version: Option<String>,
     pub recovered: bool,
     media: rendering::RenderState,
+    pub(super) proofing: proofing::ProofingState,
     pending_proofs: Vec<ReplayProof>,
     read_only: bool,
     recovery_read_only: bool,
@@ -60,6 +61,7 @@ impl RichState {
             read_only,
             recovery_read_only: false,
             media: rendering::RenderState::default(),
+            proofing: proofing::ProofingState::default(),
             pending_proofs: vec![],
             last_diagnostic: None,
             dialog: None,
@@ -106,6 +108,7 @@ impl RichState {
             read_only: true,
             recovery_read_only: true,
             media: rendering::RenderState::default(),
+            proofing: proofing::ProofingState::default(),
             pending_proofs: vec![],
             last_diagnostic: None,
             dialog: None,
@@ -476,12 +479,23 @@ impl StudioApp {
                                     // shared prose/table selection and input surface always remains mounted.
                                     let mut note_frame =
                                         self.notes.frame(&rich.pending_proofs, l, t);
-                                    let output = rich.session.show_canvas_with_sources(
-                                        ui,
-                                        &style,
-                                        Some(rich.media.catalog()),
-                                        Some(&mut note_frame),
-                                    );
+                                    let output = {
+                                        let mut proof_frame = rich.proofing.frame(
+                                            &mut note_frame,
+                                            preferences.spellcheck,
+                                            l,
+                                            t,
+                                        );
+                                        rich.session.show_canvas_with_sources(
+                                            ui,
+                                            &style,
+                                            Some(rich.media.catalog()),
+                                            Some(&mut proof_frame),
+                                        )
+                                    };
+                                    if rich.proofing.pending() {
+                                        ui.ctx().request_repaint_after(Duration::from_millis(50));
+                                    }
                                     let note_error = note_frame.take_error();
                                     if let Some(error) = note_error {
                                         operation_error = Some(error);

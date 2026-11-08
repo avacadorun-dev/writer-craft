@@ -875,7 +875,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-egui"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4#63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=b96b4d971c649bc024f37a72fd7ba626e7393100#b96b4d971c649bc024f37a72fd7ba626e7393100"
 dependencies = [
  "clipboard-rs",
  "craft-editor-model",
@@ -899,7 +899,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4#63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=b96b4d971c649bc024f37a72fd7ba626e7393100#b96b4d971c649bc024f37a72fd7ba626e7393100"
 dependencies = [
  "prosemirror",
  "serde",
@@ -910,7 +910,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-render"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4#63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=b96b4d971c649bc024f37a72fd7ba626e7393100#b96b4d971c649bc024f37a72fd7ba626e7393100"
 dependencies = [
  "craft-editor-egui",
  "craft-editor-model",
@@ -4653,6 +4653,9 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "rfd",
  "same-file",
  "serde",
