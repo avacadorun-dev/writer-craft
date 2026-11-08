@@ -176,6 +176,45 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Waiting for the board to finish saving.",
+        [
+            "Ожидаем завершения сохранения доски.",
+            "Waiting for the board to finish saving.",
+            "Warten, bis das Board gespeichert ist.",
+            "En attente de la fin de l’enregistrement du tableau.",
+            "Esperando a que termine de guardarse el tablero.",
+            "A aguardar que o quadro termine de guardar.",
+            "正在等待画板保存完成。",
+            "ボードの保存完了を待っています。",
+        ],
+    ),
+    (
+        "Review board",
+        [
+            "Проверить доску",
+            "Review board",
+            "Board prüfen",
+            "Vérifier le tableau",
+            "Revisar tablero",
+            "Rever quadro",
+            "检查画板",
+            "ボードを確認",
+        ],
+    ),
+    (
+        "The board changed. Review it before backing up.",
+        [
+            "Доска изменилась. Проверьте её перед резервным копированием.",
+            "The board changed. Review it before backing up.",
+            "Das Board wurde geändert. Prüfen Sie es vor der Sicherung.",
+            "Le tableau a changé. Vérifiez-le avant la sauvegarde.",
+            "El tablero ha cambiado. Revísalo antes de crear la copia de seguridad.",
+            "O quadro foi alterado. Reveja-o antes de criar a cópia de segurança.",
+            "画板已更改。请先检查，再备份。",
+            "ボードが変更されました。バックアップ前に確認してください。",
+        ],
+    ),
+    (
         "Double-click to write a note…",
         [
             "Дважды нажмите, чтобы написать заметку…",
