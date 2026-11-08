@@ -1644,7 +1644,7 @@ mod tests {
         let path = TableContext::at(session, "right").ok_or("Missing table")?.0;
         let cells = craft_editor_egui::TableSelection {
             table_path: path,
-            anchor: craft_editor_egui::CellPoint { row: 1, column: 1 },
+            anchor: craft_editor_egui::CellPoint { row: 2, column: 2 },
             head: craft_editor_egui::CellPoint { row: 0, column: 0 },
         };
         session.set_cell_selection(cells.clone())?;
