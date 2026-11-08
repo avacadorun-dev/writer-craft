@@ -55,6 +55,14 @@ Insert exposes table, code language, image, Mermaid, inline/block formula, callo
 
 Large tables and long unwrapped code may scroll inside their own bounded block, with clear edges; ordinary prose and whole-window chrome do not acquire horizontal scrolling. Table context commands must name and operate on the selected table/cell range. A deleted table/row cannot leave an invisible active target.
 
+## F-31 workspace air, density and toolbar correction
+
+The owner rejected excessive top whitespace and the formatting strip, then required visual air and reviewable design pictures before choosing an implementation. Follow [WORKSPACE_EDITOR_REDESIGN.md](WORKSPACE_EDITOR_REDESIGN.md) and [issue #6](https://github.com/avacadorun-dev/writer-craft/issues/6): Comfort proposes 52/76/42 px and Balanced 48/56/40 px global/identity/format bars, with identical side panes and unchanged comfortable manuscript type. These are comparison concepts, not approved geometry. Record the owner's choice before host layout changes.
+
+Remove the redundant MANUSCRIPT eyebrow, hero spacing and outer toolbar card; retain an integrated flat row, clear group separation, 32 px targets, measured grouped overflow and all capabilities. Preserve the shared shell, user manuscript typography and selected Lucide family. Do not solve space by squeezing controls or reducing body air.
+
+After selection, independently verify actual native heights/content origin, live pane boundaries, vertical centers and reachable controls at 1000 × 680 and 1440 × 940, with pane resizing and expanded translations. Locale/theme/type changes and menu/overflow movement preserve exact selection, active/mixed state, caret/focus, Undo and draft. The all-21-node/six-mark interactive specimen includes real image, Mermaid and formula output/editing. SVG concepts, source strings and decorative placeholders do not pass this regression or the full-editor gate.
+
 ## F-30 native table-capacity exception
 
 The owner explicitly accepts a maximum of 63 logical table columns for native editing in alpha.2. Do not fork WordCraft solely to increase this capacity. This is the only table-size exception selected here; all other table operations and full-editor requirements remain in scope.
