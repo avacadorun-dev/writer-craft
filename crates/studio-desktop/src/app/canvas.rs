@@ -12,7 +12,7 @@ use craft_canvas_model::{
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
-use studio_core::{ProjectCanvasDraft, ProjectCanvasRevision, ProjectCanvasSnapshot};
+use studio_core::{ProjectCanvasRevision, ProjectCanvasSnapshot};
 
 /// Explicit project-relative navigation. It never authorizes an ambient file read.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -692,9 +692,6 @@ impl CanvasState {
         )?;
         *self = Self::open(workspace, &self.project_id, &self.snapshot.canvas.id)?;
         Ok(())
-    }
-    pub(super) fn preserved_draft(&self) -> Option<&ProjectCanvasDraft> {
-        self.snapshot.draft.as_ref()
     }
 }
 
