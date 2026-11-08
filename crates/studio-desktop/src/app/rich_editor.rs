@@ -2,9 +2,10 @@
 //! This integration does not assert completion of the full-editor-parity release gate.
 use super::*;
 use craft_editor_egui::{EditorSession, MarkState, canvas::CanvasStyle};
+use craft_editor_model as tables;
 use craft_editor_model::{
-    Command, Document as RichDocument, Mark, Node, NodePath, NodeRef, Revision,
-    tables::{self, CellRect, CellSelection, TableGrid},
+    CellRect, CellSelection, Command, Document as RichDocument, Mark, Node, NodePath, NodeRef,
+    Revision, TableGrid,
 };
 use serde_json::{Map, json};
 
@@ -154,7 +155,13 @@ impl StudioApp {
                             ("italic", "I", "Italic"),
                             ("underline", "U", "Underline"),
                         ] {
-                            let state = rich.session.mark_state(mark).unwrap_or(MarkState::Off);
+                            let (state, valid) = match rich.session.mark_state(mark) {
+                                Ok(state) => (state, true),
+                                Err(error) => {
+                                    operation_error = Some(error.into());
+                                    (MarkState::Off, false)
+                                }
+                            };
                             let active = state == MarkState::On;
                             let mut text = RichText::new(glyph).size(16.0);
                             if mark == "bold" {
@@ -168,7 +175,7 @@ impl StudioApp {
                             }
                             if ui
                                 .add_enabled(
-                                    can_format,
+                                    can_format && valid,
                                     egui::Button::new(text)
                                         .selected(active)
                                         .stroke(Stroke::new(
@@ -271,13 +278,15 @@ impl StudioApp {
                             }
                         });
                     });
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(l.text("Editor Preview"))
-                                .small()
-                                .color(t.muted),
-                        );
-                    });
+                    if ui.available_width() > 180.0 {
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(l.text("Editor Preview"))
+                                    .small()
+                                    .color(t.muted),
+                            );
+                        });
+                    }
                 });
             });
         let mut changed = false;
