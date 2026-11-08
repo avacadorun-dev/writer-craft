@@ -6,6 +6,7 @@ mod canvas_commands;
 mod canvas_validation;
 mod evidence;
 mod json;
+mod portable_format;
 mod snapshot;
 mod validation;
 
@@ -17,6 +18,13 @@ pub use evidence::{
     EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary,
     MAX_EVIDENCE_METADATA_BYTES, MAX_EVIDENCE_OBJECT_BYTES, ProjectEvidenceSnapshot,
     ValidatedEvidenceObject, ValidatedEvidenceReference,
+};
+pub use portable_format::{
+    MAX_PORTABLE_MATERIALIZED_BYTES, MAX_PORTABLE_MEMBERS, MAX_PORTABLE_RECORD_BYTES,
+    MAX_PORTABLE_RECORDS, MAX_PORTABLE_ROOT_BYTES, MAX_PORTABLE_SHARD_BYTES,
+    MAX_PORTABLE_SHARD_RECORDS, MAX_PORTABLE_SHARDS, MAX_PORTABLE_TRANSPORT_BYTES,
+    PortableObjectReference, PortableProjectHeader, PortableProjectScope, PortableResourceBudget,
+    PortableShardDescriptor, VerifiedPortableRecord, visit_portable_shard,
 };
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 

@@ -35,3 +35,9 @@ All tasks remain open until exact-source evidence exists. P identifiers refer to
   unknown fields, precise numbers, scoped privacy and corruption/cancellation rollback.
 - [ ] Measure separate source/native peak memory and responsiveness on hosted synthetic workloads,
   including 512 MiB streamed media, before claiming memory qualification.
+
+## Alpha.3 restart (2026-11-08)
+
+- [ ] Requalify the corrected format-2 root/shard framing constructor against hosted default/all-feature tests; framing alone is not semantic restore acceptance.
+- [ ] Implement bounded format-1 compatibility semantic validation, fresh-namespace atomic restore and flat quarantine before wiring native restoration.
+- [ ] Replace legacy monolithic export with the paged format-2 object stream and qualify both transport adapters and native UI.
