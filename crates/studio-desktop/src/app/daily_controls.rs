@@ -192,7 +192,6 @@ impl StudioApp {
                 .is_some_and(|id| ui.memory(|memory| memory.has_focus(id)));
             let was_composing = draft.composing;
             let escape = (had_focus || draft.field_focused)
-                && !was_composing
                 && ui
                     .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
             if had_focus {
@@ -670,7 +669,7 @@ mod tests {
     }
 
     #[test]
-    fn title_escape_discards_only_title_draft_and_clears_native_edit_state() -> AppResult<()> {
+    fn title_escape_discards_composition_draft_and_clears_native_edit_state() -> AppResult<()> {
         let (_directory, mut app) = fixture()?;
         let document = app.document.clone().ok_or("missing document")?;
         let context = egui::Context::default();
@@ -701,6 +700,11 @@ mod tests {
                 app.document_title(ui, &document, tokens);
             });
         });
+        app.daily_controls
+            .title
+            .as_mut()
+            .ok_or("missing title draft")?
+            .composing = true;
         let mut escape = input;
         escape.events.push(egui::Event::Key {
             key: egui::Key::Escape,
