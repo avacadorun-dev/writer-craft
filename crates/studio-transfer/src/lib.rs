@@ -5,12 +5,16 @@
 //! flattening the original rich documents, histories or owned artifacts.
 #![deny(missing_docs)]
 
+mod canonical_archive;
 mod markdown_render;
 mod portable_file;
 mod portable_markdown;
 mod portable_paths;
 mod portable_selection;
 mod project_archive;
+pub use canonical_archive::{
+    export_canonical_project_archive_file, write_canonical_project_archive,
+};
 pub use portable_file::{PortableFileReceipt, export_project_archive_file};
 pub use portable_markdown::{
     MarkdownConversion, MarkdownExportProgress, MarkdownExportReceipt, MarkdownExportSelection,
