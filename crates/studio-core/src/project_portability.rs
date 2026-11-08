@@ -514,41 +514,39 @@ fn import_notes(
         let mut native_projection = None;
         // An unmappable legacy/UTF-16-bug range has no native anchor. Keep its
         // readable note and original anchor in a detached projection, never invent offsets.
-        if kind == "note" {
-            if let Some(anchor) = resolution.native.as_ref() {
-                let status = match original["status"].as_str() {
-                    Some("resolved") => super::AnnotationStatus::Resolved,
-                    Some("needs_attention") => super::AnnotationStatus::NeedsAttention,
-                    _ => super::AnnotationStatus::Open,
-                };
-                let note = super::PassageAnnotation {
-                    id: native.clone(),
-                    document_id: document_id.clone(),
-                    revision: i64::try_from(original["revision"].as_u64().unwrap_or(1).max(1))
-                        .map_err(|_| {
-                            StudioError::Validation(
-                                "Annotation revision exceeds native bounds".into(),
-                            )
-                        })?,
-                    base_revision: i64::try_from(base).map_err(|_| {
-                        StudioError::Validation("Annotation base exceeds native bounds".into())
+        if kind == "note"
+            && let Some(anchor) = resolution.native.as_ref()
+        {
+            let status = match original["status"].as_str() {
+                Some("resolved") => super::AnnotationStatus::Resolved,
+                Some("needs_attention") => super::AnnotationStatus::NeedsAttention,
+                _ => super::AnnotationStatus::Open,
+            };
+            let note = super::PassageAnnotation {
+                id: native.clone(),
+                document_id: document_id.clone(),
+                revision: i64::try_from(original["revision"].as_u64().unwrap_or(1).max(1))
+                    .map_err(|_| {
+                        StudioError::Validation("Annotation revision exceeds native bounds".into())
                     })?,
-                    anchor: anchor.clone(),
-                    note: validation::string(original, "note")?.to_owned(),
-                    status,
-                    anchor_status: if attached {
-                        super::AnchorStatus::Attached
-                    } else {
-                        super::AnchorStatus::Detached
-                    },
-                    deleted: false,
-                };
-                transaction.execute("INSERT INTO document_annotations(id,document_id,revision,annotation_json) VALUES(?1,?2,?3,?4)",params![note.id,note.document_id,note.revision,serde_json::to_string(&note)?])?;
-                transaction.execute("INSERT INTO document_annotation_history(annotation_id,annotation_revision,document_revision,source,before_json,after_json) VALUES(?1,?2,?3,'create',NULL,?4)",params![note.id,note.revision,note.base_revision,serde_json::to_string(&note)?])?;
-                transaction.execute("INSERT INTO document_annotation_snapshots(document_id,document_revision,annotation_id,attachment_json) VALUES(?1,?2,?3,?4)",params![note.document_id,note.base_revision,note.id,serde_json::to_string(&serde_json::json!({"anchor":&note.anchor,"status":note.anchor_status}))?])?;
-                native_projection = Some(serde_json::to_string(&note)?);
-                native_annotation = Some(native);
-            }
+                base_revision: i64::try_from(base).map_err(|_| {
+                    StudioError::Validation("Annotation base exceeds native bounds".into())
+                })?,
+                anchor: anchor.clone(),
+                note: validation::string(original, "note")?.to_owned(),
+                status,
+                anchor_status: if attached {
+                    super::AnchorStatus::Attached
+                } else {
+                    super::AnchorStatus::Detached
+                },
+                deleted: false,
+            };
+            transaction.execute("INSERT INTO document_annotations(id,document_id,revision,annotation_json) VALUES(?1,?2,?3,?4)",params![note.id,note.document_id,note.revision,serde_json::to_string(&note)?])?;
+            transaction.execute("INSERT INTO document_annotation_history(annotation_id,annotation_revision,document_revision,source,before_json,after_json) VALUES(?1,?2,?3,'create',NULL,?4)",params![note.id,note.revision,note.base_revision,serde_json::to_string(&note)?])?;
+            transaction.execute("INSERT INTO document_annotation_snapshots(document_id,document_revision,annotation_id,attachment_json) VALUES(?1,?2,?3,?4)",params![note.document_id,note.base_revision,note.id,serde_json::to_string(&serde_json::json!({"anchor":&note.anchor,"status":note.anchor_status}))?])?;
+            native_projection = Some(serde_json::to_string(&note)?);
+            native_annotation = Some(native);
         }
         transaction.execute("INSERT INTO project_annotation_projections(project_id,logical_id,document_id,native_annotation_id,native_anchor_json,native_projection_json,anchor_status,raw_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",params![project,logical,document_id,native_annotation,resolution.native.as_ref().map(serde_json::to_string).transpose()?,native_projection,if attached {"attached"}else{"detached"},serde_json::to_string(original)?])?;
     }

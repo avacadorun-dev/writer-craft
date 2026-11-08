@@ -166,14 +166,13 @@ pub(super) fn validate(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
             return invalid("invalid node position");
         }
         optional_reference(node, "parentId", &nodes)?;
-        if let Some(frontmatter) = node.get("sourceFrontmatter") {
-            if (version < 5 && frontmatter.as_str() != Some(""))
+        if let Some(frontmatter) = node.get("sourceFrontmatter")
+            && ((version < 5 && frontmatter.as_str() != Some(""))
                 || !frontmatter
                     .as_str()
-                    .is_some_and(|s| s.len() <= 10 * 1024 * 1024)
-            {
-                return invalid("invalid source frontmatter");
-            }
+                    .is_some_and(|s| s.len() <= 10 * 1024 * 1024))
+        {
+            return invalid("invalid source frontmatter");
         }
         let mut seen = HashSet::new();
         let mut current = Some(*node);
@@ -367,10 +366,10 @@ pub(super) fn validate(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
                     | "video/webm" => return invalid("invalid supported-media bounds or metadata"),
                     _ => {}
                 }
-                if let Some(source) = item.get("sourcePath").filter(|v| !v.is_null()) {
-                    if version < 5 || !source.as_str().is_some_and(safe_path) {
-                        return invalid("unsafe original media source path");
-                    }
+                if let Some(source) = item.get("sourcePath").filter(|v| !v.is_null())
+                    && (version < 5 || !source.as_str().is_some_and(safe_path))
+                {
+                    return invalid("unsafe original media source path");
                 }
                 if item.get("durationMs").is_some_and(|v| !v.is_null()) {
                     number(item, "durationMs")?;
@@ -405,10 +404,10 @@ pub(super) fn validate(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
     for revision in revisions.values() {
         validate_document_media(&revision["content"], &media)?;
     }
-    if let Some(cover) = project["exportProfile"]["metadata"]["coverAssetId"].as_str() {
-        if !media.contains_key(cover) {
-            return invalid("export cover attachment is missing");
-        }
+    if let Some(cover) = project["exportProfile"]["metadata"]["coverAssetId"].as_str()
+        && !media.contains_key(cover)
+    {
+        return invalid("export cover attachment is missing");
     }
     let canvases = ids(manifest, "canvases", 2_000)?;
     if version < 6 && (!canvases.is_empty() || !array(manifest, "canvasRevisions")?.is_empty()) {
@@ -484,15 +483,13 @@ fn dimension(item: &Value, key: &str) -> Result<Option<u32>> {
     }
 }
 fn validate_document_media(content: &Value, media: &HashMap<&str, &Value>) -> Result<()> {
-    if content["type"].as_str() == Some("imageBlock") {
-        if let Some(id) = content["attrs"]["assetId"]
+    if content["type"].as_str() == Some("imageBlock")
+        && let Some(id) = content["attrs"]["assetId"]
             .as_str()
             .filter(|s| !s.is_empty())
-        {
-            if !media.contains_key(id) {
-                return invalid("document image attachment is missing");
-            }
-        }
+        && !media.contains_key(id)
+    {
+        return invalid("document image attachment is missing");
     }
     for child in array(content, "content")? {
         validate_document_media(child, media)?;

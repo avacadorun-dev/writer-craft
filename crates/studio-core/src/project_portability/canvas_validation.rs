@@ -149,25 +149,24 @@ pub(super) fn validate_content(
                 .get("promotedDocumentId")
                 .filter(|v| !v.is_null())
                 .and_then(Value::as_str)
+                && !documents.contains_key(id)
             {
-                if !documents.contains_key(id) {
-                    return invalid("promoted Canvas document is missing");
-                }
+                return invalid("promoted Canvas document is missing");
             }
-            if let Some(type_id) = card["typeId"].as_str() {
-                if let Some(values) = card["fields"].as_object() {
-                    for (field, value) in values {
-                        if let Some(kind) = fields.get(&(type_id.to_owned(), field.clone())) {
-                            if value.is_null() || value.as_str() == Some("") {
-                                continue;
-                            }
-                            let id = value.as_str().ok_or_else(|| {
-                                StudioError::Validation(
-                                    "Typed Canvas reference must be a string".into(),
-                                )
-                            })?;
-                            reference(kind, id, documents, media, canvases)?;
+            if let Some(type_id) = card["typeId"].as_str()
+                && let Some(values) = card["fields"].as_object()
+            {
+                for (field, value) in values {
+                    if let Some(kind) = fields.get(&(type_id.to_owned(), field.clone())) {
+                        if value.is_null() || value.as_str() == Some("") {
+                            continue;
                         }
+                        let id = value.as_str().ok_or_else(|| {
+                            StudioError::Validation(
+                                "Typed Canvas reference must be a string".into(),
+                            )
+                        })?;
+                        reference(kind, id, documents, media, canvases)?;
                     }
                 }
             }
