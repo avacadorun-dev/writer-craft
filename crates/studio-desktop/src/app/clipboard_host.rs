@@ -150,12 +150,7 @@ impl StudioApp {
                 self.status = if preserve { RECOVERY_FULL } else { PENDING }.into();
             }
         }
-        let allow_mutation = !self.library
-            && !self.modal_open()
-            && self
-                .document
-                .as_ref()
-                .is_some_and(|document| !document.read_only);
+        let allow_mutation = !self.library && !self.modal_open() && self.can_edit_manuscript();
         for completion in self.clipboard_jobs.take_completed() {
             let session = if allow_mutation {
                 self.rich.as_mut().map(|rich| &mut rich.session)
@@ -300,10 +295,7 @@ impl StudioApp {
         let can_paste = !self.library
             && !self.modal_open()
             && self.rich.is_some()
-            && self
-                .document
-                .as_ref()
-                .is_some_and(|document| !document.read_only);
+            && self.can_edit_manuscript();
         let l = self.language;
         let t = theme::tokens(ui.ctx());
         let mut action = None;
@@ -366,6 +358,10 @@ impl StudioApp {
         else {
             return;
         };
+        if action == 1 && !self.can_edit_manuscript() {
+            self.retain_clipboard(item.bundle, item.scope, "Read only");
+            return;
+        }
         if action != 2 {
             let result = if action == 0 {
                 self.clipboard_intents
