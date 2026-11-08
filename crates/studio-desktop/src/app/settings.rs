@@ -434,7 +434,7 @@ impl StudioApp {
                     |ui| {
                         ui.set_clip_rect(content);
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 12.0);
-                        ui.spacing_mut().interact_size.y = 36.0;
+                        ui.spacing_mut().interact_size.y = 40.0;
                         ui.horizontal(|ui| {
                             icons::icon(ui, self.settings_section.icon(), 22.0, t.accent);
                             ui.heading(l.text(self.settings_section.label()));
@@ -457,7 +457,7 @@ impl StudioApp {
                     .0;
                 let button_rect = egui::Rect::from_center_size(
                     egui::pos2(footer.right() - 72.0, footer.center().y),
-                    Vec2::new(96.0, 36.0),
+                    Vec2::new(96.0, 40.0),
                 );
                 if ui
                     .put(

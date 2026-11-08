@@ -535,6 +535,9 @@ def verify_linux(output):
         run(privileged(["apt-get", "remove", "-y", "writercraft"]), env=environment)
     if sha256(sentinel) != sentinel_hash:
         raise ValueError("Removing the package changed user workspace data")
+    # A local package with no conffiles disappears completely after remove. Test a real
+    # purge by installing the same verified payload again, not purging a missing name.
+    run(privileged(["apt-get", "install", "-y", package]), env=environment)
     run(privileged(["apt-get", "purge", "-y", "writercraft"]), env=environment)
     if sha256(sentinel) != sentinel_hash:
         raise ValueError("Purging the package changed user workspace data")

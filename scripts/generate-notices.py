@@ -154,7 +154,7 @@ def bundled_font_notices(asset_root):
 
 
 def host_target():
-    details = subprocess.check_output(["rustc", "-vV"], text=True)
+    details = subprocess.check_output(["rustc", "-vV"], text=True, encoding="utf-8")
     for line in details.splitlines():
         if line.startswith("host: "):
             return line[6:]
@@ -182,7 +182,7 @@ def main():
                         "--format-version", "1", "--manifest-path", str(args.manifest_path)]
     for features in args.features:
         metadata_command.extend(["--features", features])
-    metadata = json.loads(subprocess.check_output(metadata_command, text=True))
+    metadata = json.loads(subprocess.check_output(metadata_command, text=True, encoding="utf-8"))
     report, warnings = render_notices(metadata, target)
     report += bundled_font_notices(ROOT / "assets")
     args.output.parent.mkdir(parents=True, exist_ok=True)
