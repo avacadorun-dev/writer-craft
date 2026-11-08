@@ -553,6 +553,8 @@ impl ConnectedCapture {
             generation: u64::from_le_bytes(generation),
             scroll_offset_bits: 0,
             visible_atoms: usize::from(visible),
+            target_is_text: false,
+            visible_text_targets: 0,
             pending_atoms: usize::from(!self.events.is_empty()),
             failed_atoms: usize::from(self.failure.is_some()),
             target_visible: visible,

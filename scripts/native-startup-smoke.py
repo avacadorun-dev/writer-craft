@@ -91,7 +91,7 @@ def run_child(command: list[str], env: dict[str, str], stdout: Path, stderr: Pat
     return {"returncode": returncode, "timed_out": timed_out, "elapsed_seconds": round(time.monotonic() - start, 3)}
 
 
-def validate_capture_state(state: dict, target: str | None, scenario: str | None = None) -> None:
+def validate_capture_state(state: dict, target: str | None, scenario: str | None = None, target_kind: str = "opaque") -> None:
     """Reject vacuous readiness, target misses, failed renderers and mutated synthetic content."""
     ready = state.get("render_readiness") or {}
     if state.get("schema_version") != 1 or state.get("status") != "captured":
@@ -106,8 +106,19 @@ def validate_capture_state(state: dict, target: str | None, scenario: str | None
         raise ValueError("Visible native render/scroll state did not settle")
     if ready.get("pending_atoms") != 0 or ready.get("failed_atoms") != 0:
         raise ValueError("Valid synthetic native atoms remain pending or failed")
-    if (target or scenario) and ready.get("visible_atoms", 0) <= 0:
-        raise ValueError("Opaque target was not present in the observed native viewport")
+    if target:
+        if state.get("target_kind") != target_kind:
+            raise ValueError("Observed native target kind does not match the requested coverage")
+        if target_kind == "text":
+            if ready.get("target_is_text") is not True or ready.get("visible_text_targets", 0) <= 0:
+                raise ValueError("Text target was not observed by the actual native text-range observer")
+        elif target_kind == "opaque":
+            if ready.get("target_is_text") is not False or ready.get("visible_atoms", 0) <= 0:
+                raise ValueError("Opaque target was not present in the observed native viewport")
+        else:
+            raise ValueError("Unknown native target kind")
+    if scenario and ready.get("visible_atoms", 0) <= 0:
+        raise ValueError("Connected surface target was not present in the observed native viewport")
     size = state.get("observed_inner_size_points")
     if not isinstance(size, list) or len(size) != 2 or not all(isinstance(v, (int, float)) and v > 0 for v in size):
         raise ValueError("Observed native viewport dimensions are missing")
@@ -353,15 +364,22 @@ def self_test() -> None:
                 with self.assertRaises(ValueError):
                     png_dimensions(path)
         def test_capture_state_refuses_unready_empty_failed_or_changed_content(self):
-            good = {"schema_version": 1, "status": "captured", "target_block": "image", "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1024, 684], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "pending_atoms": 0, "failed_atoms": 0}}
+            good = {"schema_version": 1, "status": "captured", "target_block": "image", "target_kind": "opaque", "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1024, 684], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "target_is_text": False, "visible_text_targets": 0, "pending_atoms": 0, "failed_atoms": 0}}
             validate_capture_state(good, "image")
             for field, value in (("pending_atoms", 1), ("failed_atoms", 1), ("visible_atoms", 0), ("target_visible", False), ("settled", False)):
                 bad = dict(good, render_readiness=dict(good["render_readiness"], **{field: value}))
                 with self.assertRaises(ValueError): validate_capture_state(bad, "image")
             for field, value in (("canonical_unchanged", False), ("stable_frames", 2), ("target_block", "different"), ("observed_inner_size_points", None)):
                 with self.assertRaises(ValueError): validate_capture_state(dict(good, **{field: value}), "image")
+        def test_text_targets_are_distinct_from_opaque_atom_readiness(self):
+            good = {"schema_version": 1, "status": "captured", "target_block": "final-cell", "target_kind": "text", "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 0, "target_is_text": True, "visible_text_targets": 1, "pending_atoms": 0, "failed_atoms": 0}}
+            validate_capture_state(good, "final-cell", target_kind="text")
+            with self.assertRaises(ValueError): validate_capture_state(good, "final-cell")
+            for field, value in (("target_is_text", False), ("visible_text_targets", 0)):
+                bad = dict(good, render_readiness=dict(good["render_readiness"], **{field: value}))
+                with self.assertRaises(ValueError): validate_capture_state(bad, "final-cell", target_kind="text")
         def test_connected_capture_refuses_default_readiness_and_invented_acceptance(self):
-            good = {"schema_version": 1, "status": "captured", "target_block": None, "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "pending_atoms": 0, "failed_atoms": 0}}
+            good = {"schema_version": 1, "status": "captured", "target_block": None, "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "target_is_text": False, "visible_text_targets": 0, "pending_atoms": 0, "failed_atoms": 0}}
             for scenario in ("canvas-inline", "canvas-cancel", "canvas-clipped-2x", "hierarchy-search"):
                 with self.assertRaises(ValueError): validate_capture_state(good, None, scenario)
             probe = {"scenario": "canvas-inline", "terminal": True, "content_contract_satisfied": True, "failure": None, "os_input_acceptance": True, "full_journey_acceptance": False}
