@@ -32,3 +32,14 @@ The heading-selection endpoint-at-zero case was raised as an investigation quest
 The issue #1 icon closure is based on independent owner confirmation and is unrelated to this review. Issues #4, #6, #7, #8 and #9 remain open until their complete checks pass. No native/UX acceptance, alpha.2 readiness, package release or full-project migration claim follows from these source corrections.
 
 Root follow-up, 2026-11-08: link-prefill now uses a temporary semantic session to obtain the original right/left boundary range without changing the author selection. Apply restores the captured directed target before extending/patching the link; Cancel restores it only against the unchanged revision. Added exact boundary/cancel/Undo fixtures plus inline-formula, shortened-code and captured-insertion fixtures. These source corrections and fixtures await hosted execution and native review. The whole-manuscript media-readiness finding remains open and is assigned separately. The original installed Tiptap probe confirmed inclusive heading/list end-at-zero block behavior; do not apply the speculative half-open correction.
+
+
+## Integrated source follow-up — 2026-11-08
+
+The subsequent qualified application checkpoint `4dfe35d` passed all 160 workspace tests, strict all-feature Clippy, notices and macOS packaging in [hosted preview run 42465520996](https://github.com/avacadorun-dev/writer-craft/actions/runs/42465520996). This includes the 11 progressive-media fixtures; the whole-document blocking spinner finding has a tested semantic/source correction. Native scrolling, reflow and interaction acceptance remain pending.
+
+The next integration uses the official Lucide subset for formatting, Insert and properties, mounts the persistent note inspector and post-input marks, and keeps inspector category selection reachable through a measured compact selector when translated tabs would overflow. Native copy/paste uses the application-lifetime registered-format provider and bounded worker with explicit retained-content recovery. These new changes require their own hosted/native validation.
+
+Code properties now use granular shared `ReplaceText`/`SetBlockAttrs` commands for existing code, retaining untouched imported leaf metadata, exact position maps and a single Undo transaction. Unchanged omitted language metadata stays omitted. The new imported multi-leaf Unicode/Undo fixture is pending hosted execution at this source checkpoint. A properties Copy command supplements, and does not establish completion of, the original code-block inline chrome journey.
+
+The owner approved the adaptive wide/focus/docked design in F-34. This remains design approval, not the independent compiled editor gate.

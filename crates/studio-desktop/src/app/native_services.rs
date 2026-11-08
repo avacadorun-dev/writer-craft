@@ -14,7 +14,10 @@ pub(super) fn clipboard() -> craft_editor_egui::clipboard::ClipboardResult<
     Arc<dyn craft_editor_egui::clipboard::ClipboardProvider>,
 > {
     Ok(Arc::new(
-        craft_editor_egui::clipboard::NativeClipboard::new(CLIPBOARD_BYTES)?,
+        craft_editor_egui::clipboard::NativeClipboard::with_formats(
+            CLIPBOARD_BYTES,
+            vec![project_clipboard::image_capsule_format()],
+        )?,
     ))
 }
 

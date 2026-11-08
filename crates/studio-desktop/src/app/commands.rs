@@ -203,6 +203,9 @@ impl StudioApp {
 
     pub(super) fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            #[cfg(feature = "editor-preview")]
+            let result = self.save_focused_note(ctx).unwrap_or_else(|| self.save());
+            #[cfg(not(feature = "editor-preview"))]
             let result = self.save();
             self.record_error(result);
             if self.modal_open() {

@@ -179,6 +179,9 @@ impl StudioApp {
         }
         self.dirty = None;
         self.status = "All changes saved".into();
+        if let Some(document) = &self.document {
+            self.notes.prepare(&self.workspace, document)?;
+        }
         Ok(())
     }
 
@@ -200,6 +203,8 @@ impl StudioApp {
         ui.painter()
             .rect_filled(bounds, 0, if floating { t.bg } else { t.editor });
         let mut changed = false;
+        let mut manuscript_response = None;
+        let mut activated_note = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(surface_rect), |ui| {
             egui::Frame::new()
                 .fill(t.editor)
@@ -229,7 +234,7 @@ impl StudioApp {
                         .show(ui, |ui| {
                             let boundary = ui.max_rect();
                             ui.painter().hline(
-                                boundary.x_range(),
+                                (boundary.left() - 24.0)..=(boundary.right() + 24.0),
                                 boundary.bottom() + 4.0,
                                 Stroke::new(1.0, t.border),
                             );
@@ -306,11 +311,20 @@ impl StudioApp {
                                     }
                                     // Media readiness changes only its opaque atom's native status box. The
                                     // shared prose/table selection and input surface always remains mounted.
-                                    let output = rich.session.show_canvas_with_resolver(
+                                    let mut note_frame =
+                                        self.notes.frame(&rich.pending_proofs, l, t);
+                                    let output = rich.session.show_canvas_with_sources(
                                         ui,
                                         &style,
-                                        rich.media.catalog(),
+                                        Some(rich.media.catalog()),
+                                        Some(&mut note_frame),
                                     );
+                                    let note_error = note_frame.take_error();
+                                    if let Some(error) = note_error {
+                                        operation_error = Some(error);
+                                    }
+                                    manuscript_response = Some(output.response.clone());
+                                    activated_note = output.activated_decorations.first().cloned();
                                     if self.focus_manuscript {
                                         output.response.request_focus();
                                         self.focus_manuscript = false;
@@ -320,10 +334,18 @@ impl StudioApp {
                                         rich.pending_proofs.push(change.replay_proof());
                                     }
                                     if let Some(error) = output.errors.into_iter().next() {
-                                        let diagnostic = error.to_string();
-                                        if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
-                                            rich.last_diagnostic = Some(diagnostic);
-                                            operation_error = Some(error.into());
+                                        if let craft_editor_egui::Error::Clipboard(clipboard) =
+                                            &error
+                                        {
+                                            // Transport backpressure is a retry status, not a modal that
+                                            // steals the manuscript selection or composition focus.
+                                            self.status = clipboard_host::message(clipboard).into();
+                                        } else {
+                                            let diagnostic = error.to_string();
+                                            if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
+                                                rich.last_diagnostic = Some(diagnostic);
+                                                operation_error = Some(error.into());
+                                            }
                                         }
                                     } else {
                                         rich.last_diagnostic = None;
@@ -348,6 +370,13 @@ impl StudioApp {
             }
         }
         self.rich = Some(rich);
+        if let Some(response) = manuscript_response {
+            self.rich_note_selection_menu(&response);
+        }
+        if let Some(id) = activated_note {
+            let result = self.open_mark_note(&id);
+            self.record_error(result);
+        }
         if let Some(error) = operation_error {
             self.record_error(Err(error));
         }

@@ -39,7 +39,7 @@ impl StudioApp {
                                 )
                                 .size()
                                 .x
-                                + 24.0;
+                                + 52.0;
                             let read_only = document.read_only
                                 || (document.rich_json.is_some()
                                     && !cfg!(feature = "editor-preview"));
@@ -57,7 +57,7 @@ impl StudioApp {
                                 0.0
                             };
                             let title_width =
-                                (ui.available_width() - focus_width - badge_width - 48.0).max(60.0);
+                                (ui.available_width() - focus_width - badge_width - 88.0).max(60.0);
                             ui.allocate_ui_with_layout(
                                 egui::vec2(title_width, 34.0),
                                 Layout::left_to_right(Align::Center),
@@ -85,14 +85,28 @@ impl StudioApp {
                                 {
                                     self.export_text();
                                 }
-                                if ui
-                                    .button(focus_label)
-                                    .on_hover_text(l.text(if self.focus_mode {
-                                        "Exit focus"
-                                    } else {
-                                        "Hide side panels · ⌘⇧F"
-                                    }))
-                                    .clicked()
+                                #[cfg(feature = "editor-preview")]
+                                if self.rich.is_some()
+                                    && icons::icon_button(ui, Icon::Assistant, l.text("Notes"))
+                                        .clicked()
+                                {
+                                    self.inspector = Inspector::Notes;
+                                    self.inspector_visible = true;
+                                    self.prefer_inspector = true;
+                                    self.focus_mode = false;
+                                }
+                                if icons::labeled_button(
+                                    ui,
+                                    Icon::Focus,
+                                    focus_label,
+                                    self.focus_mode,
+                                )
+                                .on_hover_text(l.text(if self.focus_mode {
+                                    "Exit focus"
+                                } else {
+                                    "Hide side panels · ⌘⇧F"
+                                }))
+                                .clicked()
                                 {
                                     self.focus_mode = !self.focus_mode;
                                 }

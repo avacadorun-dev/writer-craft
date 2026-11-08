@@ -173,6 +173,11 @@ impl BlockDialog {
             )?;
             return Ok(());
         }
+        if self.kind == Kind::Code
+            && let Some(target) = &self.target
+        {
+            return self.apply_code(session, target);
+        }
         let node = self.build_node(workspace, project_id)?;
         commit_node(
             session,
@@ -182,6 +187,92 @@ impl BlockDialog {
         )?;
         Ok(())
     }
+    /// Use the same granular text commands as native typing, including their
+    /// sealed position maps. Rebuilding the whole code node would detach notes
+    /// and discard untouched imported leaf metadata.
+    fn apply_code(&self, session: &mut EditorSession, target: &NodeRef) -> AppResult<()> {
+        use craft_editor_model::{Command, Editor, TextRange, Transaction};
+        if session.document().node(&target.path)? != target.expected.as_ref() {
+            return Err(craft_editor_model::Error::NodeReferenceConflict.into());
+        }
+        let id = target.expected.block_id().ok_or("missing_code_identity")?;
+        let previous = target.expected.inline_text();
+        let old_len = previous.chars().count();
+        let new_len = self.source.chars().count();
+        let prefix = previous
+            .chars()
+            .zip(self.source.chars())
+            .take_while(|(a, b)| a == b)
+            .count();
+        let suffix = previous
+            .chars()
+            .rev()
+            .take(old_len - prefix)
+            .zip(self.source.chars().rev().take(new_len - prefix))
+            .take_while(|(a, b)| a == b)
+            .count();
+        let end = old_len - suffix;
+        let inserted = new_len - prefix - suffix;
+        let mut commands = Vec::new();
+        if previous != self.source {
+            commands.push(Command::ReplaceText {
+                range: TextRange {
+                    block_id: id.into(),
+                    start: ScalarOffset(prefix),
+                    end: ScalarOffset(end),
+                },
+                expected: previous.chars().skip(prefix).take(end - prefix).collect(),
+                replacement: self.source.chars().skip(prefix).take(inserted).collect(),
+            });
+        }
+        if target.expected.string_attr("language").unwrap_or_default() != self.language {
+            commands.push(Command::SetBlockAttrs {
+                block_id: id.into(),
+                attrs: Map::from_iter([(
+                    "language".into(),
+                    if self.language.is_empty() {
+                        serde_json::Value::Null
+                    } else {
+                        json!(self.language)
+                    },
+                )]),
+            });
+        }
+        if commands.is_empty() {
+            return Ok(());
+        }
+        if let Some(selection) = session.selection() {
+            let map = |point: &DocPoint| {
+                let mut mapped = point.clone();
+                if point.block_id == id {
+                    mapped.offset = ScalarOffset(if point.offset.0 < prefix {
+                        point.offset.0
+                    } else if point.offset.0 > end {
+                        prefix + inserted + (point.offset.0 - end)
+                    } else {
+                        prefix + inserted
+                    });
+                }
+                mapped
+            };
+            let selection = Selection {
+                anchor: map(&selection.anchor),
+                head: map(&selection.head),
+            };
+            session.apply_commands_with_selection(commands, selection)?;
+        } else {
+            let mut candidate = Editor::new(session.document().clone(), session.revision());
+            candidate.apply(Transaction {
+                base_revision: candidate.revision(),
+                commands: commands.clone(),
+            })?;
+            let selected = candidate.document().node_ref(&target.path)?;
+            session.apply_commands_with_node_selection(commands, selected)?;
+        }
+        session.request_scroll_to_caret();
+        Ok(())
+    }
+
     fn build_node(&self, workspace: &Workspace, project_id: &str) -> AppResult<Node> {
         let mut node = self.target.as_ref().map_or_else(
             || Node::block(self.kind.node_type(), Map::new(), vec![]),
@@ -279,37 +370,8 @@ fn commit_node(
             base_revision: candidate.revision(),
             commands: vec![command.clone()],
         })?;
-        if target.expected.node_type == "codeBlock" {
-            let id = target.expected.block_id().ok_or("missing_code_identity")?;
-            let length = candidate.document().block_text(id)?.chars().count();
-            let clamp = |point: &DocPoint| DocPoint {
-                block_id: id.into(),
-                offset: ScalarOffset(point.offset.0.min(length)),
-            };
-            let selection = session
-                .selection()
-                .filter(|selection| {
-                    selection.anchor.block_id == id && selection.head.block_id == id
-                })
-                .map(|selection| Selection {
-                    anchor: clamp(&selection.anchor),
-                    head: clamp(&selection.head),
-                })
-                .unwrap_or_else(|| {
-                    let point = DocPoint {
-                        block_id: id.into(),
-                        offset: ScalarOffset(0),
-                    };
-                    Selection {
-                        anchor: point.clone(),
-                        head: point,
-                    }
-                });
-            session.apply_commands_with_selection(vec![command], selection)?;
-        } else {
-            let selected = candidate.document().node_ref(&target.path)?;
-            session.apply_commands_with_node_selection(vec![command], selected)?;
-        }
+        let selected = candidate.document().node_ref(&target.path)?;
+        session.apply_commands_with_node_selection(vec![command], selected)?;
     } else if inline {
         session.insert_content(ContentSlice::Inline(vec![node]))?;
     } else if node.node_type == "codeBlock" {
@@ -1312,6 +1374,62 @@ mod tests {
                 .map(|node| node.node_type.as_str()),
             Some("mermaidBlock")
         );
+        Ok(())
+    }
+    #[test]
+    fn imported_multileaf_code_edits_keep_surviving_metadata_and_single_step_undo() -> AppResult<()>
+    {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Imported code")?;
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"codeBlock","attrs":{"blockId":"code","customBlock":7},"content":[
+                    {"type":"text","text":"α prefix ","leafSource":"first"},
+                    {"type":"text","text":"old","leafSource":"middle"},
+                    {"type":"text","text":" suffix 界","leafSource":"last"}
+                ]},
+                {"type":"paragraph","attrs":{"blockId":"after"},"content":[{"type":"text","text":"Unchanged"}]}
+            ]}),
+        )?;
+        let original = tree.to_json()?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let point = DocPoint {
+            block_id: "code".into(),
+            offset: ScalarOffset(session.document().block_text("code")?.chars().count()),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        let target = session.document().node_ref(&NodePath(vec![0]))?;
+        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target));
+        dialog.source = "α prefix NEW😀 suffix 界".into();
+        dialog.apply(&mut session, &workspace, &project.id)?;
+        let content = session.document().to_json()?;
+        assert_eq!(session.document().block_text("code")?, dialog.source);
+        assert_eq!(content["content"][0]["content"][0]["leafSource"], "first");
+        assert_eq!(
+            content["content"][0]["content"]
+                .as_array()
+                .and_then(|rows| rows.last())
+                .and_then(|leaf| leaf.get("leafSource")),
+            Some(&json!("last"))
+        );
+        assert!(content["content"][0]["attrs"].get("language").is_none());
+        assert_eq!(content["content"][1], original["content"][1]);
+        let changes = session.take_pending_changes();
+        assert_eq!(changes.len(), 1);
+        assert!(
+            changes[0]
+                .mappings
+                .iter()
+                .any(|mapping| matches!(mapping, craft_editor_model::PositionMap::Text { .. }))
+        );
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, original);
+        assert!(!session.can_undo());
+        session.redo()?;
+        assert_eq!(session.document().to_json()?, content);
         Ok(())
     }
 }

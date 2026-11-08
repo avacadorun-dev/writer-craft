@@ -1,4 +1,8 @@
 //! Bounded native writer workspace: state and command orchestration.
+#[cfg(feature = "editor-preview")]
+mod clipboard_host;
+#[cfg(feature = "editor-preview")]
+mod clipboard_jobs;
 mod commands;
 mod components;
 mod dialogs;
@@ -7,6 +11,10 @@ mod manuscript;
 #[cfg(feature = "editor-preview")]
 mod native_services;
 mod navigator;
+#[cfg(feature = "editor-preview")]
+mod notes;
+#[cfg(feature = "editor-preview")]
+mod project_clipboard;
 #[cfg(feature = "editor-preview")]
 mod rendering;
 mod review;
@@ -37,6 +45,8 @@ type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Inspector {
+    #[cfg(feature = "editor-preview")]
+    Notes,
     Review,
     Versions,
 }
@@ -59,6 +69,14 @@ pub struct StudioApp {
     body: String,
     #[cfg(feature = "editor-preview")]
     rich: Option<rich_editor::RichState>,
+    #[cfg(feature = "editor-preview")]
+    notes: notes::NotesState,
+    #[cfg(feature = "editor-preview")]
+    clipboard_jobs: clipboard_jobs::ClipboardJobs,
+    #[cfg(feature = "editor-preview")]
+    clipboard_recovery: Option<clipboard_host::ClipboardRecovery>,
+    #[cfg(feature = "editor-preview")]
+    clipboard_intents: std::sync::Arc<craft_editor_egui::clipboard::ClipboardIntentGate>,
     #[cfg(feature = "editor-preview")]
     clipboard: Option<std::sync::Arc<dyn craft_editor_egui::clipboard::ClipboardProvider>>,
     dirty: Option<Instant>,
@@ -149,6 +167,14 @@ impl StudioApp {
             body: String::new(),
             #[cfg(feature = "editor-preview")]
             rich: None,
+            #[cfg(feature = "editor-preview")]
+            notes: notes::NotesState::default(),
+            #[cfg(feature = "editor-preview")]
+            clipboard_jobs: clipboard_jobs::ClipboardJobs::new()?,
+            #[cfg(feature = "editor-preview")]
+            clipboard_recovery: None,
+            #[cfg(feature = "editor-preview")]
+            clipboard_intents: std::sync::Arc::default(),
             #[cfg(feature = "editor-preview")]
             clipboard,
             dirty: None,
@@ -261,6 +287,8 @@ impl StudioApp {
     }
 
     fn open_project(&mut self, project: Project) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.cancel_clipboard_work();
         self.save()?;
         self.documents = self.workspace.list_documents(&project.id)?;
         self.project = Some(project);
@@ -269,6 +297,7 @@ impl StudioApp {
         #[cfg(feature = "editor-preview")]
         {
             self.rich = None;
+            self.notes.clear();
         }
         self.library = false;
         if let Some(document) = self.documents.first().cloned() {
@@ -278,6 +307,8 @@ impl StudioApp {
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.cancel_clipboard_work();
         self.save()?;
         let document = self.workspace.document(&document.id)?;
         #[cfg(feature = "editor-preview")]
@@ -285,6 +316,19 @@ impl StudioApp {
         #[cfg(feature = "editor-preview")]
         if let Some(state) = &mut rich {
             state.session.set_clipboard_provider(self.clipboard.clone());
+            state
+                .session
+                .set_clipboard_mode(craft_editor_egui::clipboard::ClipboardMode::Deferred)?;
+            state
+                .session
+                .set_clipboard_intent_gate(self.clipboard_intents.clone())?;
+        }
+        #[cfg(feature = "editor-preview")]
+        {
+            // Note metadata must not prevent the writer from opening preserved prose.
+            // NotesState hides stale context and caches the failed acquisition until retry.
+            let result = self.notes.prepare(&self.workspace, &document);
+            self.record_error(result);
         }
         self.body.clone_from(&document.body);
         self.dirty = None;
@@ -481,9 +525,11 @@ impl StudioApp {
     fn rich_modal_open(&self) -> bool {
         #[cfg(feature = "editor-preview")]
         {
-            self.rich
-                .as_ref()
-                .is_some_and(rich_editor::RichState::dialog_open)
+            self.notes.modal_open()
+                || self
+                    .rich
+                    .as_ref()
+                    .is_some_and(rich_editor::RichState::dialog_open)
         }
         #[cfg(not(feature = "editor-preview"))]
         {
@@ -505,6 +551,8 @@ impl eframe::App for StudioApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let t = theme::tokens(&ctx);
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_frame_start(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
         }
@@ -520,11 +568,23 @@ impl eframe::App for StudioApp {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         if ctx.input(|i| i.viewport().close_requested()) {
-            let result = self.save();
-            if result.is_err() {
+            #[cfg(feature = "editor-preview")]
+            let note_drafts_pending = self.notes.has_unsaved_drafts();
+            #[cfg(not(feature = "editor-preview"))]
+            let note_drafts_pending = false;
+            if note_drafts_pending {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                #[cfg(feature = "editor-preview")]
+                if !self.notes.close_confirmation_open() {
+                    self.notes.request_close_confirmation();
+                }
+            } else {
+                let result = self.save();
+                if result.is_err() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                }
+                self.record_error(result);
             }
-            self.record_error(result);
         }
         if let Some(receiver) = &self.import_job {
             let received = receiver.try_recv();
@@ -550,6 +610,8 @@ impl eframe::App for StudioApp {
         }
         self.toolbar(ui, t);
         self.status_bar(ui, t);
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_recovery_actions(ui);
         let (show_navigator, show_inspector) = self.effective_panes(&ctx);
         if self.library || show_navigator {
             self.navigation(ui, t);
@@ -565,12 +627,17 @@ impl eframe::App for StudioApp {
         let had_modal = self.modal_open();
         self.full_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.notes_dialogs(&ctx, t);
         if had_modal && !self.modal_open() {
             // The next manuscript may not have been emitted in this frame yet.
             // Focus only after its TextEdit has registered an accessibility node.
             self.focus_manuscript = true;
             ctx.request_repaint();
         }
+
+        #[cfg(feature = "editor-preview")]
+        self.clipboard_frame_end(&ctx);
 
         self.frames += 1;
         if self.capture.is_some() && self.frames >= 8 {
@@ -665,20 +732,7 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
     if let Some(craft_editor_egui::Error::Clipboard(error)) =
         error.downcast_ref::<craft_editor_egui::Error>()
     {
-        use craft_editor_egui::clipboard::ClipboardError;
-        return match error {
-            ClipboardError::Unavailable => {
-                "The system clipboard is unavailable. Reopen the application and try again."
-            }
-            ClipboardError::Read => "The clipboard could not be read. Copy the content again.",
-            ClipboardError::Write => "The clipboard could not be updated. Your text was not cut.",
-            ClipboardError::ResourceLimit => {
-                "The clipboard content is too large. Copy a smaller selection."
-            }
-            ClipboardError::InvalidSlice => {
-                "The clipboard content is invalid. Copy the content again."
-            }
-        };
+        return clipboard_host::message(error);
     }
     if error.is::<studio_transfer::TransferError>() {
         return "The archive could not be checked. The original project was not changed.";
