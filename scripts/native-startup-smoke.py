@@ -109,7 +109,17 @@ def validate_capture_state(state: dict, target: str | None) -> None:
         raise ValueError("Observed native viewport dimensions are missing")
 
 
-def main(bundle: Path) -> int:
+def validate_bundle_identity(info: dict, commit: str, normal_app: bool) -> None:
+    expected = "app.writercraft.desktop" if normal_app else "app.writercraft.editor-preview"
+    if not commit or info.get("CFBundleIdentifier") != expected or info.get("WriterCraftBuildCommit") != commit:
+        raise ValueError("Native bundle/source identity mismatch")
+    if info.get("WriterCraftNativeEditor") is not True:
+        raise ValueError("Capture requires the native rich editor")
+    if normal_app and info.get("LSEnvironment", {}).get("WRITERCRAFT_EDITOR_PREVIEW") == "1":
+        raise ValueError("Normal app must not activate the isolated preview identity")
+
+
+def main(bundle: Path, normal_app: bool = False) -> int:
     runner_temp = Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)
     output = runner_temp / OUTPUT_NAME
     output.mkdir(exist_ok=True)
@@ -121,6 +131,7 @@ def main(bundle: Path) -> int:
         "runner_image_version": os.environ.get("ImageVersion"),
         "os_version": platform.mac_ver()[0],
         "architecture": platform.machine(),
+        "application_identity": "normal" if normal_app else "isolated-preview",
         "capture_kind": "native WGPU viewport readback after visible render and scroll stability",
         "all_captures_settled": False,
         "editor_acceptance": False,
@@ -137,8 +148,8 @@ def main(bundle: Path) -> int:
         bundle = bundle.resolve(strict=True)
         with (bundle / "Contents/Info.plist").open("rb") as stream:
             info = plistlib.load(stream)
-        if info.get("CFBundleIdentifier") != "app.writercraft.editor-preview" or info.get("WriterCraftBuildCommit") != evidence["source_commit"]:
-            raise ValueError("Preview bundle/source identity mismatch")
+        validate_bundle_identity(info, evidence["source_commit"], normal_app)
+        evidence["bundle_identifier"] = info["CFBundleIdentifier"]
         executable = bundle / "Contents/MacOS/WriterCraft"
         evidence["executable_sha256"] = sha256(executable)
         evidence["bundle_version"] = info["WriterCraftVersion"]
@@ -200,8 +211,11 @@ def main(bundle: Path) -> int:
                     if name in profiles:
                         (Path(scratch) / "editor.json").write_text(json.dumps({"version": 1, "preferences": profiles[name]}))
                     env = os.environ.copy()
-                    env.update(WRITERCRAFT_EDITOR_PREVIEW="1", WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "")
-                    command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", "--editor-preview", *(["--compact"] if compact else []), "--capture", str(capture), *flags]
+                    env.pop("WRITERCRAFT_EDITOR_PREVIEW", None)
+                    if not normal_app:
+                        env["WRITERCRAFT_EDITOR_PREVIEW"] = "1"
+                    env.update(WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "")
+                    command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", *([] if normal_app else ["--editor-preview"]), *(["--compact"] if compact else []), "--capture", str(capture), *flags]
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
                         raise ValueError("Native startup timed out" if case["timed_out"] else "Native startup exited unsuccessfully")
@@ -239,6 +253,14 @@ def main(bundle: Path) -> int:
 def self_test() -> None:
     import unittest
     class Tests(unittest.TestCase):
+        def test_bundle_mode_never_substitutes_preview_for_normal_app(self):
+            normal = {"CFBundleIdentifier": "app.writercraft.desktop", "WriterCraftBuildCommit": "a" * 40, "WriterCraftNativeEditor": True}
+            validate_bundle_identity(normal, "a" * 40, True)
+            preview = dict(normal, CFBundleIdentifier="app.writercraft.editor-preview", LSEnvironment={"WRITERCRAFT_EDITOR_PREVIEW": "1"})
+            validate_bundle_identity(preview, "a" * 40, False)
+            for info, commit, mode in ((normal, "b" * 40, True), (normal, "a" * 40, False), (preview, "a" * 40, True), (dict(normal, WriterCraftNativeEditor=False), "a" * 40, True), (dict(normal, LSEnvironment={"WRITERCRAFT_EDITOR_PREVIEW": "1"}), "a" * 40, True)):
+                with self.assertRaises(ValueError):
+                    validate_bundle_identity(info, commit, mode)
         def test_png_valid_crc_and_pixels(self):
             def chunk(kind, payload):
                 return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
@@ -278,6 +300,7 @@ def self_test() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--normal-app", action="store_true", help="Require normal WriterCraft identity and never activate the isolated preview")
     parser.add_argument("--self-test", action="store_true")
     arguments = parser.parse_args()
     if arguments.self_test:
@@ -285,4 +308,4 @@ if __name__ == "__main__":
     elif arguments.bundle is None:
         parser.error("--bundle is required")
     else:
-        raise SystemExit(main(arguments.bundle))
+        raise SystemExit(main(arguments.bundle, arguments.normal_app))
