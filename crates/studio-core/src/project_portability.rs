@@ -4,6 +4,7 @@
 //! remains quarantined evidence and cannot populate trusted replay checkpoints.
 mod canvas_commands;
 mod canvas_validation;
+mod evidence;
 mod json;
 mod snapshot;
 mod validation;
@@ -11,6 +12,11 @@ mod validation;
 pub use canvas_commands::{
     ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo,
     ProjectCanvasSnapshot,
+};
+pub use evidence::{
+    EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary,
+    MAX_EVIDENCE_METADATA_BYTES, MAX_EVIDENCE_OBJECT_BYTES, ProjectEvidenceSnapshot,
+    ValidatedEvidenceObject, ValidatedEvidenceReference,
 };
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 
