@@ -40,7 +40,7 @@ fn plain(text: &str) -> Value {
 fn all_nodes() -> Value {
     let mut blocks = vec![
         json!({"type":"heading","attrs":{"blockId":"heading","level":2},"content":[{"type":"text","text":"Visible heading"}]}),
-        paragraph("p", "selected saved writing"),
+        json!({"type":"paragraph","attrs":{"blockId":"p","sourceRefs":["outside-segment"]},"content":[{"type":"text","text":"selected saved writing"}]}),
         json!({"type":"paragraph","attrs":{"blockId":"marked"},"content":[
             {"type":"text","text":" bold ","marks":[{"type":"bold"}]},
             {"type":"text","text":"italic","marks":[{"type":"italic"}]},
@@ -93,8 +93,8 @@ fn fixture() -> (Value, Assets) {
         "namedVersions":[{"id":"named","nodeId":"selected","revision":1,"name":"Original"}],
         "documentAnnotations":[{"id":"source-note","nodeId":"selected","kind":"note","status":"resolved","anchorStatus":"attached","anchor":{"blockId":"p","start":0,"end":8,"exactText":"selected","prefix":"","suffix":" saved writing"},"note":"Selected source note","targetSnapshot":{},"baseRevision":2,"revision":1}],
         "dictionaryTerms":[],
-        "dictationSessions":[{"id":"audio-session","destinationNodeId":"selected","language":"en","status":"review_ready","durationMs":100,"recordedDurationMs":100,"manifest":{},"commandsEnabled":false,"commandPrefix":""}],
-        "transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],
+        "dictationSessions":[{"id":"audio-session","destinationNodeId":"selected","language":"en","status":"review_ready","durationMs":100,"recordedDurationMs":100,"manifest":{},"commandsEnabled":false,"commandPrefix":""},{"id":"outside-session","destinationNodeId":"secret","language":"en","durationMs":0,"recordedDurationMs":0,"manifest":{"private":"UNSELECTED_SOURCE_SESSION"}}],
+        "transcriptArtifacts":[{"id":"outside-artifact","sessionId":"outside-session","kind":"batch_source","text":"UNSELECTED_TRANSCRIPT","segments":[{"id":"outside-segment","text":"UNSELECTED_SOURCE_SEGMENT"}]}],"transcriptDrafts":[],"transcriptDraftRevisions":[],
         "audio":[{"sessionId":"audio-session","path":"audio/original.wav","sha256":format!("{:x}",Sha256::digest(&audio)),"byteSize":audio.len(),"durationMs":100,"mediaType":"audio/wav"}],
         "media":records,
         "canvases":[{"id":"board","title":"Board é 😀","position":0,"currentRevision":1}],
@@ -307,10 +307,20 @@ fn selected_export_should_filter_every_unrelated_document_and_recovery_domain() 
         "UNSELECTED_UNKNOWN",
         "UNSELECTED_NATIVE_DRAFT",
         "UNSELECTED_EXTERNAL_RECOVERY",
+        "UNSELECTED_SOURCE_SESSION",
+        "UNSELECTED_TRANSCRIPT",
+        "UNSELECTED_SOURCE_SEGMENT",
     ] {
         assert!(!text.contains(secret), "leaked {secret}");
     }
     assert!(text.contains("selected unfinished draft"));
+    assert!(text.contains("outside-segment"));
+    assert!(
+        receipt
+            .conversions
+            .iter()
+            .any(|item| item.feature == "out-of-scope-source-references-retained-opaque")
+    );
     assert!(text.contains("Selected source note"));
     assert!(text.contains("selected original history"));
     assert!(

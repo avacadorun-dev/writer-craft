@@ -145,6 +145,11 @@ impl ProjectExportSnapshot {
     pub fn recovery(&self) -> &Value {
         &self.recovery
     }
+    /// Captured native notes, aliases, history and opaque source; imported JSON is untrusted evidence.
+    /// This read-only view avoids serializing or parsing unrelated source writing for scoped exports.
+    pub fn native_state(&self) -> &Value {
+        &self.native_state
+    }
     /// Whether a legacy-only export would omit changed native notes, recovery or review state.
     pub fn requires_canonical_companion(&self) -> bool {
         self.requires_companion

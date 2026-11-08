@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use studio_core::{
@@ -363,29 +363,32 @@ fn plan_export(
     snapshot: &ProjectExportSnapshot,
     selection: &MarkdownExportSelection,
 ) -> Result<ExportPlan> {
-    let (manifest, companion, asset_ids, audio_ids, scope) = match selection {
-        MarkdownExportSelection::Project => (
-            snapshot.manifest().clone(),
-            snapshot.canonical_manifest_bytes().map_err(core_error)?,
-            None,
-            None,
-            "complete-project",
-        ),
-        MarkdownExportSelection::Documents(ids) => {
-            let selected: HashSet<String> = ids.iter().cloned().collect();
-            if selected.is_empty() || selected.len() != ids.len() {
-                return invalid("Select one or more distinct document identities");
+    let (manifest, companion, asset_ids, audio_ids, outside_source_references, scope) =
+        match selection {
+            MarkdownExportSelection::Project => (
+                snapshot.manifest().clone(),
+                snapshot.canonical_manifest_bytes().map_err(core_error)?,
+                None,
+                None,
+                false,
+                "complete-project",
+            ),
+            MarkdownExportSelection::Documents(ids) => {
+                let selected: HashSet<String> = ids.iter().cloned().collect();
+                if selected.is_empty() || selected.len() != ids.len() {
+                    return invalid("Select one or more distinct document identities");
+                }
+                let selected = selected_companion(snapshot, &selected)?;
+                (
+                    selected.manifest,
+                    selected.bytes,
+                    Some(selected.asset_ids),
+                    Some(selected.audio_ids),
+                    selected.outside_source_references,
+                    "selected-documents",
+                )
             }
-            let selected = selected_companion(snapshot, &selected)?;
-            (
-                selected.manifest,
-                selected.bytes,
-                Some(selected.asset_ids),
-                Some(selected.audio_ids),
-                "selected-documents",
-            )
-        }
-    };
+        };
     let nodes = array(&manifest, "nodes");
     let ordered_nodes = ordered_tree(nodes, scope == "selected-documents")?;
     let mut allocator = NameAllocator::default();
@@ -483,7 +486,13 @@ fn plan_export(
             feature: "canvas-extensions-and-original-paths-in-companion".into(),
         });
     }
-    record_opaque_previews(&companion, &mut conversions)?;
+    record_opaque_previews(snapshot, &node_paths, &mut conversions)?;
+    if outside_source_references {
+        conversions.insert(MarkdownConversion {
+            resource_id: "project".into(),
+            feature: "out-of-scope-source-references-retained-opaque".into(),
+        });
+    }
     conversions.insert(MarkdownConversion {
         resource_id: "project".into(),
         feature: "canonical-companion-retains-history-metadata-notes-and-recovery".into(),
@@ -816,41 +825,26 @@ fn sync_directory(path: &Path) -> Result<()> {
 }
 
 fn record_opaque_previews(
-    companion: &[u8],
+    snapshot: &ProjectExportSnapshot,
+    exported_nodes: &HashMap<String, String>,
     conversions: &mut BTreeSet<MarkdownConversion>,
 ) -> Result<()> {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Companion {
-        native_state: NativeMetadata,
-    }
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct NativeMetadata {
-        document_aliases: HashMap<String, String>,
-        #[serde(default)]
-        opaque_documents: Vec<OpaqueMetadata>,
-    }
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct OpaqueMetadata {
-        native_document_id: String,
-    }
-    let metadata: Companion = serde_json::from_slice(companion)?;
-    for opaque in metadata.native_state.opaque_documents {
-        let logical = metadata
-            .native_state
-            .document_aliases
-            .get(&opaque.native_document_id)
+    let native = snapshot.native_state();
+    for opaque in array(native, "opaqueDocuments") {
+        let identity = required(opaque, "nativeDocumentId")?;
+        let logical = native["documentAliases"][identity]
+            .as_str()
             .ok_or_else(|| {
                 TransferError::Invalid(
                     "Opaque preview is missing its captured logical identity".into(),
                 )
             })?;
-        conversions.insert(MarkdownConversion {
-            resource_id: logical.clone(),
-            feature: "opaque-import-reading-preview-original-json-in-companion".into(),
-        });
+        if exported_nodes.contains_key(logical) {
+            conversions.insert(MarkdownConversion {
+                resource_id: logical.to_owned(),
+                feature: "opaque-import-reading-preview-original-json-in-companion".into(),
+            });
+        }
     }
     Ok(())
 }

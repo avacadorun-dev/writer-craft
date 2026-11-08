@@ -11,6 +11,7 @@ pub(super) struct SelectedCompanion {
     pub(super) bytes: Vec<u8>,
     pub(super) asset_ids: HashSet<String>,
     pub(super) audio_ids: HashSet<String>,
+    pub(super) outside_source_references: bool,
 }
 
 pub(super) fn selected_companion(
@@ -41,10 +42,29 @@ pub(super) fn selected_companion(
         })
         .cloned()
         .collect::<Vec<_>>();
+    let native = snapshot.native_state();
+    let aliases = native["documentAliases"].as_object().ok_or_else(|| {
+        TransferError::Invalid("Canonical export is missing captured document aliases".into())
+    })?;
+    let selected_native: HashSet<String> = aliases
+        .iter()
+        .filter(|(_, logical)| logical.as_str().is_some_and(|id| selected.contains(id)))
+        .map(|(native, _)| native.clone())
+        .collect();
     let mut asset_ids = HashSet::new();
     let mut source_refs = HashSet::new();
     for revision in &revisions {
         collect_references(&revision["content"], &mut asset_ids, &mut source_refs);
+    }
+    for draft in array(snapshot.recovery(), "richDrafts")
+        .iter()
+        .filter(|record| {
+            record["documentId"]
+                .as_str()
+                .is_some_and(|id| selected_native.contains(id))
+        })
+    {
+        collect_references(&draft["content"], &mut asset_ids, &mut source_refs);
     }
     let annotations = array(original, "documentAnnotations")
         .iter()
@@ -60,7 +80,7 @@ pub(super) fn selected_companion(
         .filter_map(|record| record["dictionaryTermId"].as_str())
         .map(str::to_owned)
         .collect();
-    let mut sessions: HashSet<String> = array(original, "dictationSessions")
+    let sessions: HashSet<String> = array(original, "dictationSessions")
         .iter()
         .filter(|record| {
             record["destinationNodeId"]
@@ -70,27 +90,19 @@ pub(super) fn selected_companion(
         .filter_map(|record| record["id"].as_str())
         .map(str::to_owned)
         .collect();
-    for artifact in array(original, "transcriptArtifacts") {
-        let mut artifact_ids = HashSet::new();
-        collect_ids(&artifact["segments"], &mut artifact_ids);
-        if !source_refs.is_disjoint(&artifact_ids)
-            && let Some(session) = artifact["sessionId"].as_str()
-        {
-            sessions.insert(session.to_owned());
-        }
-    }
-    let native: Value =
-        serde_json::from_slice(&snapshot.canonical_manifest_bytes().map_err(core_error)?)?;
-    let aliases = native["nativeState"]["documentAliases"]
-        .as_object()
-        .ok_or_else(|| {
-            TransferError::Invalid("Canonical export is missing captured document aliases".into())
-        })?;
-    let selected_native: HashSet<String> = aliases
+    // Selecting writing does not authorize expanding a reference into another manuscript's source.
+    let mut authorized_source_ids = HashSet::new();
+    for artifact in array(original, "transcriptArtifacts")
         .iter()
-        .filter(|(_, logical)| logical.as_str().is_some_and(|id| selected.contains(id)))
-        .map(|(native, _)| native.clone())
-        .collect();
+        .filter(|record| {
+            record["sessionId"]
+                .as_str()
+                .is_some_and(|id| sessions.contains(id))
+        })
+    {
+        collect_ids(&artifact["segments"], &mut authorized_source_ids);
+    }
+    let outside_source_references = !source_refs.is_subset(&authorized_source_ids);
     let mut manifest = json!({"format":"writers-studio-project","formatVersion":original["formatVersion"],"project":{},"nodes":nodes,"documentRevisions":revisions,"documentAnnotations":annotations});
     for key in [
         "id",
@@ -130,7 +142,7 @@ pub(super) fn selected_companion(
     manifest["projectMemoryRevisions"] = json!([]);
     manifest["canvases"] = json!([]);
     manifest["canvasRevisions"] = json!([]);
-    let selected_annotations = array(&native["nativeState"], "annotations")
+    let selected_annotations = array(native, "annotations")
         .iter()
         .filter(|record| {
             record["nativeDocumentId"]
@@ -149,7 +161,7 @@ pub(super) fn selected_companion(
         .filter(|(native, _)| selected_native.contains(*native))
         .map(|(native, logical)| (native.clone(), logical.clone()))
         .collect();
-    let opaque_documents = array(&native["nativeState"], "opaqueDocuments")
+    let opaque_documents = array(native, "opaqueDocuments")
         .iter()
         .filter(|record| {
             record["nativeDocumentId"]
@@ -165,7 +177,7 @@ pub(super) fn selected_companion(
         ("reviewEvidence", "nativeDocumentId", &selected_native),
     ] {
         state[domain] = Value::Array(
-            array(&native["nativeState"], domain)
+            array(native, domain)
                 .iter()
                 .filter(|record| {
                     record[key]
@@ -179,7 +191,7 @@ pub(super) fn selected_companion(
     let mut recovery = json!({"format":"writercraft-recovery-evidence","formatVersion":1,"authority":"untrusted-on-import"});
     for domain in ["proseDrafts", "richDrafts"] {
         recovery[domain] = Value::Array(
-            array(&native["recoveryEvidence"], domain)
+            array(snapshot.recovery(), domain)
                 .iter()
                 .filter(|record| {
                     record["documentId"]
@@ -191,7 +203,7 @@ pub(super) fn selected_companion(
         );
     }
     recovery["unknownRevisionTimes"] = Value::Array(
-        array(&native["recoveryEvidence"], "unknownRevisionTimes")
+        array(snapshot.recovery(), "unknownRevisionTimes")
             .iter()
             .filter(|record| {
                 record["nodeId"]
@@ -219,6 +231,7 @@ pub(super) fn selected_companion(
         bytes,
         asset_ids,
         audio_ids: sessions,
+        outside_source_references,
     })
 }
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
@@ -266,9 +279,6 @@ fn collect_ids(value: &Value, output: &mut HashSet<String>) {
         }
         _ => {}
     }
-}
-fn core_error(error: studio_core::StudioError) -> TransferError {
-    TransferError::Invalid(error.to_string())
 }
 
 fn asset_id(source: &str) -> Option<&str> {
