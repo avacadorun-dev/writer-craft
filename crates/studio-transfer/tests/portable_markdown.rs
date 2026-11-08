@@ -47,7 +47,7 @@ fn all_nodes() -> Value {
             {"type":"text","text":"underlined","marks":[{"type":"underline"}]},
             {"type":"text","text":"strike","marks":[{"type":"strike"}]},
             {"type":"text","text":"tick`code","marks":[{"type":"code"}]},
-            {"type":"text","text":"PDF original","marks":[{"type":"link","attrs":{"href":"asset://pdf","title":"Source"}}]},
+            {"type":"text","text":"PDF original","marks":[{"type":"link","attrs":{"href":"/api/media/pdf/content","title":"Source"}}]},
             {"type":"hardBreak"},
             {"type":"inlineMath","attrs":{"latex":"a+b","description":"Inline formula"}}
         ]}),
