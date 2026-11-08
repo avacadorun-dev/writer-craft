@@ -76,6 +76,36 @@ impl NotesState {
                 .values()
                 .any(|composer| !composer.body.trim().is_empty())
     }
+    /// Return only document identities, never note bodies, for an explicit save/review prerequisite.
+    pub(super) fn pending_documents(&self) -> Vec<String> {
+        let mut documents = std::collections::BTreeSet::new();
+        for draft in self
+            .drafts
+            .values()
+            .filter(|draft| draft.body.trim() != draft.original.note.trim())
+        {
+            documents.insert(draft.original.document_id.clone());
+        }
+        for composer in self.composer.iter().chain(self.paused_composers.values()) {
+            if !composer.body.trim().is_empty() {
+                documents.insert(composer.document_id.clone());
+            }
+        }
+        documents.into_iter().collect()
+    }
+
+    pub(super) fn select_pending_draft(&mut self, document_id: &str) {
+        self.selected = self
+            .drafts
+            .iter()
+            .find(|(_, draft)| {
+                draft.original.document_id == document_id
+                    && draft.body.trim() != draft.original.note.trim()
+            })
+            .map(|(id, _)| id.clone());
+        self.reveal_row = self.selected.is_some();
+    }
+
     pub(super) fn request_close_confirmation(&mut self) {
         self.close_confirmation = true;
     }
@@ -783,14 +813,28 @@ impl StudioApp {
         self.notes.acknowledge(&updated);
         self.refresh_notes()
     }
+    fn note_action_unavailable_reason(&self) -> Option<&'static str> {
+        if !self.can_edit_manuscript() {
+            return Some("Read only");
+        }
+        if self.notes.invalid {
+            return Some("Notes could not be refreshed. Your text is preserved.");
+        }
+        let Some(rich) = &self.rich else {
+            return Some("Select a passage to add a note.");
+        };
+        if rich.session.is_composing() {
+            return Some("Finish text composition before adding a note.");
+        }
+        captured_selection(&rich.session)
+            .err()
+            .map(|_| "Select a passage within one text block to add a note.")
+    }
+
     pub(super) fn rich_note_selection_menu(&mut self, response: &egui::Response) {
         let l = self.language;
-        let allowed = self.can_edit_manuscript()
-            && !self.notes.invalid
-            && self
-                .rich
-                .as_ref()
-                .is_some_and(|rich| captured_selection(&rich.session).is_ok());
+        let reason = self.note_action_unavailable_reason();
+        let allowed = reason.is_none();
         let keyboard = response.has_focus()
             && response
                 .ctx
@@ -826,11 +870,15 @@ impl StudioApp {
         popup.show(|ui| {
             if ui
                 .add_enabled(allowed, egui::Button::new(l.text("Add note")))
+                .on_disabled_hover_text(l.text(reason.unwrap_or("Add note")))
                 .clicked()
             {
                 let result = self.begin_note();
                 self.record_error(result);
                 ui.close();
+            }
+            if let Some(reason) = reason {
+                ui.add(egui::Label::new(l.text(reason)).wrap());
             }
             if ui.button(l.text("Notes")).clicked() {
                 self.inspector = Inspector::Notes;
@@ -860,14 +908,12 @@ impl StudioApp {
                 l.text("Notes could not be refreshed. Your text is preserved."),
             );
         }
+        let reason = self.note_action_unavailable_reason();
         ui.horizontal(|ui| {
-            let allowed = writable
-                && !self.notes.invalid
-                && self
-                    .rich
-                    .as_ref()
-                    .is_some_and(|rich| captured_selection(&rich.session).is_ok());
-            if components::action(ui, l.text("Add note"), allowed, Some(t)).clicked() {
+            if components::action(ui, l.text("Add note"), reason.is_none(), Some(t))
+                .on_disabled_hover_text(l.text(reason.unwrap_or("Add note")))
+                .clicked()
+            {
                 let result = self.begin_note();
                 self.record_error(result);
             }
@@ -876,6 +922,11 @@ impl StudioApp {
                 self.record_error(result);
             }
         });
+        if let Some(reason) = reason {
+            ui.add(
+                egui::Label::new(RichText::new(l.text(reason)).size(13.0).color(t.muted)).wrap(),
+            );
+        }
         ui.add_space(12.0);
         let mut activate = None;
         let list_height = (ui.available_height() * 0.38).clamp(100.0, 240.0);
@@ -1208,6 +1259,311 @@ mod tests {
     use super::*;
     use craft_editor_model::{Command, Editor, TextRange, Transaction};
     type TestResult = AppResult<()>;
+    struct BackupNotesFixture {
+        _directory: tempfile::TempDir,
+        app: StudioApp,
+        first: Document,
+        first_note: PassageAnnotation,
+        second: Document,
+        second_note: PassageAnnotation,
+    }
+    fn backup_notes_fixture() -> AppResult<BackupNotesFixture> {
+        let directory = tempfile::tempdir()?;
+        let creation = eframe::CreationContext::_new_kittest(egui::Context::default());
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("backup-notes.sqlite"),
+            false,
+            None,
+        )?;
+        let first_project = app.workspace.create_project("First project")?;
+        let second_project = app.workspace.create_project("Second project")?;
+        let first = app.workspace.create_rich_document(&first_project.id,"First document",RichTree::from_json(serde_json::json!({
+            "type":"doc","attrs":{"schemaVersion":1},"content":[
+                {"type":"paragraph","attrs":{"blockId":"first"},"content":[{"type":"text","text":"Я😀 echo"}]},
+                {"type":"paragraph","attrs":{"blockId":"tail"},"content":[{"type":"text","text":"tail"}]}
+            ]
+        }))?.to_json()?)?;
+        let second = app.workspace.create_rich_document(
+            &second_project.id,
+            "Second document",
+            RichTree::plain("second", "other")?.to_json()?,
+        )?;
+        let first_anchor = app.workspace.capture_annotation_anchor(
+            &first.id,
+            first.revision,
+            "first",
+            ScalarOffset(3),
+            ScalarOffset(7),
+            "echo",
+        )?;
+        let second_anchor = app.workspace.capture_annotation_anchor(
+            &second.id,
+            second.revision,
+            "second",
+            ScalarOffset(0),
+            ScalarOffset(5),
+            "other",
+        )?;
+        let first_note = app.workspace.create_annotation(
+            &first.id,
+            first.revision,
+            first_anchor,
+            "Saved first note",
+        )?;
+        let second_note = app.workspace.create_annotation(
+            &second.id,
+            second.revision,
+            second_anchor.clone(),
+            "Saved second note",
+        )?;
+        app.open_project(first_project)?;
+        app.notes.drafts.insert(
+            first_note.id.clone(),
+            NoteDraft {
+                original: first_note.clone(),
+                body: "Edited first note 😀".into(),
+            },
+        );
+        app.notes.paused_composers.insert(
+            second.id.clone(),
+            NoteComposer {
+                id: "parked-composer".into(),
+                document_id: second.id.clone(),
+                base_revision: second.revision,
+                anchor: second_anchor,
+                body: "Parked new note 中".into(),
+                focus: false,
+            },
+        );
+        Ok(BackupNotesFixture {
+            _directory: directory,
+            app,
+            first,
+            first_note,
+            second,
+            second_note,
+        })
+    }
+
+    #[test]
+    fn backup_preflight_and_cancel_do_not_commit_parked_notes() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        assert!(!fixture.app.prepare_workspace_backup()?);
+        assert!(fixture.app.storage.modal_open());
+        assert!(!fixture.app.storage.busy());
+        assert_eq!(fixture.app.notes.pending_documents().len(), 2);
+        fixture.app.cancel_workspace_backup_preflight();
+        assert!(!fixture.app.storage.modal_open());
+        assert_eq!(
+            fixture.app.workspace.annotation(&fixture.first_note.id)?,
+            fixture.first_note
+        );
+        assert_eq!(
+            fixture.app.workspace.annotations(&fixture.second.id)?,
+            vec![fixture.second_note]
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .drafts
+                .get(&fixture.first_note.id)
+                .ok_or("missing first draft")?
+                .body,
+            "Edited first note 😀"
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .paused_composers
+                .get(&fixture.second.id)
+                .ok_or("missing parked composer")?
+                .body,
+            "Parked new note 中"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_backup_save_resolves_pending_notes_across_projects() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        assert!(!fixture.app.prepare_workspace_backup()?);
+        fixture.app.save_backup_note_prerequisites()?;
+        assert!(!fixture.app.notes.has_unsaved_drafts());
+        assert!(!fixture.app.storage.modal_open());
+        assert_eq!(
+            fixture
+                .app
+                .workspace
+                .annotation(&fixture.first_note.id)?
+                .note,
+            "Edited first note 😀"
+        );
+        assert!(
+            fixture
+                .app
+                .workspace
+                .annotations(&fixture.second.id)?
+                .iter()
+                .any(|note| note.note == "Parked new note 中")
+        );
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.first.id)?,
+            fixture.first
+        );
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.second.id)?,
+            fixture.second
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_backup_note_save_keeps_exact_conflicting_body_and_preflight() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        fixture.app.notes.drafts.insert(
+            fixture.second_note.id.clone(),
+            NoteDraft {
+                original: fixture.second_note.clone(),
+                body: "Keep my conflicting draft 😀".into(),
+            },
+        );
+        assert!(!fixture.app.prepare_workspace_backup()?);
+        let external = fixture.app.workspace.update_annotation(
+            &fixture.second_note.id,
+            fixture.second.revision,
+            fixture.second_note.revision,
+            AnnotationPatch {
+                note: Some("Newer saved note".into()),
+                status: None,
+            },
+        )?;
+        assert!(fixture.app.save_backup_note_prerequisites().is_err());
+        assert!(fixture.app.storage.modal_open());
+        assert!(!fixture.app.storage.busy());
+        assert_eq!(
+            fixture.app.workspace.annotation(&fixture.second_note.id)?,
+            external
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .drafts
+                .get(&fixture.second_note.id)
+                .ok_or("conflicting draft was lost")?
+                .body,
+            "Keep my conflicting draft 😀"
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .paused_composers
+                .get(&fixture.second.id)
+                .ok_or("parked composer was lost")?
+                .body,
+            "Parked new note 中"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn backup_review_opens_the_affected_document_and_preserves_drafts() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        fixture.app.settings_open = true;
+        assert!(!fixture.app.prepare_workspace_backup()?);
+        fixture.app.review_backup_notes(&fixture.second.id)?;
+        assert_eq!(
+            fixture
+                .app
+                .document
+                .as_ref()
+                .map(|document| document.id.as_str()),
+            Some(fixture.second.id.as_str())
+        );
+        assert!(!fixture.app.settings_open);
+        assert!(!fixture.app.storage.modal_open());
+        assert!(fixture.app.inspector_visible && fixture.app.inspector == Inspector::Notes);
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .composer
+                .as_ref()
+                .ok_or("missing reviewed composer")?
+                .body,
+            "Parked new note 中"
+        );
+        assert_eq!(
+            fixture.app.workspace.annotations(&fixture.second.id)?,
+            vec![fixture.second_note]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unsupported_note_selection_explains_scope_without_expanding_it() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        for (anchor, head) in [(0, 2), (2, 0)] {
+            fixture
+                .app
+                .rich
+                .as_mut()
+                .ok_or("missing rich session")?
+                .session
+                .set_selection(Selection {
+                    anchor: DocPoint {
+                        block_id: "first".into(),
+                        offset: ScalarOffset(anchor),
+                    },
+                    head: DocPoint {
+                        block_id: "first".into(),
+                        offset: ScalarOffset(head),
+                    },
+                })?;
+            assert!(fixture.app.note_action_unavailable_reason().is_none());
+        }
+        let selection = Selection {
+            anchor: DocPoint {
+                block_id: "first".into(),
+                offset: ScalarOffset(0),
+            },
+            head: DocPoint {
+                block_id: "tail".into(),
+                offset: ScalarOffset(2),
+            },
+        };
+        fixture
+            .app
+            .rich
+            .as_mut()
+            .ok_or("missing rich session")?
+            .session
+            .set_selection(selection.clone())?;
+        assert_eq!(
+            fixture.app.note_action_unavailable_reason(),
+            Some("Select a passage within one text block to add a note.")
+        );
+        assert_eq!(
+            fixture
+                .app
+                .rich
+                .as_ref()
+                .ok_or("missing rich session")?
+                .session
+                .selection(),
+            Some(&selection)
+        );
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.first.id)?,
+            fixture.first
+        );
+        Ok(())
+    }
+
     fn fixture() -> AppResult<(Workspace, Document, PassageAnnotation, Editor)> {
         let workspace = Workspace::memory()?;
         let project = workspace.create_project("Synthetic note controller")?;

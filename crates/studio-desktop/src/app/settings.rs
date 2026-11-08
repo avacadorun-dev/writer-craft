@@ -455,20 +455,42 @@ impl StudioApp {
                         egui::Sense::hover(),
                     )
                     .0;
-                let button_rect = egui::Rect::from_center_size(
-                    egui::pos2(footer.right() - 72.0, footer.center().y),
-                    Vec2::new(96.0, 40.0),
+                let pending = self.editor_preferences.has_pending_write();
+                ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .max_rect(footer.shrink2(egui::vec2(24.0, 8.0)))
+                        .layout(Layout::right_to_left(Align::Center)),
+                    |ui| {
+                        let label = if pending {
+                            "Continue for this session"
+                        } else {
+                            "Done"
+                        };
+                        if components::action(ui, l.text(label), true, Some(t)).clicked() {
+                            self.settings_open = false;
+                        }
+                        if pending {
+                            if components::action(
+                                ui,
+                                l.text("Retry save"),
+                                self.editor_preferences.writable(),
+                                None,
+                            )
+                            .clicked()
+                            {
+                                let result = self.editor_preferences.save().map_err(Into::into);
+                                self.record_error(result);
+                            }
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(l.text("Editor settings are not saved."))
+                                        .color(t.warning),
+                                )
+                                .wrap(),
+                            );
+                        }
+                    },
                 );
-                if ui
-                    .put(
-                        button_rect,
-                        egui::Button::new(RichText::new(l.text("Done")).color(t.on_accent))
-                            .fill(t.accent),
-                    )
-                    .clicked()
-                {
-                    self.settings_open = false;
-                }
             },
         );
         if self.settings != previous {
@@ -493,9 +515,11 @@ impl StudioApp {
             });
             self.status = "Attention needed".into();
         }
-        if self.editor_preferences.values != previous_editor {
-            let result = self.editor_preferences.save().map_err(Into::into);
-            self.record_error(result);
+        if self.editor_preferences.values != previous_editor
+            && let Err(error) = self.editor_preferences.save()
+        {
+            self.settings_open = true;
+            self.record_error(Err(error.into()));
         }
         if response.should_close() {
             self.settings_open = false;

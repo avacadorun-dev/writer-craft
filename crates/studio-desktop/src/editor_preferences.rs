@@ -132,6 +132,7 @@ pub(crate) struct EditorPreferenceStore {
     path: PathBuf,
     saved: SavedFile,
     extensions: BTreeMap<String, Value>,
+    pending_write: bool,
 }
 impl EditorPreferenceStore {
     /// A missing editor file migrates an existing native font size only when the host
@@ -143,6 +144,7 @@ impl EditorPreferenceStore {
                 values: EditorPreferences::migrate_legacy_size(legacy_font_size),
                 path,
                 saved: SavedFile::Missing,
+                pending_write: false,
                 extensions: BTreeMap::new(),
             });
         };
@@ -155,6 +157,7 @@ impl EditorPreferenceStore {
             values: envelope.preferences,
             path,
             saved: SavedFile::Exact(bytes),
+            pending_write: false,
             extensions: envelope.extensions,
         })
     }
@@ -166,6 +169,7 @@ impl EditorPreferenceStore {
             values: EditorPreferences::migrate_legacy_size(legacy_font_size),
             path,
             saved: SavedFile::Blocked,
+            pending_write: false,
             extensions: BTreeMap::new(),
         }
     }
@@ -174,9 +178,15 @@ impl EditorPreferenceStore {
         !matches!(self.saved, SavedFile::Blocked)
     }
 
+    /// A failed explicit persistence attempt leaves the selected values pending until a retry succeeds.
+    pub(crate) fn has_pending_write(&self) -> bool {
+        self.pending_write
+    }
+
     /// Replace only the same acknowledged valid file. Failed writes retain the exact
     /// in-memory choices, allowing an explicit retry without changing a manuscript.
     pub(crate) fn save(&mut self) -> io::Result<()> {
+        self.pending_write = true;
         self.values.validate()?;
         if !self.writable() {
             return Err(invalid(
@@ -213,6 +223,7 @@ impl EditorPreferenceStore {
         file.as_file().sync_all()?;
         file.persist(&self.path).map_err(|error| error.error)?;
         self.saved = SavedFile::Exact(bytes);
+        self.pending_write = false;
         Ok(())
     }
 }
@@ -322,6 +333,30 @@ mod tests {
         assert_eq!(
             saved["preferences"]["vendor_option"],
             serde_json::json!([1, 2, 3])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_write_can_be_retried_without_changing_the_desired_values() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let parent = directory.path().join("preferences");
+        std::fs::create_dir(&parent)?;
+        let path = parent.join("editor.json");
+        let mut store = EditorPreferenceStore::load(path.clone(), None)?;
+        store.values.font_size = 21.0;
+        std::fs::remove_dir(&parent)?;
+        std::fs::write(&parent, b"blocked destination")?;
+        assert!(store.save().is_err());
+        assert!(store.has_pending_write());
+        assert_eq!(store.values.font_size, 21.0);
+        std::fs::remove_file(&parent)?;
+        std::fs::create_dir(&parent)?;
+        store.save()?;
+        assert!(!store.has_pending_write());
+        assert_eq!(
+            EditorPreferenceStore::load(path, None)?.values,
+            store.values
         );
         Ok(())
     }
