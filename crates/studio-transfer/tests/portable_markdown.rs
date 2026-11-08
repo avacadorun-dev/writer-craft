@@ -98,7 +98,7 @@ fn fixture() -> (Value, Assets) {
         "audio":[{"sessionId":"audio-session","path":"audio/original.wav","sha256":format!("{:x}",Sha256::digest(&audio)),"byteSize":audio.len(),"durationMs":100,"mediaType":"audio/wav"}],
         "media":records,
         "canvases":[{"id":"board","title":"Board é 😀","position":0,"currentRevision":1}],
-        "canvasRevisions":[{"id":"canvas-revision","canvasId":"board","revision":1,"baseRevision":0,"schemaVersion":2,"source":"manual","content":{"nodes":[{"id":"image-card","type":"file","x":0,"y":0,"width":200,"height":120,"file":"writers-studio://media/image","x-writers-studio":{"resource":{"kind":"media","id":"image"},"vendor":"keep"}},{"id":"prose-card","type":"file","x":220,"y":0,"width":200,"height":120,"file":"writers-studio://documents/selected","x-writers-studio":{"resource":{"kind":"document","id":"selected"}}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"retain":true}}}}],
+        "canvasRevisions":[{"id":"canvas-revision","canvasId":"board","revision":1,"baseRevision":0,"schemaVersion":2,"source":"manual","content":{"nodes":[{"id":"image-card","type":"file","x":0,"y":0,"width":200,"height":120,"file":"writers-studio://media/image","x-writers-studio":{"resource":{"kind":"media","id":"image"},"vendor":"keep"}},{"id":"prose-card","type":"file","x":220,"y":0,"width":200,"height":120,"file":"writers-studio://documents/selected","x-writers-studio":{"resource":{"kind":"document","id":"selected"}}},{"id":"opaque-file","type":"file","x":440,"y":0,"width":200,"height":120,"file":"unowned/local-reference.pdf","x-writers-studio":{"resource":null}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"retain":true}}}}],
         "assistantGuide":{"currentRevision":1,"active":true,"revisions":[{"id":"guide","revision":1,"content":"UNSELECTED_GUIDE","source":"manual"}]},
         "projectMemory":[],"projectMemoryRevisions":[],
         "unknownWriting":"UNSELECTED_UNKNOWN",
@@ -238,7 +238,12 @@ fn complete_export_should_keep_rich_reading_views_original_artifacts_and_canonic
         .unwrap();
     let canvas_value: Value =
         serde_json::from_slice(&std::fs::read(destination.join(&canvas.path)).unwrap()).unwrap();
-    for card in canvas_value["nodes"].as_array().unwrap() {
+    for card in canvas_value["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|card| !card["x-writers-studio"]["resource"].is_null())
+    {
         let file = card["file"].as_str().unwrap();
         assert!(
             destination
@@ -256,6 +261,7 @@ fn complete_export_should_keep_rich_reading_views_original_artifacts_and_canonic
         "underline-html-reader-support",
         "table-widths-and-cell-metadata-in-companion",
         "canvas-extensions-and-original-paths-in-companion",
+        "unresolved-canvas-file-source-retained-in-companion",
     ] {
         assert!(
             receipt

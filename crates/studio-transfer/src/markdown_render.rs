@@ -98,12 +98,17 @@ impl MarkdownRenderer<'_> {
                 Ok(out)
             }
             "imageBlock" => {
-                let target = self.image_target(attrs)?;
-                let mut out = format!(
-                    "![{}](<{}>)",
-                    escape_text(attrs["alt"].as_str().unwrap_or("")),
-                    target
-                );
+                let mut out = match self.image_target(attrs)? {
+                    Some(target) => format!(
+                        "![{}](<{}>)",
+                        escape_text(attrs["alt"].as_str().unwrap_or("")),
+                        target
+                    ),
+                    None => format!(
+                        "[Image source retained in canonical companion](<{}>)",
+                        relative_link(self.current, ".writercraft/project.json")?
+                    ),
+                };
                 if let Some(caption) = attrs["caption"].as_str().filter(|s| !s.is_empty()) {
                     out.push_str("\n\n");
                     out.push_str(&escape_text(caption));
@@ -262,7 +267,7 @@ impl MarkdownRenderer<'_> {
             .insert("unresolved-or-application-link-in-companion".into());
         Ok(None)
     }
-    fn image_target(&mut self, attrs: &Value) -> Result<String> {
+    fn image_target(&mut self, attrs: &Value) -> Result<Option<String>> {
         let source = attrs["src"].as_str().unwrap_or("");
         let identity = attrs["assetId"]
             .as_str()
@@ -279,11 +284,15 @@ impl MarkdownRenderer<'_> {
                     "A referenced project image is missing from the export snapshot".into(),
                 )
             })?;
-            return relative_link(self.current, path);
+            return Ok(Some(relative_link(self.current, path)?));
         }
         self.conversions
             .insert("external-or-opaque-image-source-retained".into());
-        Ok(escape_url(source))
+        if source.starts_with("https://") || source.starts_with("http://") {
+            Ok(Some(escape_url(source)))
+        } else {
+            Ok(None)
+        }
     }
     fn list(&mut self, items: &[Value], start: Option<u64>) -> Result<String> {
         let mut out = Vec::new();
@@ -445,11 +454,14 @@ impl MarkdownRenderer<'_> {
             "listItem" => format!("<li>{inner}</li>"),
             "hardBreak" => "<br>".into(),
             "codeBlock" => format!("<pre><code>{}</code></pre>", html_escape(&literal(node))),
-            "imageBlock" => format!(
-                "<img src=\"{}\" alt=\"{}\">",
-                html_escape(&self.image_target(attrs)?),
-                html_escape(attrs["alt"].as_str().unwrap_or(""))
-            ),
+            "imageBlock" => match self.image_target(attrs)? {
+                Some(target) => format!(
+                    "<img src=\"{}\" alt=\"{}\">",
+                    html_escape(&target),
+                    html_escape(attrs["alt"].as_str().unwrap_or(""))
+                ),
+                None => "<span>Image source retained in canonical companion</span>".into(),
+            },
             "horizontalRule" | "sceneBreak" => "<hr>".into(),
             "inlineMath" | "mathBlock" => format!(
                 "<code>{}</code>",
@@ -631,6 +643,29 @@ mod tests {
                 .contains("document-link-outside-export-scope")
         );
         assert_eq!(renderer.link_target("javascript:alert(1)").unwrap(), None);
+    }
+
+    #[test]
+    fn opaque_image_locations_should_have_readable_fallbacks_without_invented_local_links() {
+        let nodes = HashMap::new();
+        let assets = HashMap::new();
+        let mut renderer = MarkdownRenderer {
+            current: "documents/a.md",
+            project: "project",
+            nodes: &nodes,
+            assets: &assets,
+            conversions: BTreeSet::new(),
+        };
+        let image = serde_json::json!({"type":"imageBlock","attrs":{"src":"file:///unrelated/local.png","caption":"Original caption"}});
+        let output = renderer.render(&image).unwrap();
+        assert!(output.contains("canonical companion"));
+        assert!(output.contains("Original caption"));
+        assert!(!output.contains("file:///"));
+        assert!(
+            renderer
+                .conversions
+                .contains("external-or-opaque-image-source-retained")
+        );
     }
 
     #[test]

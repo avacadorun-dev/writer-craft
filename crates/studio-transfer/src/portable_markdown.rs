@@ -255,6 +255,17 @@ pub fn export_markdown_folder_with_progress(
             })
             .ok_or_else(|| TransferError::Invalid("Export Canvas head is missing".into()))?;
         let mut content = revision["content"].clone();
+        if array(&content, "nodes").iter().any(|node| {
+            node["type"].as_str() == Some("file")
+                && node["x-writers-studio"]
+                    .get("resource")
+                    .is_none_or(Value::is_null)
+        }) {
+            plan.conversions.insert(MarkdownConversion {
+                resource_id: id.to_owned(),
+                feature: "unresolved-canvas-file-source-retained-in-companion".into(),
+            });
+        }
         rewrite_canvas_resources(
             &mut content,
             path,
@@ -283,7 +294,10 @@ pub fn export_markdown_folder_with_progress(
                 reading.push_str(&fenced(text, "text"));
                 reading.push_str("\n\n");
             }
-            if let Some(resource) = node["x-writers-studio"].get("resource") {
+            if let Some(resource) = node["x-writers-studio"]
+                .get("resource")
+                .filter(|value| !value.is_null())
+            {
                 let target = resource_path(
                     resource,
                     &plan.node_paths,
@@ -294,6 +308,16 @@ pub fn export_markdown_folder_with_progress(
                     "- [{}](<{}>)\n",
                     escape_text(node["file"].as_str().unwrap_or("Resource")),
                     relative_link(&reading_path, target)?
+                ));
+            }
+            if node["type"].as_str() == Some("file")
+                && node["x-writers-studio"]
+                    .get("resource")
+                    .is_none_or(Value::is_null)
+            {
+                reading.push_str(&format!(
+                    "- File source retained in canonical companion: {}\n",
+                    escape_text(node["file"].as_str().unwrap_or(""))
                 ));
             }
             if let Some(url) = node["url"].as_str() {
@@ -634,7 +658,9 @@ fn rewrite_canvas_resources(
     if let Some(items) = content["nodes"].as_array_mut() {
         for node in items {
             if node["type"].as_str() == Some("file")
-                && let Some(resource) = node["x-writers-studio"].get("resource")
+                && let Some(resource) = node["x-writers-studio"]
+                    .get("resource")
+                    .filter(|value| !value.is_null())
             {
                 let target = resource_path(resource, nodes, canvases, assets)?;
                 node["file"] = Value::String(relative_file_path(current, target)?);
