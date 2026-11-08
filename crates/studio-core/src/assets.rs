@@ -115,6 +115,11 @@ impl ProjectImages {
                 .filter(|total| *total <= max_bytes)
                 .ok_or_else(transfer_invalid)?;
             let (asset, bytes) = read_verified_image(&connection, &self.project_id, id)?;
+            if asset != metadata {
+                return Err(StudioError::CorruptData(
+                    "Image changed while its transfer was being captured".into(),
+                ));
+            }
             output.push(ImageTransfer {
                 source_id: asset.id,
                 original_name: asset.original_name,
