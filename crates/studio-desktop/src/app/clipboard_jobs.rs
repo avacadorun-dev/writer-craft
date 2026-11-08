@@ -22,6 +22,7 @@ pub(super) enum SubmitFailureKind {
     Busy,
     Closed,
     EpochExhausted,
+    Cancelled,
 }
 /// Failed submission returns the exact one-shot request so the host can preserve or retry it.
 pub(super) struct SubmitFailure {
@@ -83,6 +84,7 @@ pub(super) enum ClipboardOutcome {
     Cut(Change),
     Pasted(Change),
     Cancelled,
+    Interrupted,
     Failed(JobError),
 }
 pub(super) struct ClipboardCompletion {
@@ -104,6 +106,7 @@ enum Prepared {
 struct Epochs {
     writes: AtomicU64,
     cancel: AtomicU64,
+    focus_cancel: AtomicU64,
     // Only the final cancellation/start handshake is locked. OS and project I/O stay outside.
     publication_fence: Mutex<()>,
     active_write: AtomicBool,
@@ -235,6 +238,18 @@ impl ClipboardJobs {
         // cancellation must not repeatedly discard it. Only a newer Copy/Cut intent supersedes it.
         Ok(())
     }
+    /// A focus boundary interrupts document work without discarding its captured Copy data.
+    /// This cannot interrupt an OS write that has already entered the provider.
+    pub fn cancel_for_focus_loss(&mut self) -> std::result::Result<(), SubmitFailureKind> {
+        if let Some(pending) = self.native_output.as_mut()
+            && pending.error.is_none()
+        {
+            pending.error = Some(SubmitFailureKind::Cancelled);
+        }
+        let epoch = advance(&self.epochs.cancel).ok_or(SubmitFailureKind::EpochExhausted)?;
+        self.epochs.focus_cancel.store(epoch, Ordering::Release);
+        Ok(())
+    }
     /// Retain the exact native widget command until older rich writes have actually returned.
     /// This does not write or acknowledge the clipboard. Newer Copy intents replace older ones.
     pub fn defer_native_output(&mut self, command: egui::OutputCommand) {
@@ -284,6 +299,7 @@ impl ClipboardJobs {
     pub fn retry_native_output(&mut self) {
         if let Some(pending) = &mut self.native_output {
             pending.error = None;
+            pending.epoch = None;
         }
         self.progress_native_output();
     }
@@ -344,7 +360,11 @@ impl ClipboardJobs {
             completion.write_epoch,
         );
         let outcome = if !current {
-            ClipboardOutcome::Cancelled
+            if self.epochs.focus_cancel.load(Ordering::Acquire) > completion.cancel_epoch {
+                ClipboardOutcome::Interrupted
+            } else {
+                ClipboardOutcome::Cancelled
+            }
         } else {
             match completion.prepared {
                 Prepared::Copied => ClipboardOutcome::Copied,

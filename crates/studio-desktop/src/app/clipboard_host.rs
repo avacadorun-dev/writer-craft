@@ -78,6 +78,29 @@ fn is_clipboard_event(event: &egui::Event) -> bool {
         egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_)
     )
 }
+fn take_widget_copy(ctx: &egui::Context) -> Option<egui::OutputCommand> {
+    ctx.output_mut(|output| {
+        let mut latest = None;
+        for command in std::mem::take(&mut output.commands) {
+            if matches!(
+                command,
+                egui::OutputCommand::CopyText(_) | egui::OutputCommand::CopyImage(_)
+            ) {
+                latest = Some(command);
+            } else {
+                output.commands.push(command);
+            }
+        }
+        latest
+    })
+}
+fn native_output_message(error: SubmitFailureKind) -> &'static str {
+    if error == SubmitFailureKind::Cancelled {
+        CANCELLED
+    } else {
+        "The clipboard worker stopped. Captured content is preserved."
+    }
+}
 impl StudioApp {
     fn clipboard_scope(&self) -> studio_core::Result<ProjectClipboard> {
         let document = self.document.as_ref().ok_or_else(|| {
@@ -112,8 +135,10 @@ impl StudioApp {
     }
     /// Call before shortcuts/input and before applying any background completion.
     pub(super) fn clipboard_frame_start(&mut self, ctx: &egui::Context) {
+        let window_focused = ctx.input(|input| input.focused);
         self.clipboard_jobs.progress_native_output();
-        let rich_focused = !self.library
+        let rich_focused = window_focused
+            && !self.library
             && !self.modal_open()
             && self
                 .rich
@@ -126,7 +151,9 @@ impl StudioApp {
                     .iter()
                     .any(|event| matches!(event, egui::Event::Copy | egui::Event::Cut))
             });
-        if self.modal_open()
+        if !window_focused {
+            self.cancel_clipboard_for_focus_loss();
+        } else if self.modal_open()
             || foreign_copy
             || ctx.input(|input| input.viewport().close_requested())
         {
@@ -152,7 +179,8 @@ impl StudioApp {
                 self.status = if preserve { RECOVERY_FULL } else { PENDING }.into();
             }
         }
-        let allow_mutation = !self.library && !self.modal_open() && self.can_edit_manuscript();
+        let allow_mutation =
+            window_focused && !self.library && !self.modal_open() && self.can_edit_manuscript();
         for completion in self.clipboard_jobs.take_completed() {
             let session = if allow_mutation {
                 self.rich.as_mut().map(|rich| &mut rich.session)
@@ -173,6 +201,9 @@ impl StudioApp {
                     self.status = "Saving…".into();
                 }
             }
+            ClipboardOutcome::Interrupted => {
+                self.retain_clipboard(result.captured, Some(result.scope), CANCELLED);
+            }
             ClipboardOutcome::Cancelled => {
                 // Superseding Copy intentionally replaces an earlier read-only publication.
                 // Cut/Paste preserve their capture because they represented a document intent.
@@ -188,6 +219,14 @@ impl StudioApp {
     /// Call after all canvas/dialog UI. A later native text-copy command wins over an earlier
     /// rich job even when the command was produced by a button rather than a keyboard event.
     pub(super) fn clipboard_frame_end(&mut self, ctx: &egui::Context) {
+        if !ctx.input(|input| input.focused) {
+            let captured = take_widget_copy(ctx);
+            if let Some(command) = captured {
+                self.clipboard_jobs.defer_native_output(command);
+            }
+            self.cancel_clipboard_for_focus_loss();
+            return;
+        }
         let ordinary_copy = ctx.output(|output| {
             output.commands.iter().any(|command| {
                 matches!(
@@ -201,21 +240,7 @@ impl StudioApp {
         if ordinary_copy || self.modal_open() {
             self.cancel_clipboard_work();
             if ordinary_copy && needs_ordering {
-                let captured = ctx.output_mut(|output| {
-                    let mut latest = None;
-                    for command in std::mem::take(&mut output.commands) {
-                        if matches!(
-                            &command,
-                            egui::OutputCommand::CopyText(_) | egui::OutputCommand::CopyImage(_)
-                        ) {
-                            // Native clipboard semantics retain the latest Copy intent in order.
-                            latest = Some(command);
-                        } else {
-                            output.commands.push(command);
-                        }
-                    }
-                    latest
-                });
+                let captured = take_widget_copy(ctx);
                 if let Some(command) = captured {
                     self.clipboard_jobs.defer_native_output(command);
                     self.status = WORKING.into();
@@ -237,8 +262,8 @@ impl StudioApp {
             // re-emission, not a fabricated ClipboardProvider write acknowledgement.
             ctx.output_mut(|output| output.commands.push(command));
             self.status = "Content copied".into();
-        } else if self.clipboard_jobs.native_output_error().is_some() {
-            self.status = "The clipboard worker stopped. Captured content is preserved.".into();
+        } else if let Some(error) = self.clipboard_jobs.native_output_error() {
+            self.status = native_output_message(error).into();
         }
     }
     fn submit_clipboard_request(
@@ -270,6 +295,7 @@ impl StudioApp {
             Err(failure) => {
                 let msgid = match failure.kind {
                     SubmitFailureKind::Busy => BUSY,
+                    SubmitFailureKind::Cancelled => CANCELLED,
                     SubmitFailureKind::Closed | SubmitFailureKind::EpochExhausted => {
                         "The clipboard worker stopped. Captured content is preserved."
                     }
@@ -285,7 +311,18 @@ impl StudioApp {
     }
     /// Call before changing project/document or closing. Cancellation never joins the worker.
     pub(super) fn cancel_clipboard_work(&mut self) {
-        if self.clipboard_jobs.cancel_pending().is_err() {
+        self.cancel_clipboard_work_inner(false);
+    }
+    fn cancel_clipboard_for_focus_loss(&mut self) {
+        self.cancel_clipboard_work_inner(true);
+    }
+    fn cancel_clipboard_work_inner(&mut self, preserve_copy: bool) {
+        let cancellation = if preserve_copy {
+            self.clipboard_jobs.cancel_for_focus_loss()
+        } else {
+            self.clipboard_jobs.cancel_pending()
+        };
+        if cancellation.is_err() {
             self.status = "The clipboard worker stopped. Captured content is preserved.".into();
         }
         let requests = if let Some(rich) = self.rich.as_mut() {
@@ -303,7 +340,7 @@ impl StudioApp {
         // Scope creation is needed only for actual captured work, never on every modal frame.
         let scope = self.clipboard_scope().ok();
         for request in requests {
-            if clipboard_jobs::request_intent(&request) != ClipboardIntent::Copy {
+            if preserve_copy || clipboard_jobs::request_intent(&request) != ClipboardIntent::Copy {
                 self.retain_clipboard(
                     clipboard_jobs::captured_bundle(&request),
                     scope.clone(),
@@ -315,7 +352,8 @@ impl StudioApp {
     /// Render as a separate bounded bottom panel above the existing status bar, not inside its
     /// fixed-height row. Actions are explicit new intents; a failed Cut is never silently retried.
     pub(super) fn clipboard_recovery_actions(&mut self, ui: &mut egui::Ui) {
-        if self.clipboard_jobs.native_output_error().is_some() {
+        if let Some(error) = self.clipboard_jobs.native_output_error() {
+            let msgid = native_output_message(error);
             let l = self.language;
             let tokens = theme::tokens(ui.ctx());
             let mut retry = false;
@@ -329,9 +367,7 @@ impl StudioApp {
                 )
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(
-                            l.text("The clipboard worker stopped. Captured content is preserved."),
-                        );
+                        ui.label(l.text(msgid));
                         retry = ui
                             .add_enabled(
                                 !self.modal_open(),
@@ -476,7 +512,7 @@ mod tests {
     use super::*;
     use craft_editor_egui::{DocPoint, Selection};
     use craft_editor_model::{Document as RichDocument, ScalarOffset};
-    fn fixture() -> AppResult<(tempfile::TempDir, StudioApp, egui::Context)> {
+    pub(super) fn fixture() -> AppResult<(tempfile::TempDir, StudioApp, egui::Context)> {
         let directory = tempfile::tempdir()?;
         let context = egui::Context::default();
         let cc = eframe::CreationContext::_new_kittest(context.clone());
@@ -532,6 +568,59 @@ mod tests {
         assert!(frame.platform_output.commands.iter().any(|command|matches!(command,egui::OutputCommand::CopyText(text) if text=="exact widget 😀")));
         assert!(!app.clipboard_jobs.has_pending_native_output());
         assert_eq!(app.status, "Content copied");
+        Ok(())
+    }
+    #[test]
+    fn focus_loss_retains_widget_text_and_image_without_automatic_republication() -> AppResult<()> {
+        let image = egui::ColorImage::from_rgba_unmultiplied([1, 1], &[25, 60, 90, 255]);
+        for expected in [
+            egui::OutputCommand::CopyText("captured exact 😀".into()),
+            egui::OutputCommand::CopyImage(image),
+        ] {
+            let (_directory, mut app, context) = fixture()?;
+            app.clipboard_jobs.defer_native_output(expected.clone());
+            for focused in [false, true] {
+                let mut frame = context.run_ui(
+                    egui::RawInput {
+                        focused,
+                        ..Default::default()
+                    },
+                    |root| {
+                        app.clipboard_frame_start(root.ctx());
+                        app.clipboard_frame_end(root.ctx());
+                    },
+                );
+                frame.textures_delta.clear();
+                assert!(frame.platform_output.commands.is_empty());
+                assert_eq!(
+                    app.clipboard_jobs.native_output_error(),
+                    Some(SubmitFailureKind::Cancelled)
+                );
+                assert_eq!(
+                    app.rich
+                        .as_ref()
+                        .ok_or("missing session")?
+                        .session
+                        .document()
+                        .block_text("p")?,
+                    "ABCDE"
+                );
+            }
+            app.clipboard_jobs.retry_native_output();
+            let mut frame = context.run_ui(
+                egui::RawInput {
+                    focused: true,
+                    ..Default::default()
+                },
+                |root| {
+                    app.clipboard_frame_start(root.ctx());
+                    app.clipboard_frame_end(root.ctx());
+                },
+            );
+            frame.textures_delta.clear();
+            assert_eq!(frame.platform_output.commands, vec![expected]);
+            assert!(!app.clipboard_jobs.has_pending_native_output());
+        }
         Ok(())
     }
     #[test]
@@ -750,6 +839,60 @@ mod completion_save_tests {
             1_000_000
         }
     }
+    #[test]
+    fn focus_loss_rejects_acknowledged_cut_paste_and_copy_without_losing_capture() -> AppResult<()>
+    {
+        for intent in [
+            ClipboardIntent::Cut,
+            ClipboardIntent::Paste,
+            ClipboardIntent::Copy,
+        ] {
+            let (_directory, mut app, ctx) = super::tests::fixture()?;
+            app.clipboard = Some(Arc::new(Provider::default()));
+            let session = &app.rich.as_ref().ok_or("missing session")?.session;
+            let request = match intent {
+                ClipboardIntent::Cut => session.begin_cut()?.ok_or("missing cut")?,
+                ClipboardIntent::Copy => session.begin_copy()?.ok_or("missing copy")?,
+                ClipboardIntent::Paste => session.begin_paste(ClipboardBundle {
+                    plain: "Exact pasted 😀".into(),
+                    ..Default::default()
+                })?,
+            };
+            app.submit_clipboard_request(request, Some(app.clipboard_scope()?), &ctx);
+            app.clipboard_jobs.wait_ready()?;
+            let mut frame = ctx.run_ui(
+                egui::RawInput {
+                    focused: false,
+                    ..Default::default()
+                },
+                |root| {
+                    app.clipboard_frame_start(root.ctx());
+                    app.clipboard_frame_end(root.ctx());
+                },
+            );
+            frame.textures_delta.clear();
+            let rich = app.rich.as_ref().ok_or("missing session")?;
+            assert_eq!(rich.session.document().block_text("p")?, "ABCDE");
+            assert!(!rich.session.can_undo());
+            assert!(app.dirty.is_none());
+            let retained = app
+                .clipboard_recovery
+                .as_ref()
+                .and_then(|recovery| recovery.items.front())
+                .ok_or("missing interrupted capture")?;
+            assert_eq!(
+                retained.bundle.plain,
+                if intent == ClipboardIntent::Paste {
+                    "Exact pasted 😀"
+                } else {
+                    "BCD"
+                }
+            );
+            assert_eq!(retained.message, CANCELLED);
+            assert!(app.error.is_none());
+        }
+        Ok(())
+    }
     fn complete_save_reopen_undo(cut: bool) -> AppResult<()> {
         let directory = tempfile::tempdir()?;
         let ctx = egui::Context::default();
@@ -804,7 +947,14 @@ mod completion_save_tests {
         app.submit_clipboard_request(request, Some(app.clipboard_scope()?), &ctx);
         app.clipboard_jobs.wait_ready()?;
         // No canvas or note decoration paint runs between worker completion and durable save.
-        app.clipboard_frame_start(&ctx);
+        let mut completion_frame = ctx.run_ui(
+            egui::RawInput {
+                focused: true,
+                ..Default::default()
+            },
+            |root| app.clipboard_frame_start(root.ctx()),
+        );
+        completion_frame.textures_delta.clear();
         assert!(app.dirty.is_some());
         let expected_text = if cut { "AE" } else { "AXE" };
         let expected_start = if cut { 1 } else { 2 };
