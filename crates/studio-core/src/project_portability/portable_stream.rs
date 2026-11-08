@@ -63,6 +63,7 @@ impl ProjectPortableExportWorker {
         export_recovery(&transaction, project, &mut output)?;
         export_assets_and_evidence(&transaction, project, &mut output)?;
         cancel.check()?;
+        super::portable_reading::capture_reading(&transaction, &output.index, project, cancel)?;
         let prepared = output.finish(original)?;
         transaction.commit()?;
         Ok(prepared)
@@ -72,7 +73,7 @@ impl ProjectPortableExportWorker {
 /// A bounded prepared format-2 project. Paths and database handles are private capabilities.
 /// Dropping it removes only its own temporary directory.
 pub struct PreparedPortableProject {
-    index: Connection,
+    pub(super) index: Connection,
     directory: TempDir,
     root: Vec<u8>,
     object_count: u64,

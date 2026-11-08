@@ -39,10 +39,10 @@ pub use project_portability::{
     PortableShardDescriptor, PreparedPortableProject, ProjectAssetSource, ProjectAttachment,
     ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo,
     ProjectCanvasSnapshot, ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
-    ProjectPortableExportWorker, ProjectTransferCancellation, ProjectTreeNode,
-    ValidatedEvidenceObject, ValidatedEvidenceReference, ValidatedPortableProjectImport,
-    ValidatedProjectImport, VerifiedPortableProjectStream, VerifiedPortableRecord,
-    visit_portable_shard,
+    ProjectPortableExportWorker, ProjectReadingCanvas, ProjectReadingDocument, ProjectReadingNode,
+    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
+    ValidatedEvidenceReference, ValidatedPortableProjectImport, ValidatedProjectImport,
+    VerifiedPortableProjectStream, VerifiedPortableRecord, visit_portable_shard,
 };
 pub use rich::{RichDraft, RichRevision};
 pub use rich_review::{RichProposal, RichProposalSummary};
