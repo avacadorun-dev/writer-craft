@@ -185,6 +185,11 @@ impl StudioApp {
             )).color(t.warning));
             ui.add_space(16.0);
         }
+        #[cfg(feature = "editor-preview")]
+        let spelling_unavailable = !cfg!(target_os = "macos")
+            || self.rich.as_ref().is_some_and(|rich| {
+                rich.proofing.availability() == proofing::Availability::Unavailable
+            });
         ui.add_enabled_ui(self.editor_preferences.writable(), |ui| {
             ui.spacing_mut().interact_size.y = 40.0;
             ui.spacing_mut().item_spacing.y = 16.0;
@@ -260,6 +265,28 @@ impl StudioApp {
                         }
                     }
                 });
+            });
+            #[cfg(feature = "editor-preview")]
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 8.0;
+                ui.add_enabled_ui(cfg!(target_os = "macos"), |ui| {
+                    ui.checkbox(&mut preferences.spellcheck, l.text("Spellcheck"));
+                });
+                ui.label(
+                    RichText::new(l.text(if spelling_unavailable && preferences.spellcheck {
+                        "Spellcheck is unavailable on this system."
+                    } else {
+                        "Uses your system spelling languages. No automatic corrections."
+                    }))
+                    .size(13.0)
+                    .color(
+                        if spelling_unavailable && preferences.spellcheck {
+                            t.warning
+                        } else {
+                            t.muted
+                        },
+                    ),
+                );
             });
             ui.add_space(8.0);
             ui.separator();

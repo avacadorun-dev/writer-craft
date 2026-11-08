@@ -97,6 +97,27 @@ mod tests {
     }
 
     #[test]
+    fn sofia_language_neutral_shaping_matches_the_source_localized_forms_policy() -> AppResult<()> {
+        manuscript_fonts()?;
+        let cyrillic: String = ('\u{0400}'..='\u{052f}').collect();
+        let sample =
+            format!("office affine fi fl Русский текст ёжик Български локални форми {cyrillic}");
+        for style in ["Regular", "Bold", "Italic", "Bold Italic", "SemiBold"] {
+            assert!(
+                !craft_editor_egui::fonts::feature_changes_shaping(
+                    "Sofia Sans",
+                    style,
+                    &sample,
+                    *b"locl",
+                    0,
+                )?,
+                "language-neutral native shaping requires a real localized-form override for {style}",
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn bundled_native_manuscript_font_covers_chinese_and_japanese_without_os_clipboard_access()
     -> AppResult<()> {
         manuscript_fonts()?;
