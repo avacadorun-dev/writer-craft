@@ -582,3 +582,47 @@ fn format2_should_preserve_source_24000_character_notes_and_roll_back_24001() {
     );
     assert_eq!(importer.workspace().list_projects().unwrap().len(), before);
 }
+#[test]
+fn native_restored_artifacts_should_remain_declared_in_legacy_reading_snapshots() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("image.sqlite");
+    let source = Workspace::open(&database).unwrap();
+    let project = source.create_project("Image source").unwrap();
+    source
+        .create_rich_document(&project.id, "Text", rich("Preserved source"))
+        .unwrap();
+    let mut png = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+        1,
+        1,
+        image::Rgba([1, 2, 3, 255]),
+    ))
+    .write_to(&mut png, image::ImageFormat::Png)
+    .unwrap();
+    let image = source
+        .import_image(
+            &project.id,
+            "original.png",
+            Some("image/png"),
+            png.get_ref(),
+        )
+        .unwrap();
+    let mut exporter = ProjectPortableExportWorker::open(&database).unwrap();
+    let prepared = exporter
+        .prepare(&project.id, &ProjectTransferCancellation::default())
+        .unwrap();
+    let stream = preflight(&prepared, None);
+    let mut importer = ProjectImportWorker::memory().unwrap();
+    let imported = importer
+        .restore_stream(&stream, &ProjectTransferCancellation::default())
+        .unwrap();
+    let snapshot = importer
+        .workspace()
+        .project_export_snapshot(&imported.project_id)
+        .unwrap();
+    assert_eq!(snapshot.manifest()["media"].as_array().unwrap().len(), 1);
+    assert_eq!(snapshot.manifest()["media"][0]["id"], image.id);
+    assert_eq!(snapshot.manifest()["media"][0]["sha256"], image.sha256);
+    assert_eq!(snapshot.attachments().len(), 1);
+    studio_core::ValidatedProjectImport::parse(snapshot.manifest_bytes()).unwrap();
+}

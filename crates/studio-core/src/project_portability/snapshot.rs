@@ -509,34 +509,51 @@ fn capture_assets(
         .filter_map(|item| item["path"].as_str())
         .map(str::to_lowercase)
         .collect();
-    let mut new_media = Vec::new();
+    let mut declared = HashSet::new();
+    for (domain, key) in [("media", "id"), ("audio", "sessionId")] {
+        for record in array(manifest, domain)? {
+            declared.insert((domain.to_owned(), string(record, key)?.to_owned()));
+        }
+    }
+    let mut appended: HashMap<String, Vec<Value>> = HashMap::new();
     for (rowid, native, sha, size, mime, name, width, height, kind, logical, path, raw) in rows {
         let kind = kind.unwrap_or_else(|| "media".into());
         let logical = logical.unwrap_or(native);
-        let path = match path {
-            Some(path) => path,
-            None => {
-                let path = format!("media/native-{logical}{}", extension(&mime));
-                if !paths.insert(path.to_lowercase()) {
-                    return invalid("native export asset path collides with retained source");
-                }
-                manifest["formatVersion"] = json!(8);
-                new_media.push(json!({"id":logical,"path":path,"sha256":sha,"byteSize":size,"mediaType":mime,"originalName":name,"width":width,"height":height}));
-                path
-            }
-        };
-        if let Some(raw) = raw {
-            let original: Value = serde_json::from_str(&raw)?;
-            if original["sha256"]
+        let path = path.unwrap_or_else(|| format!("media/native-{logical}{}", extension(&mime)));
+        let original = raw
+            .map(|raw| serde_json::from_str::<Value>(&raw))
+            .transpose()?;
+        if let Some(original) = original.as_ref()
+            && (original["sha256"]
                 .as_str()
                 .is_none_or(|value| !value.eq_ignore_ascii_case(&sha))
                 || original["byteSize"].as_u64() != Some(size)
-                || original["mediaType"].as_str() != Some(mime.as_str())
-            {
-                return Err(StudioError::CorruptData(
-                    "Original project asset metadata changed".into(),
-                ));
+                || original["mediaType"].as_str() != Some(mime.as_str()))
+        {
+            return Err(StudioError::CorruptData(
+                "Original project asset metadata changed".into(),
+            ));
+        }
+        if !declared.contains(&(kind.clone(), logical.clone())) {
+            if !paths.insert(path.to_lowercase()) {
+                return invalid("native export asset path collides with retained source");
             }
+            let mut record=original.unwrap_or_else(||json!({"path":path,"sha256":sha,"byteSize":size,"mediaType":mime,"originalName":name,"width":width,"height":height}));
+            let key = match kind.as_str() {
+                "media" => "id",
+                "audio" => "sessionId",
+                _ => return invalid("Unknown captured artifact resource kind"),
+            };
+            if record
+                .get(key)
+                .is_some_and(|id| id.as_str() != Some(logical.as_str()))
+                || record["path"].as_str() != Some(path.as_str())
+            {
+                return invalid("Native artifact identity/path differs from its retained metadata");
+            }
+            record[key] = json!(logical);
+            appended.entry(kind.clone()).or_default().push(record);
+            manifest["formatVersion"] = json!(8);
         }
         let descriptor = ProjectAttachment {
             resource_kind: kind,
@@ -557,10 +574,10 @@ fn capture_assets(
             return invalid("duplicate export attachment path");
         }
     }
-    if !new_media.is_empty() {
-        let mut media = array(manifest, "media")?.to_vec();
-        media.extend(new_media);
-        manifest["media"] = Value::Array(media);
+    for (domain, records) in appended {
+        let mut all = array(manifest, &domain)?.to_vec();
+        all.extend(records);
+        manifest[&domain] = Value::Array(all);
     }
     for domain in ["media", "audio"] {
         for record in array(manifest, domain)? {
