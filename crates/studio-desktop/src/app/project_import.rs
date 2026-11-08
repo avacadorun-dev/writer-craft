@@ -203,10 +203,8 @@ impl ProjectImportState {
         );
         if cancel || response.should_close() {
             self.cancel();
-        } else if import {
-            if let Err(error) = self.begin_import(database) {
-                self.error = Some(error.to_string());
-            }
+        } else if import && let Err(error) = self.begin_import(database) {
+            self.error = Some(error.to_string());
         }
     }
 }
