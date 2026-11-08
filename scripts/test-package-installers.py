@@ -42,6 +42,30 @@ class InstallerContracts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "256px"):
                 packaging.icon_from_icns(source, destination)
 
+    def test_windows_import_inspection_refuses_external_crt_and_invalid_rvas(self):
+        data = bytearray(1024)
+        data[:2] = b"MZ"
+        struct.pack_into("<I", data, 60, 128)
+        data[128:132] = b"PE\0\0"
+        struct.pack_into("<H", data, 134, 1)
+        struct.pack_into("<H", data, 148, 240)
+        struct.pack_into("<H", data, 152, 0x20B)
+        struct.pack_into("<I", data, 260, 16)
+        struct.pack_into("<II", data, 272, 4096, 40)
+        struct.pack_into("<II", data, 368, 4296, 64)
+        struct.pack_into("<III", data, 404, 4096, 512, 512)
+        struct.pack_into("<I", data, 524, 4196)
+        data[612:625] = b"KERNEL32.dll\0"
+        struct.pack_into("<II", data, 712, 1, 4396)
+        data[812:823] = b"USER32.dll\0"
+        self.assertEqual(packaging.windows_imports(bytes(data)), ["kernel32.dll", "user32.dll"])
+        data[612:629] = b"VCRUNTIME140.dll\0"
+        with self.assertRaisesRegex(ValueError, "Visual C"):
+            packaging.windows_imports(bytes(data))
+        struct.pack_into("<I", data, 524, 99999)
+        with self.assertRaisesRegex(ValueError, "escapes"):
+            packaging.windows_imports(bytes(data))
+
     def payload(self, root):
         (root / "assets/fonts").mkdir(parents=True)
         (root / "assets/fonts/FONT-LICENSE.txt").write_text("Font attribution fixture")

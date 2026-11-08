@@ -111,6 +111,67 @@ def icon_from_icns(source, destination):
     raise ValueError("ICNS needs its original 256px PNG (ic08) for the Windows icon")
 
 
+def windows_imports(data):
+    """Inspect PE32+ normal/delay imports without requiring a developer shell."""
+    if len(data) < 64 or data[:2] != b"MZ":
+        raise ValueError("Missing Windows PE executable header")
+    pe = struct.unpack_from("<I", data, 60)[0]
+    if pe + 24 > len(data) or data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError("Invalid Windows PE header offset")
+    count = struct.unpack_from("<H", data, pe + 6)[0]
+    optional_size = struct.unpack_from("<H", data, pe + 20)[0]
+    optional = pe + 24
+    if optional_size < 224 or optional + optional_size + count * 40 > len(data) or struct.unpack_from("<H", data, optional)[0] != 0x20B:
+        raise ValueError("Expected bounded Windows PE32+ sections and data directories")
+    sections = []
+    for index in range(count):
+        section = optional + optional_size + index * 40
+        address, size, offset = struct.unpack_from("<III", data, section + 12)
+        sections.append((address, size, offset))
+    def file_offset(address, size=1):
+        for start, length, offset in sections:
+            if start <= address and address + size <= start + length and offset + address - start + size <= len(data):
+                return offset + address - start
+        raise ValueError("Windows import RVA escapes executable sections")
+    imports = set()
+    directories = struct.unpack_from("<I", data, optional + 108)[0]
+    for index, width, name_position in [(1, 20, 12), (13, 32, 4)]:
+        if directories <= index:
+            continue
+        address, size = struct.unpack_from("<II", data, optional + 112 + index * 8)
+        if not address:
+            continue
+        if size < width or size > len(data):
+            raise ValueError("Invalid Windows import directory size")
+        terminated = False
+        for position in range(0, size - width + 1, width):
+            offset = file_offset(address + position, width)
+            if not any(data[offset:offset + width]):
+                terminated = True
+                break
+            if index == 13 and struct.unpack_from("<I", data, offset)[0] != 1:
+                raise ValueError("Unsupported absolute-address Windows delay import")
+            name_rva = struct.unpack_from("<I", data, offset + name_position)[0]
+            name = bytearray()
+            for character in range(256):
+                value = data[file_offset(name_rva + character)]
+                if value == 0:
+                    break
+                name.append(value)
+            else:
+                raise ValueError("Windows import DLL name is too long")
+            if not re.fullmatch(rb"[A-Za-z0-9._-]+\.[dD][lL][lL]", bytes(name)):
+                raise ValueError("Invalid Windows import DLL name")
+            imports.add(name.decode("ascii").lower())
+        if not terminated:
+            raise ValueError("Unterminated Windows import descriptor table")
+    if not imports:
+        raise ValueError("Windows executable has no inspectable imports")
+    if any(name.startswith(("vcruntime", "msvcp", "concrt")) for name in imports):
+        raise ValueError("Per-user installer must not depend on a machine-wide Visual C++ redistributable")
+    return sorted(imports)
+
+
 def stage_payload(root, binary, destination, metadata, notices):
     destination.mkdir(parents=True)
     shutil.copy2(binary, destination / ("WriterCraft.exe" if metadata["platform"] == "windows-x64" else "writercraft"))
@@ -271,13 +332,16 @@ FunctionEnd
 
 def build_native_binary(name, output):
     target = TARGETS[name][2]
-    run(["cargo", "build", "--locked", "--release", "-p", "studio-desktop", "--features", "editor-preview", "--target", target], cwd=ROOT)
+    environment = dict(os.environ)
+    if name == "windows-x64":
+        environment["RUSTFLAGS"] = "-C target-feature=+crt-static"
+    run(["cargo", "build", "--locked", "--release", "-p", "studio-desktop", "--features", "editor-preview", "--target", target], cwd=ROOT, env=environment)
     base = Path(os.environ.get("CARGO_TARGET_DIR", "target"))
     binary = (base if base.is_absolute() else ROOT / base) / target / "release" / ("writercraft.exe" if name == "windows-x64" else "writercraft")
     load_script("package-portable").validate_binary(binary.read_bytes(), target)
     notices = output / "THIRD_PARTY_NOTICES.txt"
     run([sys.executable, ROOT / "scripts/generate-notices.py", "--target", target,
-         "--features", "studio-desktop/editor-preview", "--output", notices], cwd=ROOT)
+         "--features", "studio-desktop/editor-preview", "--output", notices], cwd=ROOT, env=environment)
     return binary, notices
 
 
@@ -330,6 +394,8 @@ def build_windows(metadata, output, package):
     binary, notices = build_native_binary("windows-x64", output)
     metadata["executable_sha256"] = sha256(binary)
     metadata["windows_file_version"] = windows_version(metadata["version"])
+    metadata["rustflags"] = "-C target-feature=+crt-static"
+    metadata["windows_imports"] = windows_imports(binary.read_bytes())
     compiler_root = Path(os.environ["WRITERCRAFT_NSIS"])
     with tempfile.TemporaryDirectory(prefix="writercraft-nsis-", dir=os.environ["RUNNER_TEMP"]) as folder:
         work = Path(folder)
@@ -347,14 +413,14 @@ def build_windows(metadata, output, package):
         shutil.copy2(source, output / "installer-source.nsi")
     metadata["signing"] = "unsigned installer; Windows SmartScreen reputation is not established"
     metadata["packaging_tool"] = "NSIS " + NSIS_VERSION + "; zlib compressor"
-    metadata["checks"] = {"architecture": True, "notices": True, "application_icon": True}
+    metadata["checks"] = {"architecture": True, "notices": True, "application_icon": True, "windows_runtime": True}
 
 
 def check_macos_bundle(app, metadata):
     release = load_script("release-check")
     issues = release.bundle_issues(app, release.workspace_metadata())
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-    if issues or info.get("WriterCraftBuildCommit") != metadata["commit"] or info.get("WriterCraftVersion") != metadata["version"]:
+    if issues or info.get("WriterCraftBuildCommit") != metadata["commit"] or info.get("WriterCraftVersion") != metadata["version"] or info.get("WriterCraftNativeEditor") is not True:
         raise ValueError("macOS bundle identity mismatch: " + "; ".join(issues))
     run(["codesign", "--verify", "--deep", "--strict", app])
     notices = app / "Contents/Resources/licenses/THIRD_PARTY_NOTICES.txt"
@@ -487,7 +553,7 @@ def verify_linux(output):
 
 REQUIRED_CHECKS = {
     "macos-arm64": {"architecture", "notices", "application_icon", "dmg_filesystem", "applications_link", "app_signature", "installed_version"},
-    "windows-x64": {"architecture", "notices", "application_icon", "unattended_install", "unattended_uninstall", "user_data_preserved", "unowned_files_preserved", "start_menu", "application_identity", "installed_version", "installed_binary_checksum"},
+    "windows-x64": {"architecture", "notices", "application_icon", "windows_runtime", "unattended_install", "unattended_uninstall", "user_data_preserved", "unowned_files_preserved", "start_menu", "application_identity", "installed_version", "installed_binary_checksum"},
     "linux-amd64": {"architecture", "notices", "application_icon", "desktop_launcher", "runtime_dependencies", "unattended_install", "unattended_uninstall", "purge", "user_data_preserved", "installed_version", "installed_binary_checksum"},
 }
 
