@@ -154,6 +154,57 @@ fn complete_export_should_keep_rich_reading_views_original_artifacts_and_canonic
     let database = directory.path().join("workspace.sqlite");
     let (worker, project) = imported(&database);
     let snapshot = snapshot(&worker, &project);
+    let document_id = worker
+        .workspace()
+        .resolve_project_resource(&project, "node", "selected")
+        .unwrap();
+    let canonical = worker
+        .workspace()
+        .document(&document_id)
+        .unwrap()
+        .rich_json
+        .unwrap();
+    let tree = craft_editor_model::Document::from_json(canonical.clone()).unwrap();
+    let image = tree
+        .root()
+        .children()
+        .iter()
+        .find(|node| node.node_type == "imageBlock")
+        .unwrap();
+    assert_eq!(image.string_attr("assetId"), Some("image"));
+    let images = worker
+        .workspace()
+        .image_asset_snapshot(&project, &tree)
+        .unwrap();
+    assert!(images.failures().is_empty());
+    let native = worker
+        .workspace()
+        .resolve_project_resource(&project, "media", "image")
+        .unwrap();
+    assert_ne!(native, "image");
+    assert_eq!(images.metadata("image").unwrap().id, native);
+    let expected = fixture().1;
+    assert_eq!(
+        images.load(image).unwrap().as_slice(),
+        expected.0["media/image.png"].as_slice()
+    );
+    let capsule = worker
+        .workspace()
+        .project_images(&project)
+        .unwrap()
+        .export_images(&["image".into()], 1024 * 1024)
+        .unwrap();
+    assert_eq!(capsule[0].source_id, "image");
+    assert_eq!(capsule[0].bytes, expected.0["media/image.png"]);
+    assert_eq!(
+        worker
+            .workspace()
+            .document(&document_id)
+            .unwrap()
+            .rich_json
+            .unwrap(),
+        canonical
+    );
     let destination = directory.path().join("portable");
     let receipt = export_markdown_folder(
         &snapshot,
