@@ -172,18 +172,34 @@ struct IconGeometry {
 include!("../../../assets/icons/lucide/native_geometry.rs");
 
 pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
+    paint_oriented(painter, rect, kind, color, false);
+}
+
+/// The same official Lucide chevron, rotated clockwise for an expanded tree row.
+pub(crate) fn paint_disclosure(painter: &Painter, rect: Rect, expanded: bool, color: Color32) {
+    paint_oriented(painter, rect, Icon::ChevronRight, color, expanded);
+}
+
+fn paint_oriented(painter: &Painter, rect: Rect, kind: Icon, color: Color32, quarter_turn: bool) {
     let source = geometry(kind);
     let scale = rect.width().min(rect.height()) / 24.0;
     if !scale.is_finite() || scale <= 0.0 {
         return;
     }
-    let origin = rect.center() - Vec2::splat(12.0 * scale);
+    let orient = |value: Vec2| {
+        if quarter_turn {
+            vec2(-value.y, value.x)
+        } else {
+            value
+        }
+    };
+    let position = |x, y| rect.center() + orient(vec2(x - 12.0, y - 12.0)) * scale;
     let half_fringe = 0.5 / painter.ctx().pixels_per_point();
     let mut mesh = egui::Mesh::default();
     mesh.vertices.reserve(source.vertices.len() * 2);
     for [x, y, nx, ny] in source.vertices {
         mesh.vertices.push(egui::epaint::Vertex {
-            pos: origin + vec2(*x, *y) * scale - vec2(*nx, *ny) * half_fringe,
+            pos: position(*x, *y) - orient(vec2(*nx, *ny)) * half_fringe,
             uv: egui::epaint::WHITE_UV,
             color,
         });
@@ -191,7 +207,7 @@ pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
     let outer_offset = mesh.vertices.len() as u32;
     for [x, y, nx, ny] in source.vertices {
         mesh.vertices.push(egui::epaint::Vertex {
-            pos: origin + vec2(*x, *y) * scale + vec2(*nx, *ny) * half_fringe,
+            pos: position(*x, *y) + orient(vec2(*nx, *ny)) * half_fringe,
             uv: egui::epaint::WHITE_UV,
             color: Color32::TRANSPARENT,
         });

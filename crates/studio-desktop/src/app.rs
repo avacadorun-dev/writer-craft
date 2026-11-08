@@ -22,6 +22,7 @@ mod notes;
 #[cfg(feature = "editor-preview")]
 mod project_clipboard;
 mod project_import;
+mod project_navigation;
 #[cfg(feature = "editor-preview")]
 mod proofing;
 #[cfg(feature = "editor-preview")]
@@ -79,6 +80,7 @@ pub struct StudioApp {
     storage: storage::StorageState,
     projects: Vec<Project>,
     project: Option<Project>,
+    project_outline: project_navigation::ProjectOutline,
     documents: Vec<Document>,
     document: Option<Document>,
     body: String,
@@ -217,6 +219,7 @@ impl StudioApp {
             storage: storage::StorageState::default(),
             projects: vec![],
             project: None,
+            project_outline: project_navigation::ProjectOutline::default(),
             documents: vec![],
             document: None,
             body: String::new(),
@@ -383,6 +386,10 @@ impl StudioApp {
         self.cancel_clipboard_work();
         self.save()?;
         let documents = self.workspace.list_documents(&project.id)?;
+        let outline = project_navigation::ProjectOutline::prepare(
+            &project.id,
+            &self.workspace.project_tree(&project.id)?,
+        )?;
         if let Some(document) = documents.first().cloned() {
             // The old project/context remains intact if opening needs an explicit
             // recovery choice. Never display an empty project after a guarded refusal.
@@ -406,6 +413,7 @@ impl StudioApp {
             self.canvas = None;
         }
         self.documents = documents;
+        self.project_outline = outline;
         self.project = Some(project);
         self.library = false;
         Ok(())

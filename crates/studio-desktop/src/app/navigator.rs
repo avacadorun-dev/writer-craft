@@ -90,33 +90,19 @@ impl StudioApp {
                         });
                     });
                     ui.add_space(6.0);
-                    let mut selected = None;
-                    egui::ScrollArea::vertical()
-                        .id_salt("document-tree")
-                        .auto_shrink([false, false])
-                        .max_height((ui.available_height() - 90.0).max(80.0))
-                        .show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 0.0;
-                            for document in &self.documents {
-                                if !self.search.is_empty()
-                                    && !document
-                                        .title
-                                        .to_lowercase()
-                                        .contains(&self.search.to_lowercase())
-                                {
-                                    continue;
-                                }
-                                let active = self
-                                    .document
-                                    .as_ref()
-                                    .is_some_and(|current| current.id == document.id);
-                                if nav_row(ui, Icon::Document, &document.title, active, t).clicked()
-                                {
-                                    selected = Some(document.clone());
-                                }
-                            }
-                        });
-                    if let Some(document) = selected {
+                    if let Some(id) = self.project_outline.show(
+                        ui,
+                        &self.documents,
+                        self.document.as_ref().map(|document| document.id.as_str()),
+                        &self.search,
+                        l,
+                        t,
+                    ) && let Some(document) = self
+                        .documents
+                        .iter()
+                        .find(|document| document.id == id)
+                        .cloned()
+                    {
                         let result = self.open_document(document);
                         self.record_error(result);
                     }

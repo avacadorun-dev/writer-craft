@@ -4290,6 +4290,58 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Expand {title}",
+        [
+            "Развернуть «{title}»",
+            "Expand {title}",
+            "{title} aufklappen",
+            "Développer {title}",
+            "Expandir {title}",
+            "Expandir {title}",
+            "展开 {title}",
+            "{title} を展開",
+        ],
+    ),
+    (
+        "Collapse {title}",
+        [
+            "Свернуть «{title}»",
+            "Collapse {title}",
+            "{title} zuklappen",
+            "Réduire {title}",
+            "Contraer {title}",
+            "Recolher {title}",
+            "折叠 {title}",
+            "{title} を折りたたむ",
+        ],
+    ),
+    (
+        "No matching documents",
+        [
+            "Документы не найдены",
+            "No matching documents",
+            "Keine passenden Dokumente",
+            "Aucun document correspondant",
+            "No se encontraron documentos",
+            "Nenhum documento encontrado",
+            "未找到匹配文档",
+            "一致する文書がありません",
+        ],
+    ),
+    (
+        "This section has no saved text yet.",
+        [
+            "В этом разделе пока нет сохранённого текста.",
+            "This section has no saved text yet.",
+            "Dieser Abschnitt enthält noch keinen gespeicherten Text.",
+            "Cette section ne contient pas encore de texte enregistré.",
+            "Esta sección aún no tiene texto guardado.",
+            "Esta seção ainda não tem texto salvo.",
+            "此章节尚无已保存的文本。",
+            "このセクションにはまだ保存されたテキストがありません。",
+        ],
+    ),
+    (
         "Find a document…",
         [
             "Найти документ…",
