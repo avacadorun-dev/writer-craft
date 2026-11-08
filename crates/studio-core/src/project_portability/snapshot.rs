@@ -158,6 +158,8 @@ impl ProjectExportSnapshot {
             format_version: u32,
             scope: &'static str,
             source_manifest: &'a serde_json::value::RawValue,
+            source_manifest_raw: &'a str,
+            source_manifest_sha256: String,
             native_state: &'a Value,
             recovery_evidence: &'a Value,
         }
@@ -168,6 +170,9 @@ impl ProjectExportSnapshot {
             format_version: 1,
             scope: "complete-project",
             source_manifest: &source,
+            source_manifest_raw: std::str::from_utf8(&self.manifest_bytes)
+                .map_err(|_| StudioError::CorruptData("Captured manifest is not UTF-8".into()))?,
+            source_manifest_sha256: format!("{:x}", Sha256::digest(&self.manifest_bytes)),
             native_state: &self.native_state,
             recovery_evidence: &self.recovery,
         })?)
@@ -354,10 +359,7 @@ impl Workspace {
         native_state["documentAliases"] = serde_json::to_value(&node_map)?;
         let requires_companion = native_changed || !prose.is_empty() || !rich.is_empty();
         let manifest_bytes = match original {
-            Some(raw) => super::json::encode_preserving_source(
-                &serde_json::from_str::<Box<serde_json::value::RawValue>>(&raw)?,
-                &manifest,
-            )?,
+            Some(raw) => super::json::encode_preserving_manifest(&raw, &manifest)?,
             None => serde_json::to_vec_pretty(&manifest)?,
         };
         transaction.commit()?;

@@ -84,6 +84,24 @@ pub(super) fn invalid<T>(message: impl Into<String>) -> Result<T> {
     )))
 }
 
+/// Root framing is data too: RawValue intentionally omits its surrounding whitespace.
+pub(super) fn encode_preserving_manifest(
+    original: &str,
+    current: &serde_json::Value,
+) -> Result<Vec<u8>> {
+    let previous: serde_json::Value = serde_json::from_str(original)?;
+    if previous == *current {
+        return Ok(original.as_bytes().to_vec());
+    }
+    let raw: Box<serde_json::value::RawValue> = serde_json::from_str(original)?;
+    let start = original.len() - original.trim_start_matches([' ', '\t', '\n', '\r']).len();
+    let end = original.trim_end_matches([' ', '\t', '\n', '\r']).len();
+    let mut output = original.as_bytes()[..start].to_vec();
+    output.extend(encode_preserving_source(&raw, current)?);
+    output.extend_from_slice(&original.as_bytes()[end..]);
+    Ok(output)
+}
+
 pub(super) fn encode_preserving_source(
     original: &serde_json::value::RawValue,
     current: &serde_json::Value,

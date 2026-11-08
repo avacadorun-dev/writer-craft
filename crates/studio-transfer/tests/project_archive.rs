@@ -148,3 +148,37 @@ fn legacy_only_writer_should_refuse_opaque_native_state_without_emitting_any_byt
     );
     assert!(output.get_ref().is_empty());
 }
+
+#[test]
+fn unchanged_zip_roundtrip_should_preserve_exact_manifest_framing_and_terminal_newline() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("framed.wstudio");
+    let (manifest, bytes) = fixture(8);
+    let mut framed = b"\r\n\t ".to_vec();
+    framed.extend(serde_json::to_vec_pretty(&manifest).unwrap());
+    framed.extend_from_slice(b" \n\r\n\t");
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+    zip.start_file("project.json", SimpleFileOptions::default())
+        .unwrap();
+    zip.write_all(&framed).unwrap();
+    zip.start_file("media/original.bin", SimpleFileOptions::default())
+        .unwrap();
+    zip.write_all(&bytes).unwrap();
+    zip.finish().unwrap();
+    let mut archive = ProjectArchive::open(&path).unwrap();
+    assert_eq!(archive.project().original_manifest().as_bytes(), framed);
+    let mut worker = ProjectImportWorker::memory().unwrap();
+    let cancel = ProjectTransferCancellation::default();
+    let imported = archive.import(&mut worker, &cancel).unwrap();
+    let snapshot = worker
+        .workspace()
+        .project_export_snapshot(&imported.project_id)
+        .unwrap();
+    let mut output = Cursor::new(Vec::new());
+    write_project_archive(&snapshot, &mut output, &cancel).unwrap();
+    output.set_position(0);
+    let mut exported = zip::ZipArchive::new(output).unwrap();
+    let mut raw = Vec::new();
+    std::io::Read::read_to_end(&mut exported.by_name("project.json").unwrap(), &mut raw).unwrap();
+    assert_eq!(raw, framed);
+}

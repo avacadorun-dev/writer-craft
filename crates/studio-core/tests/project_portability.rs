@@ -544,3 +544,76 @@ fn older_opaque_import_should_preserve_its_complete_json_and_require_the_compani
         true
     );
 }
+
+#[test]
+fn original_manifest_framing_should_survive_import_snapshot_and_workspace_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source-framing.sqlite");
+    let (raw, mut assets) = fixture();
+    let mut framed = b"\n \t\r\n".to_vec();
+    framed.extend(raw);
+    framed.extend_from_slice(b"\r\n \t\n");
+    let validated = ValidatedProjectImport::parse(&framed).unwrap();
+    assert_eq!(validated.original_manifest().as_bytes(), framed);
+    let project = {
+        let mut worker = ProjectImportWorker::open(&database).unwrap();
+        let imported = worker
+            .import(
+                &validated,
+                &mut assets,
+                &ProjectTransferCancellation::default(),
+            )
+            .unwrap();
+        let snapshot = worker
+            .workspace()
+            .project_export_snapshot(&imported.project_id)
+            .unwrap();
+        assert_eq!(snapshot.manifest_bytes(), framed);
+        let companion: Value =
+            serde_json::from_slice(&snapshot.canonical_manifest_bytes().unwrap()).unwrap();
+        assert_eq!(
+            companion["sourceManifestRaw"].as_str().unwrap().as_bytes(),
+            framed
+        );
+        assert_eq!(
+            companion["sourceManifestSha256"],
+            format!("{:x}", Sha256::digest(&framed))
+        );
+        imported.project_id
+    };
+    let reopened = ProjectImportWorker::open(&database).unwrap();
+    assert_eq!(
+        reopened
+            .workspace()
+            .project_export_snapshot(&project)
+            .unwrap()
+            .manifest_bytes(),
+        framed
+    );
+    let native = reopened
+        .workspace()
+        .resolve_project_resource(&project, "node", "doc")
+        .unwrap();
+    let mut current = reopened
+        .workspace()
+        .document(&native)
+        .unwrap()
+        .rich_json
+        .unwrap();
+    current["content"][0]["content"][0]["text"] = "First changed.".into();
+    reopened
+        .workspace()
+        .save_rich_document(&native, 2, current)
+        .unwrap();
+    let changed = reopened
+        .workspace()
+        .project_export_snapshot(&project)
+        .unwrap();
+    assert!(changed.manifest_bytes().starts_with(b"\n \t\r\n"));
+    assert!(changed.manifest_bytes().ends_with(b"\r\n \t\n"));
+    assert!(
+        std::str::from_utf8(changed.manifest_bytes())
+            .unwrap()
+            .contains("1.2345678901234567890123456789e+100")
+    );
+}

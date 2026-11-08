@@ -83,7 +83,7 @@ pub trait ImportAssetSource {
 
 /// Semantically validated original project. No deserialization or public fields grant authority.
 pub struct ValidatedProjectImport {
-    raw_manifest: Box<RawValue>,
+    raw_manifest: String,
     manifest: Value,
     format_version: u64,
     logical_project_id: String,
@@ -104,7 +104,9 @@ impl ValidatedProjectImport {
         let logical_project_id = validation::string(project, "id")?.to_owned();
         let title = validation::string(project, "title")?.to_owned();
         Ok(Self {
-            raw_manifest: serde_json::from_slice(bytes)?,
+            raw_manifest: std::str::from_utf8(bytes)
+                .map_err(|_| StudioError::Validation("Project manifest must be UTF-8".into()))?
+                .to_owned(),
             manifest,
             format_version,
             logical_project_id,
@@ -114,7 +116,7 @@ impl ValidatedProjectImport {
     }
     /// Entire original JSON text, including untouched number lexemes and unknown fields.
     pub fn original_manifest(&self) -> &str {
-        self.raw_manifest.get()
+        &self.raw_manifest
     }
     /// Read-only complete parsed semantic representation, retaining arbitrary precision.
     pub fn manifest(&self) -> &Value {
@@ -195,7 +197,7 @@ impl ProjectImportWorker {
             params![project_id, project.title],
         )?;
         transaction.execute("INSERT INTO project_portability(project_id,logical_project_id,format_version,raw_manifest,manifest_sha256) VALUES(?1,?2,?3,?4,?5)",
-            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.get(),format!("{:x}",Sha256::digest(project.raw_manifest.get().as_bytes()))])?;
+            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.as_str(),format!("{:x}",Sha256::digest(project.raw_manifest.as_str().as_bytes()))])?;
         insert_alias(
             &transaction,
             &project_id,
