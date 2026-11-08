@@ -80,9 +80,21 @@ jobs:
         shell: pwsh
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'nsis-3.12.zip'
-          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip' -OutFile $archive
           $expected = '56581f90db321581c5381193d796fffcf2d24b2f8fed2160a6c6a3baa67f2c4f'
-          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'NSIS compiler checksum mismatch.' }
+          $urls = @(
+            'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip',
+            'https://master.dl.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip?viasf=1',
+            'https://sourceforge.net/projects/nsis/files/NSIS%203/3.12/nsis-3.12.zip/download'
+          )
+          $verified = $false
+          foreach ($url in $urls) {
+            curl.exe --fail --location --retry 3 --retry-all-errors --connect-timeout 15 --max-time 90 --output $archive --write-out "HTTP %{http_code}; content type %{content_type}; bytes %{size_download}\n" $url
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $archive)) { continue }
+            $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+            if ($actual -eq $expected) { $verified = $true; break }
+            Write-Warning "Rejected NSIS response: $((Get-Item $archive).Length) bytes; SHA256 $actual"
+          }
+          if (-not $verified) { throw 'No official NSIS download matched the pinned compiler checksum.' }
           $destination = Join-Path $env:RUNNER_TEMP 'writercraft-nsis'
           Expand-Archive $archive $destination
           "WRITERCRAFT_NSIS=$destination\nsis-3.12" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
