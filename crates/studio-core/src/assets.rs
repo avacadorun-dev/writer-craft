@@ -390,7 +390,7 @@ fn read_image_metadata(connection: &Connection, project_id: &str, id: &str) -> R
         return Err(unavailable(id));
     }
     let asset = connection.query_row("SELECT id,project_id,media_type,original_name,sha256,byte_size,COALESCE(width,0),COALESCE(height,0),created_at FROM project_assets WHERE id=?1 AND project_id=?2", params![id,project_id], |row| Ok(ImageAsset {
-        id:row.get(0)?,project_id:row.get(1)?,media_type:row.get(2)?,original_name:row.get(3)?,sha256:row.get(4)?,byte_size:row.get(5)?,width:row.get(6)?,height:row.get(7)?,created_at_unix:row.get(8)?,
+        id:row.get(0)?,project_id:row.get(1)?,media_type:row.get(2)?,original_name:row.get(3)?,sha256:row.get(4)?,byte_size:u64::try_from(row.get::<_,i64>(5)?).map_err(|error|rusqlite::Error::FromSqlConversionFailure(5,rusqlite::types::Type::Integer,Box::new(error)))?,width:row.get(6)?,height:row.get(7)?,created_at_unix:row.get(8)?,
     })).optional()?.ok_or_else(|| unavailable(id))?;
     if !["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&asset.media_type.as_str())
     {
@@ -422,7 +422,7 @@ fn read_verified_image(
     let bytes = connection
         .query_row(
             "SELECT data FROM project_assets WHERE id=?1 AND project_id=?2 AND length(data)=?3 AND length(data)<=?4",
-            params![id, project_id, asset.byte_size, MAX_IMAGE_BYTES as u64],
+            params![id, project_id, i64::try_from(asset.byte_size).map_err(|_| StudioError::CorruptData("Image byte size is out of range".into()))?, i64::try_from(MAX_IMAGE_BYTES).map_err(|_| StudioError::Validation("Image byte limit is out of range".into()))?],
             |row| row.get::<_, Vec<u8>>(0),
         )
         .optional()?

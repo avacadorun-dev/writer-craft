@@ -48,6 +48,8 @@ impl Kind {
 pub(super) struct BlockDialog {
     kind: Kind,
     revision: Revision,
+    selection: Option<Selection>,
+    selected_node: Option<NodeRef>,
     target: Option<NodeRef>,
     source: String,
     caption: String,
@@ -84,6 +86,8 @@ impl BlockDialog {
         Self {
             kind,
             revision: session.revision(),
+            selection: session.selection().cloned(),
+            selected_node: session.node_selection().cloned(),
             caption: node
                 .and_then(|node| {
                     node.string_attr(if matches!(kind, Kind::Math | Kind::InlineMath) {
@@ -109,6 +113,17 @@ impl BlockDialog {
             error: None,
         }
     }
+    fn restore_target(&self, session: &mut EditorSession) -> AppResult<()> {
+        if session.revision() != self.revision {
+            return Err("stale_block_dialog".into());
+        }
+        if let Some(selection) = &self.selection {
+            session.set_selection(selection.clone())?;
+        } else if let Some(node) = &self.selected_node {
+            session.select_node(node.clone())?;
+        }
+        Ok(())
+    }
     fn can_apply(&self) -> bool {
         match self.kind {
             Kind::Image => self.target.is_some() || self.image_path.is_some(),
@@ -125,7 +140,9 @@ impl BlockDialog {
         if session.revision() != self.revision {
             return Err("stale_block_dialog".into());
         }
+        self.restore_target(session)?;
         if self.kind == Kind::Link {
+            session.extend_mark_range("link")?;
             let mut mark = Mark::new("link");
             let mode = if self.source.trim().is_empty() {
                 MarkMode::Remove
@@ -265,8 +282,33 @@ fn commit_node(
             base_revision: candidate.revision(),
             commands: vec![command.clone()],
         })?;
-        if inline || target.expected.node_type == "codeBlock" {
-            session.apply_commands(vec![command])?;
+        if target.expected.node_type == "codeBlock" {
+            let id = target.expected.block_id().ok_or("missing_code_identity")?;
+            let length = candidate.document().block_text(id)?.chars().count();
+            let clamp = |point: &DocPoint| DocPoint {
+                block_id: id.into(),
+                offset: ScalarOffset(point.offset.0.min(length)),
+            };
+            let selection = session
+                .selection()
+                .filter(|selection| {
+                    selection.anchor.block_id == id && selection.head.block_id == id
+                })
+                .map(|selection| Selection {
+                    anchor: clamp(&selection.anchor),
+                    head: clamp(&selection.head),
+                })
+                .unwrap_or_else(|| {
+                    let point = DocPoint {
+                        block_id: id.into(),
+                        offset: ScalarOffset(0),
+                    };
+                    Selection {
+                        anchor: point.clone(),
+                        head: point,
+                    }
+                });
+            session.apply_commands_with_selection(vec![command], selection)?;
         } else {
             let selected = candidate.document().node_ref(&target.path)?;
             session.apply_commands_with_node_selection(vec![command], selected)?;
@@ -304,8 +346,13 @@ fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     (node.expected.node_type == "codeBlock").then_some(node)
 }
 fn link_at_selection(session: &EditorSession) -> Option<String> {
-    let selection = session.selection()?;
-    let block = session.document().block(&selection.anchor.block_id).ok()?;
+    // Reuse the engine's original right-marked/left-marked boundary semantics
+    // without changing the author's actual selection before Apply.
+    let mut probe = EditorSession::new(session.document().clone(), session.revision());
+    probe.set_selection(session.selection()?.clone()).ok()?;
+    probe.extend_mark_range("link").ok()?;
+    let selection = probe.selection()?;
+    let block = probe.document().block(&selection.anchor.block_id).ok()?;
     let mut offset = 0;
     for child in block.children() {
         let length = child.text.as_ref().map_or(1, |text| text.chars().count());
@@ -325,18 +372,9 @@ fn link_at_selection(session: &EditorSession) -> Option<String> {
     }
     None
 }
+
 fn open_dialog(rich: &mut RichState, kind: Kind, target: Option<NodeRef>) {
-    let range_error = if kind == Kind::Link {
-        rich.session
-            .extend_mark_range("link")
-            .err()
-            .map(|error| error.to_string())
-    } else {
-        None
-    };
-    let mut dialog = BlockDialog::new(&rich.session, kind, target);
-    dialog.error = range_error;
-    rich.dialog = Some(dialog);
+    rich.dialog = Some(BlockDialog::new(&rich.session, kind, target));
 }
 
 fn capture(result: AppResult<()>, error: &mut Option<Box<dyn std::error::Error + Send + Sync>>) {
@@ -409,6 +447,13 @@ fn mark_button(
                 .min_size(egui::vec2(32.0, 32.0)),
         )
         .on_hover_text(label);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            session.selection().is_some(),
+            label,
+        )
+    });
     if response.clicked() {
         format(session, action)?;
         session.request_canvas_focus(ui.ctx());
@@ -729,9 +774,12 @@ pub(super) fn show_dialog(
                     }
                     if dialog.kind == Kind::Image {
                         if ui.button(l.text("Choose image…")).clicked() {
-                            dialog.image_path = rfd::FileDialog::new()
+                            if let Some(path) = rfd::FileDialog::new()
                                 .add_filter(l.text("Image"), &["png", "jpg", "jpeg", "gif", "webp"])
-                                .pick_file();
+                                .pick_file()
+                            {
+                                dialog.image_path = Some(path);
+                            }
                         }
                         if let Some(path) = &dialog.image_path {
                             ui.label(path.file_name().unwrap_or_default().to_string_lossy());
@@ -810,6 +858,13 @@ pub(super) fn show_dialog(
     if !cancel && !response.should_close() {
         rich.dialog = Some(dialog);
     } else {
+        if rich.session.revision() == dialog.revision
+            && let Err(error) = dialog.restore_target(&mut rich.session)
+        {
+            dialog.error = Some(error.to_string());
+            rich.dialog = Some(dialog);
+            return;
+        }
         rich.session.request_canvas_focus(ctx);
     }
 }
@@ -1038,6 +1093,161 @@ mod tests {
         drop(dialog);
         assert_eq!(session.document().to_json()?, before);
         assert!(!session.can_undo());
+        Ok(())
+    }
+    #[test]
+    fn inline_formula_property_edit_keeps_the_exact_node_selected_through_history() -> AppResult<()>
+    {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Inline")?;
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"seed"},"content":[{"type":"text","text":"Before "},{"type":"inlineMath","attrs":{"latex":"x^2","description":"Before"}},{"type":"text","text":" after"}]}
+            ]}),
+        )?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let target = session.document().node_ref(&NodePath(vec![0, 1]))?;
+        session.select_node(target.clone())?;
+        let mut dialog = BlockDialog::new(&session, Kind::InlineMath, Some(target));
+        dialog.source = "y^3".into();
+        dialog.apply(&mut session, &workspace, &project.id)?;
+        assert_eq!(
+            session
+                .node_selection()
+                .map(|node| node.expected.string_attr("latex")),
+            Some(Some("y^3"))
+        );
+        session.undo()?;
+        assert_eq!(
+            session
+                .node_selection()
+                .map(|node| node.expected.string_attr("latex")),
+            Some(Some("x^2"))
+        );
+        session.redo()?;
+        assert_eq!(
+            session
+                .node_selection()
+                .map(|node| node.expected.string_attr("latex")),
+            Some(Some("y^3"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn shortening_code_source_clamps_the_caret_in_that_same_block() -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Code")?;
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"seed"},"content":[]},
+                {"type":"codeBlock","attrs":{"blockId":"code","language":"rust","custom":7},"content":[{"type":"text","text":"0123456789","customLeaf":9}]}
+            ]}),
+        )?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let point = DocPoint {
+            block_id: "code".into(),
+            offset: ScalarOffset(10),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        let target = session.document().node_ref(&NodePath(vec![1]))?;
+        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target));
+        dialog.source = "α".into();
+        dialog.apply(&mut session, &workspace, &project.id)?;
+        assert_eq!(
+            session
+                .selection()
+                .map(|s| (&s.head.block_id, s.head.offset)),
+            Some((&"code".to_string(), ScalarOffset(1)))
+        );
+        assert_eq!(
+            session.document().to_json()?["content"][1]["content"][0]["customLeaf"],
+            json!(9)
+        );
+        session.undo()?;
+        assert_eq!(
+            session.selection().map(|s| s.head.offset),
+            Some(ScalarOffset(10))
+        );
+        session.redo()?;
+        assert_eq!(
+            session.selection().map(|s| s.head.offset),
+            Some(ScalarOffset(1))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn link_boundary_prefill_does_not_expand_selection_until_apply_and_cancel_restores_it()
+    -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Link")?;
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"seed"},"content":[{"type":"text","text":"link","marks":[{"type":"link","attrs":{"href":"https://example.org"}},{"type":"bold"}]},{"type":"text","text":" after"}]}
+            ]}),
+        )?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let point = DocPoint {
+            block_id: "seed".into(),
+            offset: ScalarOffset(4),
+        };
+        let original = Selection {
+            anchor: point.clone(),
+            head: point,
+        };
+        session.set_selection(original.clone())?;
+        let dialog = BlockDialog::new(&session, Kind::Link, None);
+        assert_eq!(dialog.source, "https://example.org");
+        assert_eq!(session.selection(), Some(&original));
+        session.extend_mark_range("link")?;
+        dialog.restore_target(&mut session)?;
+        assert_eq!(session.selection(), Some(&original));
+        let mut dialog = BlockDialog::new(&session, Kind::Link, None);
+        dialog.source = "https://example.net".into();
+        dialog.apply(&mut session, &workspace, &project.id)?;
+        let value = session.document().to_json()?;
+        let marks = value["content"][0]["content"][0]["marks"]
+            .as_array()
+            .ok_or("missing marks")?;
+        assert!(marks.iter().any(|mark| mark["type"] == "bold"));
+        assert!(
+            marks
+                .iter()
+                .any(|mark| mark["attrs"]["href"] == "https://example.net")
+        );
+        session.undo()?;
+        assert_eq!(session.selection(), Some(&original));
+        Ok(())
+    }
+
+    #[test]
+    fn insert_dialog_applies_to_its_captured_selection_even_if_the_caret_moves() -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Target")?;
+        let mut session = EditorSession::new(RichDocument::plain("seed", "Writing")?, Revision(0));
+        select_seed(&mut session)?;
+        let dialog = BlockDialog::new(&session, Kind::Mermaid, None);
+        let point = DocPoint {
+            block_id: "seed".into(),
+            offset: ScalarOffset(7),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        dialog.apply(&mut session, &workspace, &project.id)?;
+        assert_eq!(
+            session
+                .document()
+                .blocks()
+                .first()
+                .map(|node| node.node_type.as_str()),
+            Some("mermaidBlock")
+        );
         Ok(())
     }
 }
