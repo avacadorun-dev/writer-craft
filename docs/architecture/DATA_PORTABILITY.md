@@ -40,3 +40,10 @@ Never commit the private archive, manuscript text, screenshots, media, absolute 
 The worker writes a private, exclusively created sibling temporary file, checks SQLite integrity and application identity, finalizes a standalone journal, syncs and hashes the complete output, then publishes through [tempfile `persist_noclobber`](https://docs.rs/tempfile/3.27.0/tempfile/struct.NamedTempFile.html#method.persist_noclobber). Existing output, source aliases and symlinks are never replaced. Cancellation and a bounded lock/step deadline leave no advertised backup; success requires a complete publication receipt. Private checkpoints remain within an explicitly requested full backup and do not become trusted through an external project import.
 
 Source implementation is pending hosted tests and native settings acceptance; it is not yet a qualified backup UI. Synthetic acceptance cases cover WAL-only writes, complete histories/notes/recovery/opaque blob retention, post-snapshot source edits, existing destination and source aliases, cancellation and foreign database rejection.
+
+
+## Reserved live-workspace paths
+
+Every host export uses the shared `is_workspace_data_path` boundary before opening output. It reserves the selected and canonical database filenames, existing aliases, absent/present WAL, SHM and rollback journals, and sibling interface/appearance/editor preferences. This protection also applies to a no-clobber backup or folder: creating an absent future sidecar would still obstruct SQLite. A selected database symlink protects the real database's journal names as well.
+
+`Workspace::open` rejects preference filenames and aliases before creating a database. This prevents an unrestricted `--database` override from selecting a file later replaced by settings persistence. Original files remain untouched; choose a distinct workspace filename. Synthetic controller tests use an active database named `.txt`, proving that an export filter is not path authority. Public tests never use owner data.

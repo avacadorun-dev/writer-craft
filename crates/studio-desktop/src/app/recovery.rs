@@ -1,7 +1,9 @@
 //! Explicit preservation choices after automatic rich-draft recovery was refused.
 use super::*;
 use serde_json::json;
+#[cfg(test)]
 use std::path::{Path, PathBuf};
+use studio_core::is_workspace_data_path as protected_export_path;
 use studio_core::{RichRecoverySnapshot, StudioError};
 
 #[derive(Debug)]
@@ -112,60 +114,6 @@ fn recovery_json(snapshot: &RichRecoverySnapshot) -> serde_json::Result<Vec<u8>>
         "preservation_notice": "Data-only recovery evidence. This is not a portable workspace backup. It cannot authorize attachment remapping or native replay when imported.",
         "media": { "workspace_media_files_included": false, "embedded_json_preserved": true }, "snapshot": snapshot,
     }))
-}
-fn sidecar(database: &Path, suffix: &str) -> PathBuf {
-    let mut path = database.as_os_str().to_owned();
-    path.push(suffix);
-    path.into()
-}
-fn normalized_file(path: &Path) -> std::io::Result<PathBuf> {
-    match std::fs::canonicalize(path) {
-        Ok(path) => Ok(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let parent = path
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or(Path::new("."));
-            Ok(
-                std::fs::canonicalize(parent)?.join(path.file_name().ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "missing_export_file_name",
-                    )
-                })?),
-            )
-        }
-        Err(error) => Err(error),
-    }
-}
-/// Canonical aliases and portable file identities both protect the live database.
-fn protected_export_path(target: &Path, database: &Path) -> std::io::Result<bool> {
-    let target_normalized = normalized_file(target)?;
-    for protected in [
-        database.to_path_buf(),
-        sidecar(database, "-wal"),
-        sidecar(database, "-shm"),
-    ] {
-        let protected_normalized = normalized_file(&protected)?;
-        let same_parent_name = target_normalized.parent() == protected_normalized.parent()
-            && target_normalized
-                .file_name()
-                .zip(protected_normalized.file_name())
-                .is_some_and(|(a, b)| {
-                    a.to_string_lossy()
-                        .eq_ignore_ascii_case(&b.to_string_lossy())
-                });
-        if target_normalized == protected_normalized || same_parent_name {
-            return Ok(true);
-        }
-        if target.try_exists()?
-            && protected.try_exists()?
-            && same_file::is_same_file(target, &protected)?
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 fn read_only_preview(
     ui: &mut egui::Ui,
@@ -338,6 +286,11 @@ impl StudioApp {
 mod tests {
     use super::*;
     type TestResult = AppResult<()>;
+    fn sidecar(database: &Path, suffix: &str) -> PathBuf {
+        let mut path = database.as_os_str().to_owned();
+        path.push(suffix);
+        path.into()
+    }
     #[test]
     fn recovery_export_refuses_database_sidecars_and_existing_aliases() -> TestResult {
         let directory = tempfile::tempdir()?;

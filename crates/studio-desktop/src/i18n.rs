@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Choose an export file outside the workspace database and settings files.",
+        [
+            "Выберите файл экспорта, отличный от базы данных и файлов настроек студии.",
+            "Choose an export file outside the workspace database and settings files.",
+            "Wählen Sie eine Exportdatei außerhalb der Datenbank und Einstellungsdateien.",
+            "Choisissez un fichier d’export distinct de la base de données et des fichiers de réglages.",
+            "Elige un archivo de exportación distinto de la base de datos y de los ajustes.",
+            "Escolha um arquivo de exportação diferente da base de dados e dos arquivos de preferências.",
+            "请选择工作区数据库和设置文件之外的导出文件。",
+            "ワークスペースのデータベースや設定ファイルとは別の書き出し先を選択してください。",
+        ],
+    ),
+    (
         "Possible spelling mistake",
         [
             "Возможная орфографическая ошибка",

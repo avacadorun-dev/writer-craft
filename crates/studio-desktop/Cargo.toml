@@ -14,7 +14,7 @@ workspace = true
 
 [features]
 default = []
-editor-preview = ["dep:craft-editor-egui", "dep:craft-editor-model", "dep:craft-editor-render", "dep:uuid", "dep:base64", "dep:sha2", "dep:same-file", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+editor-preview = ["dep:craft-editor-egui", "dep:craft-editor-model", "dep:craft-editor-render", "dep:uuid", "dep:base64", "dep:sha2", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 
 [dependencies]
 eframe.workspace = true
@@ -36,7 +36,6 @@ craft-editor-render = { workspace = true, optional = true }
 base64 = { version = "=0.23.1", optional = true }
 sha2 = { workspace = true, optional = true }
 
-same-file = { version = "=1.0.6", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "=0.6.5", optional = true }

@@ -9,6 +9,7 @@ mod daily_controls;
 mod project_portability;
 mod rich;
 mod workspace_backup;
+mod workspace_paths;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
     AnnotationStatus, LegacyAnchorProjection, LegacyAnchorResolution, PassageAnnotation,
@@ -29,6 +30,7 @@ pub use project_portability::{
 };
 pub use rich::{RichDraft, RichRevision};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
+pub use workspace_paths::is_workspace_data_path;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -276,6 +278,7 @@ impl Workspace {
     /// Existing non-workspace databases and newer schemas are rejected unchanged.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
+        workspace_paths::validate_database_path(path)?;
         if let Some(parent) = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())

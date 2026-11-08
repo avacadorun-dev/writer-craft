@@ -50,6 +50,12 @@ pub fn backup_workspace(
     check(cancelled)?;
     let source = source.as_ref();
     let destination = destination.as_ref();
+    if super::is_workspace_data_path(destination, source)? {
+        return Err(StudioError::Validation(
+            "Choose a backup filename outside the workspace database, sidecars and settings files"
+                .into(),
+        ));
+    }
     // symlink_metadata includes dangling links; final persist_noclobber closes the race.
     match std::fs::symlink_metadata(destination) {
         Ok(_) => {

@@ -576,12 +576,22 @@ impl StudioApp {
             .add_filter(l.text("Plain text"), &["txt"])
             .save_file()
         {
-            let result = atomic_write(&path, self.body.as_bytes());
+            let result = self.export_text_to_path(&path);
             if result.is_ok() {
                 self.status = "Text exported".into();
             }
             self.record_error(result);
         }
+    }
+
+    fn export_text_to_path(&self, path: &std::path::Path) -> AppResult<()> {
+        if studio_core::is_workspace_data_path(path, &self.database)? {
+            return Err(studio_core::StudioError::Validation(
+                "protected_workspace_export_path".into(),
+            )
+            .into());
+        }
+        atomic_write(path, self.body.as_bytes())
     }
 
     fn navigator_width(&self, ctx: &egui::Context) -> f32 {
@@ -810,6 +820,9 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
     if let Some(error) = error.downcast_ref::<studio_core::StudioError>() {
         use studio_core::StudioError;
         return match error {
+            StudioError::Validation(message) if message == "protected_workspace_export_path" => {
+                "Choose an export file outside the workspace database and settings files."
+            }
             StudioError::Validation(_) | StudioError::InvalidTextRange { .. } => {
                 "Check the entered values and try again."
             }
@@ -1185,6 +1198,54 @@ mod ux_regressions {
             .create_document(&project.id, "A chapter", "🪶 echo, echo.")?;
         app.open_project(project)?;
         Ok((directory, app))
+    }
+
+    #[test]
+    fn text_export_cannot_replace_a_custom_txt_database_sidecars_or_aliases() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context);
+        let database = directory.path().join("active.txt");
+        let mut app = StudioApp::new(&creation, database.clone(), false, None)?;
+        let project = app
+            .workspace
+            .create_project("Synthetic export protection")?;
+        let document =
+            app.workspace
+                .create_document(&project.id, "Chapter", "Keep the original database")?;
+        app.open_project(project)?;
+        let original = std::fs::read(&database)?;
+        let hardlink = directory.path().join("alias.txt");
+        std::fs::hard_link(&database, &hardlink)?;
+        let mut paths = vec![
+            database.clone(),
+            hardlink,
+            directory.path().join("active.TXT"),
+        ];
+        for suffix in ["-wal", "-shm"] {
+            let mut path = database.as_os_str().to_owned();
+            path.push(suffix);
+            paths.push(path.into());
+        }
+        paths.extend(
+            ["appearance.json", "interface.json", "editor.json"]
+                .map(|name| directory.path().join(name)),
+        );
+        #[cfg(unix)]
+        {
+            let symlink = directory.path().join("symlink.txt");
+            std::os::unix::fs::symlink(&database, &symlink)?;
+            paths.push(symlink);
+        }
+        for path in paths {
+            assert!(app.export_text_to_path(&path).is_err());
+        }
+        assert_eq!(std::fs::read(&database)?, original);
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        let output = directory.path().join("safe.txt");
+        app.export_text_to_path(&output)?;
+        assert_eq!(std::fs::read_to_string(&output)?, document.body);
+        Ok(())
     }
 
     #[test]
