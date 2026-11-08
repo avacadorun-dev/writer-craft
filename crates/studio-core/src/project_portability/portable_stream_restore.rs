@@ -67,27 +67,40 @@ impl ProjectImportWorker {
         restore_notes(&transaction, &imported.project_id, stream, cancel)?;
         restore_opaque(&transaction, &imported.project_id, stream, cancel)?;
         restore_preservation(&transaction, &imported.project_id, stream, cancel)?;
-        imported.node_count = transaction.query_row(
+        imported.node_count = checked_count(
+            &transaction,
+            &imported.project_id,
             "SELECT count(*) FROM project_nodes WHERE project_id=?1",
-            [&imported.project_id],
-            |row| row.get(0),
         )?;
-        imported.document_revision_count=transaction.query_row("SELECT count(*) FROM document_revisions r JOIN documents d ON d.id=r.document_id WHERE d.project_id=?1",[&imported.project_id],|row|row.get(0))?;
-        imported.canvas_count = transaction.query_row(
+        imported.document_revision_count = checked_count(
+            &transaction,
+            &imported.project_id,
+            "SELECT count(*) FROM document_revisions r JOIN documents d ON d.id=r.document_id WHERE d.project_id=?1",
+        )?;
+        imported.canvas_count = checked_count(
+            &transaction,
+            &imported.project_id,
             "SELECT count(*) FROM project_canvases WHERE project_id=?1",
-            [&imported.project_id],
-            |row| row.get(0),
         )?;
-        imported.attachment_count = transaction.query_row(
+        imported.attachment_count = checked_count(
+            &transaction,
+            &imported.project_id,
             "SELECT count(*) FROM project_assets WHERE project_id=?1",
-            [&imported.project_id],
-            |row| row.get(0),
         )?;
         cancel.check()?;
         transaction.commit()?;
         Ok(imported)
     }
 }
+fn checked_count(connection: &Connection, project: &str, query: &str) -> Result<usize> {
+    let value = connection.query_row(query, [project], |row| read_unsigned(row, 0))?;
+    usize::try_from(value).map_err(|error| {
+        StudioError::Validation(format!(
+            "Imported result count exceeds platform capacity: {error}"
+        ))
+    })
+}
+
 fn native_source(raw: String) -> Result<ValidatedProjectImport> {
     if raw.len() > super::MAX_PROJECT_MANIFEST_BYTES {
         return invalid("Native source exceeds the 64 MiB original-manifest bound");
