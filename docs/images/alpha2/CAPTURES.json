@@ -1,9 +1,9 @@
 {
-  "source_commit": "bde1be19bb30c8dc833e7702c34223ff1ddb7f28",
+  "source_commit": "8af4233ba5e531b360ee4914e4a5d5996f7bb72e",
   "version": "0.1.0-alpha.2",
   "bundle_identifier": "app.writercraft.desktop",
-  "executable_sha256": "6610a36f22c28e0750a3dc1d4ec66f2b920371ac34f796a4463d286f1a1bd293",
-  "hosted_run": "https://github.com/avacadorun-dev/writer-craft/actions/runs/42492509703",
+  "executable_sha256": "72031566e901cf983f542ef6ed6b2c945d6f83f87fa4d029bc48fd4ceea44795",
+  "hosted_run": "https://github.com/avacadorun-dev/writer-craft/actions/runs/42493462622",
   "images": [
     {
       "path": "docs/images/alpha2/workspace-dark.png",
@@ -18,7 +18,7 @@
     {
       "path": "docs/images/alpha2/diagram-light.png",
       "case": "compact-light-en-flowchart",
-      "sha256": "a9ea8be713729f62c0524c455419a9eb940cbe9d2d14227f535a892afc8297ec",
+      "sha256": "0e065476004cae54e326606fc5417f9e8cebb3f22691612bcfaf7905b49e14ea",
       "observed_inner_size_points": [
         1000.0,
         680.0
@@ -28,7 +28,7 @@
     {
       "path": "docs/images/alpha2/image-light.png",
       "case": "compact-light-en-image",
-      "sha256": "42ea3908eaf2c4b39726e1c8ca0739d4c53c85ca21e2dfe8849a5eac2cd02712",
+      "sha256": "4047ef81ecef7c5019ec6388bad3850bcd9d806cf89042401a12aab164936b01",
       "observed_inner_size_points": [
         1000.0,
         680.0
