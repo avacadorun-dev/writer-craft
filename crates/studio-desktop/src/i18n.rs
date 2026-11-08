@@ -176,6 +176,58 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Double-click to write a note…",
+        [
+            "Дважды нажмите, чтобы написать заметку…",
+            "Double-click to write a note…",
+            "Doppelklicken, um eine Notiz zu schreiben…",
+            "Double-cliquez pour écrire une note…",
+            "Haz doble clic para escribir una nota…",
+            "Clique duas vezes para escrever uma nota…",
+            "双击以撰写笔记…",
+            "ダブルクリックしてノートを入力…",
+        ],
+    ),
+    (
+        "Editing text card",
+        [
+            "Редактирование карточки",
+            "Editing text card",
+            "Textkarte bearbeiten",
+            "Modification de la carte",
+            "Editando tarjeta de texto",
+            "Editando cartão de texto",
+            "正在编辑文本卡片",
+            "テキストカードを編集中",
+        ],
+    ),
+    (
+        "Unsaved board changes",
+        [
+            "Есть несохранённые изменения",
+            "Unsaved board changes",
+            "Ungespeicherte Änderungen",
+            "Modifications non enregistrées",
+            "Cambios sin guardar",
+            "Alterações não salvas",
+            "看板有未保存的更改",
+            "ボードに未保存の変更があります",
+        ],
+    ),
+    (
+        "Preserve card text…",
+        [
+            "Сохранить текст карточки…",
+            "Preserve card text…",
+            "Kartentext sichern…",
+            "Conserver le texte de la carte…",
+            "Conservar texto de la tarjeta…",
+            "Preservar texto do cartão…",
+            "保留卡片文本…",
+            "カードのテキストを保存…",
+        ],
+    ),
+    (
         "Some media content could not be previewed. The original file is preserved.",
         [
             "Часть содержимого не удалось показать. Исходный файл сохранён.",

@@ -2,8 +2,8 @@
 use super::native_media::{MediaCache, MediaViewer};
 use super::*;
 use craft_canvas_egui::{
-    CanvasIntent, CanvasView, CanvasViewConfig, CanvasViewHost, CanvasViewLabels, NodeBodyResponse,
-    TextCardEditor,
+    CanvasIntent, CanvasView, CanvasViewConfig, CanvasViewHost, CanvasViewLabels, InlineTextOutput,
+    NodeBodyResponse, TextCardEditor,
 };
 use craft_canvas_model::{
     CanvasCommand, CanvasDialect, CanvasDocument, CanvasError, CanvasLimits, CanvasSession,
@@ -85,6 +85,7 @@ enum PendingOperation {
 struct CommitCompletion {
     prepared: Option<PreparedChange>,
     result: AppResult<ProjectCanvasRevision>,
+    checkpoint_version: Option<String>,
 }
 
 /// The view is disposable; this fixed project/board/session owns every acknowledged transition.
@@ -95,6 +96,13 @@ pub(super) struct CanvasState {
     view: CanvasView,
     dialect: SourceDialect,
     text_editor: Option<TextCardEditor>,
+    text_changed_at: Instant,
+    text_done: bool,
+    text_cancel: bool,
+    text_composing: bool,
+    text_save_error: bool,
+    edit_after_insert: Option<String>,
+    checkpoint_version: Option<String>,
     pending: Option<mpsc::Receiver<CommitCompletion>>,
     failed: Option<PreparedChange>,
     failure: Option<String>,
@@ -124,6 +132,13 @@ impl CanvasState {
             view: CanvasView::default(),
             dialect,
             text_editor: None,
+            text_changed_at: Instant::now(),
+            text_done: false,
+            text_cancel: false,
+            text_composing: false,
+            text_save_error: false,
+            edit_after_insert: None,
+            checkpoint_version: None,
             pending: None,
             failed: None,
             failure: None,
@@ -137,11 +152,17 @@ impl CanvasState {
         })
     }
     pub(super) fn modal_open(&self) -> bool {
-        self.text_editor.is_some() || self.media_viewer.is_some()
+        self.media_viewer.is_some()
     }
-    /// Navigation must wait for acknowledgement; a source dialog must be deliberately saved/cancelled.
+    /// Dirty or unacknowledged native input cannot silently disappear through navigation.
     pub(super) fn blocks_navigation(&self) -> bool {
-        self.pending.is_some() || self.failed.is_some() || self.text_editor.is_some()
+        self.pending.is_some()
+            || self.failed.is_some()
+            || self.text_save_error
+            || self
+                .text_editor
+                .as_ref()
+                .is_some_and(|editor| editor.dirty() || editor.has_submission())
     }
     fn editable(&self) -> bool {
         self.pending.is_none() && self.failed.is_none() && self.snapshot.draft.is_none()
@@ -164,6 +185,8 @@ impl CanvasState {
         let (sender, receiver) = mpsc::channel();
         self.view.cancel_transient();
         self.failure = None;
+        self.text_save_error = false;
+        self.checkpoint_version = None;
         std::thread::spawn(move || {
             let completion =
                 prepare_and_save(session, &path, &project, &board, revision, operation);
@@ -186,8 +209,16 @@ impl CanvasState {
         let board = self.snapshot.canvas.id.clone();
         let revision = self.snapshot.revision.clone();
         let (sender, receiver) = mpsc::channel();
+        let checkpoint_version = self.checkpoint_version.clone();
         std::thread::spawn(move || {
-            let completion = persist_candidate(&path, &project, &board, revision, prepared);
+            let completion = persist_candidate_with_checkpoint(
+                &path,
+                &project,
+                &board,
+                revision,
+                prepared,
+                checkpoint_version.as_deref(),
+            );
             let _ = sender.send(completion);
         });
         self.pending = Some(receiver);
@@ -206,6 +237,7 @@ impl CanvasState {
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.pending = None;
+                self.text_save_error = self.text_editor.is_some();
                 self.failure = Some("The board worker stopped before acknowledgement; reload saved history before continuing".into());
                 return Err(CanvasError::Invalid(
                     "Board worker disconnected before acknowledgement".into(),
@@ -238,11 +270,40 @@ impl CanvasState {
                 self.snapshot.revision = saved;
                 self.failure = None;
                 self.failed = None;
-                self.text_editor = None;
+                self.checkpoint_version = None;
+                self.text_save_error = false;
+                if let Some(editor) = &mut self.text_editor
+                    && editor.has_submission()
+                {
+                    editor.acknowledge(session)?;
+                }
+                if let Some(id) = self.edit_after_insert.take() {
+                    self.text_editor = Some(TextCardEditor::new(session, &id)?);
+                    self.text_changed_at = Instant::now();
+                }
+                if self.text_cancel
+                    || (self.text_done
+                        && self
+                            .text_editor
+                            .as_ref()
+                            .is_some_and(|editor| !editor.dirty()))
+                {
+                    self.finish_inline();
+                }
                 Ok(())
             }
             Err(error) => {
                 self.failed = completion.prepared;
+                self.checkpoint_version = completion.checkpoint_version;
+                self.text_save_error = self
+                    .text_editor
+                    .as_ref()
+                    .is_some_and(TextCardEditor::has_submission);
+                if self.failed.is_none()
+                    && let Some(editor) = &mut self.text_editor
+                {
+                    editor.submission_not_started();
+                }
                 self.failed_preserved = false;
                 self.failure = Some(error.to_string());
                 Err(error)
@@ -275,13 +336,16 @@ impl CanvasState {
             String::new(),
             self.session.limits(),
         )?;
+        let id = node.id().to_owned();
         self.command(
             database,
             vec![CanvasCommand::InsertNode {
                 node,
                 index: self.session.document().nodes().len(),
             }],
-        )
+        )?;
+        self.edit_after_insert = Some(id);
+        Ok(())
     }
     fn duplicate(
         &mut self,
@@ -328,8 +392,11 @@ impl CanvasState {
             }
             CanvasIntent::EditText { base, node_id } => {
                 if base != self.session.identity() { return Err(CanvasError::StaleBase.into()); }
+                let node=self.session.document().node(&node_id).ok_or_else(||CanvasError::NotFound(node_id.clone()))?;
+                if !self.dialect.node_policy(node).movable { return Err(CanvasError::NotEditable(node_id).into()); }
                 self.view.cancel_transient();
                 self.text_editor = Some(TextCardEditor::new(&self.session, &node_id)?);
+                self.text_changed_at=Instant::now(); self.text_done=false; self.text_cancel=false; self.text_composing=false; self.text_save_error=false;
                 Ok(())
             }
             CanvasIntent::Duplicate { base, node_ids } => self.duplicate(database, base, node_ids),
@@ -407,6 +474,8 @@ impl CanvasState {
                         ui.label(
                             RichText::new(l.text(if self.pending.is_some() {
                                 "Saving…"
+                            } else if self.blocks_navigation() {
+                                "Unsaved board changes"
                             } else {
                                 "All changes saved"
                             }))
@@ -426,36 +495,70 @@ impl CanvasState {
             )
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.add_enabled_ui(self.editable() && !blocked && !self.modal_open(), |ui| {
-                        if icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false)
-                            .clicked()
-                        {
-                            let result = self.add_text(database, WorldPoint { x: 0.0, y: 0.0 });
-                            self.set_failure(result);
-                        }
-                        if ui
-                            .add_enabled(
-                                self.session.history_usage().undo_steps > 0,
-                                egui::Button::new(l.text("Undo")),
-                            )
-                            .clicked()
-                        {
-                            let result = self
-                                .begin(database, PendingOperation::Undo(self.session.identity()));
-                            self.set_failure(result);
-                        }
-                        if ui
-                            .add_enabled(
-                                self.session.history_usage().redo_steps > 0,
-                                egui::Button::new(l.text("Redo")),
-                            )
-                            .clicked()
-                        {
-                            let result = self
-                                .begin(database, PendingOperation::Redo(self.session.identity()));
-                            self.set_failure(result);
-                        }
-                    });
+                    ui.add_enabled_ui(
+                        self.editable()
+                            && !blocked
+                            && !self.modal_open()
+                            && self.text_editor.is_none(),
+                        |ui| {
+                            if icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false)
+                                .clicked()
+                            {
+                                let result = self.add_text(database, WorldPoint { x: 0.0, y: 0.0 });
+                                self.set_failure(result);
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.session.history_usage().undo_steps > 0,
+                                    egui::Button::new(l.text("Undo")),
+                                )
+                                .clicked()
+                            {
+                                let result = self.begin(
+                                    database,
+                                    PendingOperation::Undo(self.session.identity()),
+                                );
+                                self.set_failure(result);
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.session.history_usage().redo_steps > 0,
+                                    egui::Button::new(l.text("Redo")),
+                                )
+                                .clicked()
+                            {
+                                let result = self.begin(
+                                    database,
+                                    PendingOperation::Redo(self.session.identity()),
+                                );
+                                self.set_failure(result);
+                            }
+                        },
+                    );
+                    if self.text_editor.is_some() {
+                        ui.separator();
+                        ui.label(l.text("Editing text card"));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    !self.text_composing,
+                                    egui::Button::new(l.text("Done")),
+                                )
+                                .clicked()
+                            {
+                                self.text_done = true;
+                            }
+                            if ui
+                                .add_enabled(
+                                    !self.text_composing,
+                                    egui::Button::new(l.text("Cancel")),
+                                )
+                                .clicked()
+                            {
+                                self.text_cancel = true;
+                            }
+                        });
+                    }
                 });
             });
         if self.snapshot.draft.is_some() {
@@ -501,20 +604,32 @@ impl CanvasState {
                 .show(ui, |ui| {
                     ui.colored_label(
                         tokens.warning,
-                        l.text(if self.failed.is_some() {
+                        l.text(if self.failed.is_some() || self.text_save_error {
                             "The board could not be saved. Pending changes are preserved."
                         } else {
                             "The board operation failed. Your saved content is unchanged."
                         }),
                     );
-                    if self.failed.is_some() && self.pending.is_none() {
+                    if (self.failed.is_some() || self.text_save_error) && self.pending.is_none() {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button(l.text("Retry save")).clicked() {
-                                let result = self.retry(database);
+                                let result = if self.failed.is_some() {
+                                    self.retry(database)
+                                } else {
+                                    self.submit_inline(database)
+                                };
                                 self.set_failure(result);
                             }
-                            if ui.button(l.text("Preserve pending board…")).clicked() {
+                            if (self.failed.is_some() || self.text_editor.is_some())
+                                && ui.button(l.text("Preserve pending board…")).clicked()
+                            {
                                 let result = self.preserve_pending(l);
+                                self.set_failure(result);
+                            }
+                            if self.text_editor.is_some()
+                                && ui.button(l.text("Preserve card text…")).clicked()
+                            {
+                                let result = self.preserve_card_text(l);
                                 self.set_failure(result);
                             }
                             if ui
@@ -545,7 +660,8 @@ impl CanvasState {
         config.style.text = tokens.text;
         config.style.selection = tokens.accent;
         config.style.error = tokens.warning;
-        config.interactive = self.editable() && !blocked && !self.modal_open();
+        config.interactive =
+            self.editable() && !blocked && !self.modal_open() && self.text_editor.is_none();
         config.shortcuts_blocked = !config.interactive;
         self.viewport_size = ui.available_size_before_wrap();
         if self.fit_on_open && self.viewport_size.x > 0.0 && self.viewport_size.y > 0.0 {
@@ -560,11 +676,15 @@ impl CanvasState {
             .media
             .get_or_insert_with(|| MediaCache::new(database.to_owned()));
         media.poll(ui.ctx());
+        let mut inline_output = None;
         let mut host = CardBody {
             language: l,
             tokens,
             project: &self.project_id,
             media,
+            editor: self.text_editor.as_mut(),
+            inline_output: &mut inline_output,
+            blocked: blocked || self.media_viewer.is_some(),
         };
         let output = self
             .view
@@ -577,11 +697,73 @@ impl CanvasState {
             let result = self.intent(database, intent);
             self.set_failure(result);
         }
+        if let Some(output) = inline_output {
+            self.text_composing = output.composing;
+            if output.changed {
+                self.text_changed_at = Instant::now();
+                self.failed_preserved = false;
+            }
+            self.text_done |= output.done_requested;
+            self.text_cancel |= output.cancelled;
+        }
+        if self.text_editor.is_some() {
+            let result = self.drive_inline(database, ui.ctx());
+            self.set_failure(result);
+        }
+    }
+    fn finish_inline(&mut self) {
+        self.text_editor = None;
+        self.text_done = false;
+        self.text_cancel = false;
+        self.text_composing = false;
+        self.text_save_error = false;
+        self.view.cancel_transient();
+    }
+    fn submit_inline(&mut self, database: &Path) -> AppResult<()> {
+        let transaction = self
+            .text_editor
+            .as_mut()
+            .ok_or(CanvasError::NoHistory)?
+            .submit()?;
+        if let Err(error) = self.begin(database, PendingOperation::Transaction(transaction)) {
+            if let Some(editor) = &mut self.text_editor {
+                editor.submission_not_started();
+            }
+            self.text_save_error = true;
+            return Err(error);
+        }
+        Ok(())
+    }
+    fn drive_inline(&mut self, database: &Path, ctx: &egui::Context) -> AppResult<()> {
+        if self.pending.is_some()
+            || self.failed.is_some()
+            || self.text_save_error
+            || self.text_composing
+        {
+            return Ok(());
+        }
+        let Some(editor) = &self.text_editor else {
+            return Ok(());
+        };
+        if self.text_cancel || (self.text_done && !editor.dirty()) {
+            self.finish_inline();
+            return Ok(());
+        }
+        if editor.dirty() {
+            let debounce = Duration::from_millis(600);
+            let elapsed = self.text_changed_at.elapsed();
+            if self.text_done || elapsed >= debounce {
+                self.submit_inline(database)?;
+            } else {
+                ctx.request_repaint_after(debounce - elapsed);
+            }
+        }
+        Ok(())
     }
     pub(super) fn dialogs(
         &mut self,
         ctx: &egui::Context,
-        database: &Path,
+        _database: &Path,
         language: Language,
         tokens: Tokens,
     ) {
@@ -590,69 +772,40 @@ impl CanvasState {
         {
             self.media_viewer = None;
         }
-        let Some(editor) = &mut self.text_editor else {
-            return;
+    }
+    fn preserve_card_text(&mut self, language: Language) -> AppResult<()> {
+        let text = self
+            .text_editor
+            .as_ref()
+            .ok_or(CanvasError::NoHistory)?
+            .text();
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(language.text("Preserve card text…"))
+            .set_file_name("pending-card.md")
+            .add_filter("Markdown", &["md"])
+            .save_file()
+        else {
+            return Ok(());
         };
-        let pending = self.pending.is_some();
-        let failed = self.failed.is_some();
-        let failure = self.failure.clone();
-        let mut retry = false;
-        let mut preserve = false;
-        let mut request = None;
-        let mut cancel = false;
-        let response = components::modal(
-            ctx,
-            language,
-            "canvas-source",
-            language.text("Edit text card"),
-            680.0,
-            |ui| {
-                ui.add_enabled_ui(!pending && !failed, |ui| {
-                    let result = editor.show(ui, &labels(language));
-                    request = result.transaction;
-                    cancel = result.cancelled;
-                });
-                if pending {
-                    ui.label(language.text("Saving…"));
-                }
-                if failed && !pending {
-                    ui.colored_label(
-                        tokens.warning,
-                        language
-                            .text("The board could not be saved. Pending changes are preserved."),
-                    );
-                    ui.horizontal_wrapped(|ui| {
-                        retry = ui.button(language.text("Retry save")).clicked();
-                        preserve = ui
-                            .button(language.text("Preserve pending board…"))
-                            .clicked();
-                    });
-                    if let Some(failure) = &failure {
-                        ui.collapsing(language.text("Technical details"), |ui| {
-                            ui.label(failure);
-                        });
-                    }
-                }
-            },
-        );
-        if (response.should_close() || cancel) && !pending {
-            self.text_editor = None;
-            self.view.cancel_transient();
-        } else if let Some(transaction) = request {
-            let result = self.begin(database, PendingOperation::Transaction(transaction));
-            self.set_failure(result);
-        }
-        if retry {
-            let result = self.retry(database);
-            self.set_failure(result);
-        }
-        if preserve {
-            let result = self.preserve_pending(language);
-            self.set_failure(result);
-        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(text.as_bytes())?;
+        file.flush()?;
+        file.sync_all()?;
+        Ok(())
     }
     fn preserve_pending(&mut self, language: Language) -> AppResult<()> {
-        let prepared = self.failed.as_ref().ok_or(CanvasError::NoHistory)?;
+        let latest = if let Some(editor) = &self.text_editor {
+            Some(self.session.prepare(editor.transaction(), &self.dialect)?)
+        } else {
+            None
+        };
+        let prepared = latest
+            .as_ref()
+            .or(self.failed.as_ref())
+            .ok_or(CanvasError::NoHistory)?;
         if write_board_copy(
             language,
             "pending-board.canvas",
@@ -777,6 +930,7 @@ fn prepare_and_save(
         Err(error) => CommitCompletion {
             prepared: None,
             result: Err(error),
+            checkpoint_version: None,
         },
     }
 }
@@ -787,17 +941,37 @@ fn persist_candidate(
     revision: ProjectCanvasRevision,
     prepared: PreparedChange,
 ) -> CommitCompletion {
+    persist_candidate_with_checkpoint(database, project, board, revision, prepared, None)
+}
+fn persist_candidate_with_checkpoint(
+    database: &Path,
+    project: &str,
+    board: &str,
+    revision: ProjectCanvasRevision,
+    prepared: PreparedChange,
+    expected_checkpoint: Option<&str>,
+) -> CommitCompletion {
+    let mut checkpoint_version = expected_checkpoint.map(str::to_owned);
     let result = (|| -> AppResult<ProjectCanvasRevision> {
         if !prepared.changed() {
             return Ok(revision);
         }
         let workspace = Workspace::open(database)?;
-        let content = serde_json::from_str(prepared.document().raw_json())?;
+        let content: serde_json::Value = serde_json::from_str(prepared.document().raw_json())?;
+        let draft = workspace.save_project_canvas_draft(
+            project,
+            board,
+            revision.info.revision,
+            expected_checkpoint,
+            content.clone(),
+        )?;
+        checkpoint_version = Some(draft.version);
         Ok(workspace.save_project_canvas(project, board, revision.info.revision, content)?)
     })();
     CommitCompletion {
         prepared: Some(prepared),
         result,
+        checkpoint_version,
     }
 }
 
@@ -806,6 +980,9 @@ struct CardBody<'a> {
     tokens: Tokens,
     project: &'a str,
     media: &'a mut MediaCache,
+    editor: Option<&'a mut TextCardEditor>,
+    inline_output: &'a mut Option<InlineTextOutput>,
+    blocked: bool,
 }
 impl CanvasViewHost for CardBody<'_> {
     fn paint_body(
@@ -815,6 +992,16 @@ impl CanvasViewHost for CardBody<'_> {
         rect: egui::Rect,
         zoom: f64,
     ) -> NodeBodyResponse {
+        if let Some(editor) = &mut self.editor
+            && editor.node_id() == node.id()
+        {
+            let output = ui
+                .add_enabled_ui(!self.blocked, |ui| editor.show_inline(ui, rect, zoom))
+                .inner;
+            let input = output.input;
+            *self.inline_output = Some(output);
+            return input;
+        }
         if let Some(id) = media_resource(node) {
             return self.media.card(
                 ui,
@@ -828,6 +1015,9 @@ impl CanvasViewHost for CardBody<'_> {
         let color = self.tokens.text;
         let font = egui::FontId::proportional((14.0 * zoom as f32).clamp(8.0, 42.0));
         let text = match node.kind() {
+            NodeKind::Text if node.body().trim().is_empty() => {
+                self.language.text("Double-click to write a note…")
+            }
             NodeKind::Text | NodeKind::Group => node.body(),
             NodeKind::File => node.body(),
             NodeKind::Link => node.body(),
@@ -868,6 +1058,258 @@ mod tests {
             Some("original-media")
         );
         assert_eq!(document.raw_json(), json);
+        Ok(())
+    }
+    fn deliver(state: &mut CanvasState, completion: CommitCompletion) -> AppResult<()> {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(completion)
+            .map_err(|_| "synthetic completion channel closed")?;
+        state.pending = Some(receiver);
+        state.poll(&egui::Context::default())
+    }
+    #[test]
+    fn inline_save_acknowledgement_should_keep_later_typing_and_append_durable_text_history()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("inline.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic inline card")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.text_editor = Some(TextCardEditor::new(&state.session, "card")?);
+        let editor = state.text_editor.as_mut().ok_or("editor")?;
+        *editor.text_mut() = "Submitted 日本語".into();
+        let transaction = editor.submit()?;
+        let prepared = state.session.prepare(transaction, &state.dialect)?;
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
+            "Submitted 日本語; typed during save 🪶".into();
+        let completion = persist_candidate(
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            prepared,
+        );
+        assert_eq!(
+            state.session.document().node("card").ok_or("card")?.body(),
+            "Old 😀 text"
+        );
+        assert!(completion.result.is_ok());
+        deliver(&mut state, completion)?;
+        let editor = state.text_editor.as_mut().ok_or("editor")?;
+        assert_eq!(editor.text(), "Submitted 日本語; typed during save 🪶");
+        assert!(editor.dirty());
+        let transaction = editor.submit()?;
+        let prepared = state.session.prepare(transaction, &state.dialect)?;
+        let completion = persist_candidate(
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            prepared,
+        );
+        deliver(&mut state, completion)?;
+        assert!(!state.text_editor.as_ref().ok_or("editor")?.dirty());
+        let reopened = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(reopened.revision.info.revision, 3);
+        assert!(reopened.draft.is_none());
+        assert_eq!(
+            reopened.revision.content["nodes"][0]["text"],
+            "Submitted 日本語; typed during save 🪶"
+        );
+        assert_eq!(
+            reopened.revision.content["nodes"][0]["x-writers-studio"]["future"],
+            graph()["nodes"][0]["x-writers-studio"]["future"]
+        );
+        state.finish_inline();
+        let prepared = state.session.prepare_undo()?;
+        let completion = persist_candidate(
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            prepared,
+        );
+        deliver(&mut state, completion)?;
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .content["nodes"][0]["text"],
+            "Submitted 日本語"
+        );
+        Ok(())
+    }
+    #[test]
+    fn failed_inline_save_should_keep_checkpoint_token_latest_draft_and_retry_without_adopting_other_drafts()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("failure.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic failed text")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "Exact pending source".into();
+        let prepared = state.session.prepare(editor.submit()?, &state.dialect)?;
+        let content = serde_json::from_str(prepared.document().raw_json())?;
+        let checkpoint = workspace.save_project_canvas_draft(
+            &project.id,
+            &state.snapshot.canvas.id,
+            1,
+            None,
+            content,
+        )?;
+        *editor.text_mut() = "Later text retained after failure".into();
+        state.text_editor = Some(editor);
+        assert!(
+            deliver(
+                &mut state,
+                CommitCompletion {
+                    prepared: Some(prepared),
+                    result: Err("synthetic failure after checkpoint".into()),
+                    checkpoint_version: Some(checkpoint.version.clone())
+                }
+            )
+            .is_err()
+        );
+        assert!(state.blocks_navigation());
+        assert!(state.text_save_error);
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Later text retained after failure"
+        );
+        let candidate = state.failed.take().ok_or("candidate")?;
+        let completion = persist_candidate_with_checkpoint(
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            candidate,
+            state.checkpoint_version.as_deref(),
+        );
+        assert!(completion.result.is_ok());
+        deliver(&mut state, completion)?;
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Later text retained after failure"
+        );
+        assert!(state.text_editor.as_ref().ok_or("editor")?.dirty());
+        assert!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .draft
+                .is_none()
+        );
+        Ok(())
+    }
+    #[test]
+    fn a_foreign_checkpoint_should_refuse_the_inline_save_and_preserve_both_working_texts()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("foreign-draft.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic checkpoint conflict")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "My unsaved text".into();
+        let prepared = state.session.prepare(editor.submit()?, &state.dialect)?;
+        state.text_editor = Some(editor);
+        let mut other = graph();
+        other["nodes"][0]["text"] = json!("Another draft");
+        let foreign = workspace.save_project_canvas_draft(
+            &project.id,
+            &state.snapshot.canvas.id,
+            1,
+            None,
+            other.clone(),
+        )?;
+        let completion = persist_candidate(
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            prepared,
+        );
+        assert!(deliver(&mut state, completion).is_err());
+        assert!(state.failed.is_some());
+        assert!(state.blocks_navigation());
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "My unsaved text"
+        );
+        let actual = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(actual.revision.content, graph());
+        assert_eq!(
+            actual.draft.as_ref().ok_or("draft")?.version,
+            foreign.version
+        );
+        assert_eq!(actual.draft.ok_or("draft")?.content, other);
+        Ok(())
+    }
+    #[test]
+    fn new_card_should_activate_direct_editor_only_after_durable_creation_acknowledgement()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("new-card.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic new card")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.add_text(&database, WorldPoint { x: 320., y: 0. })?;
+        assert!(state.text_editor.is_none());
+        assert!(state.pending.is_some());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(&egui::Context::default())?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(state.pending.is_none());
+        let editor = state.text_editor.as_ref().ok_or("direct editor")?;
+        assert!(editor.text().is_empty());
+        assert!(state.view.selection().nodes.contains(editor.node_id()));
+        assert!(!state.blocks_navigation());
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .info
+                .revision,
+            2
+        );
+        Ok(())
+    }
+    #[test]
+    fn composing_card_should_not_autosave_and_explicit_cancel_should_keep_canonical_source()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("composition.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic composition")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "Uncommitted composition".into();
+        state.text_editor = Some(editor);
+        state.text_composing = true;
+        state.text_done = true;
+        state.drive_inline(&database, &egui::Context::default())?;
+        assert!(state.pending.is_none());
+        assert!(state.blocks_navigation());
+        state.text_composing = false;
+        state.text_cancel = true;
+        state.drive_inline(&database, &egui::Context::default())?;
+        assert!(state.text_editor.is_none());
+        assert!(!state.blocks_navigation());
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .content,
+            graph()
+        );
         Ok(())
     }
     fn graph() -> serde_json::Value {

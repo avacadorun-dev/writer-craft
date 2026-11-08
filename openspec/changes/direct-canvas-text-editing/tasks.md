@@ -1,0 +1,8 @@
+- [x] Record original textarea/blur/Cmd-Enter/Escape behavior and issue #15.
+- [x] Specify direct input, child input ownership, IME, two histories and guarded checkpoint/retry semantics.
+- [x] Qualify the separate generic inline widget before dependency adoption (exact `58ce123`, all-platform Rust1.95 run 42505477358).
+- [x] Integrate direct card input and new-card focus without a primary modal.
+- [x] Add exact draft checkpoint before canonical save and preserve later typing through acknowledgement.
+- [x] Add five host acknowledgement/restart/checkpoint conflict/retry/new-card/composition controller regressions and complete localization; native OS journeys remain pending.
+- [ ] Pass exact-source hosted tests/fmt/strict Clippy.
+- [ ] Obtain actual compiled native input/zoom/selection/IME/failure and independent UX acceptance.
