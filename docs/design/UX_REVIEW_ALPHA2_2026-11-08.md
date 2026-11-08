@@ -97,3 +97,10 @@ The implementation owner supplied app source `141fce5e5fc27ca9bfeed1661831baa5f2
 The positive `95313f7` observations above apply to the two displayed compact startup states. They did not inspect the affected opaque viewport; the evidence record explicitly stated `media_settled:false`. The newly reported failure confirms that startup captures cannot establish rich-block composition or media flow.
 
 Retest the exact showcase at the affected blocks, with current media settled and source identity recorded, then cover every font/size/spacing/measure value and Light/Dark adaptive state through the F-37 matrix in `UX_ACCEPTANCE.md`. Assert actual paint-plus-caption containment and separation from adjacent independent blocks, not only positive declared rectangles. Exercise progressive acknowledgements, cache/theme invalidation, selection/hit testing, Undo and save/reopen while comparing unchanged canonical data for presentation-only operations. No final acceptance or issue closure is granted by this addendum.
+
+
+## Settled native capture follow-up — f9c5b75 and 3ea5f6f
+
+The independent reviewer subsequently inspected all 17 available PNG/state pairs from each exact source, verified their recorded hashes and PNG CRC/decompression, and recorded the limited result in [UX_CAPTURE_REVIEW_F9_3EA.md](UX_CAPTURE_REVIEW_F9_3EA.md). The shown constrained image/table/diagram/caption/math boundaries are separated; no new visible P0/P1 overlap is identified in those views. The new 28px Source Serif image capture is useful but leaves the lower wrapped caption outside the viewport.
+
+Each 18-case bundle still has one unavailable capture, and every requested-wide case is observed at 1024×684. These are limited exact-source visual observations, not complete F-37, interaction or alpha.2 acceptance. Issue #12, outstanding journey retests, owner acceptance and `UX_GATE.json` remain pending.
