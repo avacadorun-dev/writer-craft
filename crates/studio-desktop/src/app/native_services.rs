@@ -38,7 +38,7 @@ pub(super) fn manuscript_fonts() -> AppResult<()> {
     });
     result
         .as_ref()
-        .map(|()| ())
+        .copied()
         .map_err(|error| error.clone().into())
 }
 
