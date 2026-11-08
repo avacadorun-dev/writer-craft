@@ -481,9 +481,16 @@ mod tests {
             .project_export_snapshot(&project.id)?
             .manifest()
             .clone();
+        let dimensions = if mime == "image/png" {
+            let decoded = image::load_from_memory(bytes)?;
+            Some([decoded.width(), decoded.height()])
+        } else {
+            None
+        };
         manifest["media"] = serde_json::json!([{
             "id":"same-alias", "path":"media/original.bin", "sha256":format!("{:x}",Sha256::digest(bytes)),
-            "byteSize":bytes.len(), "mediaType":mime, "originalName":"original.bin", "width":null,"height":null
+            "byteSize":bytes.len(), "mediaType":mime, "originalName":"original.bin",
+            "width":dimensions.map(|size|size[0]),"height":dimensions.map(|size|size[1])
         }]);
         let validated = ValidatedProjectImport::parse(&serde_json::to_vec(&manifest)?)?;
         let imported = ProjectImportWorker::open(database)?.import(
