@@ -8,112 +8,109 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.1">Download alpha</a> ·
+  <a href="https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.2">Download alpha.2</a> ·
+  <a href="#the-workspace">Screenshots</a> ·
   <a href="#what-works-today">Current scope</a> ·
-  <a href="#run-from-source">Run from source</a> ·
-  <a href="docs/migration/FEATURE_PARITY.md">Parity roadmap</a> ·
-  <a href="docs/governance/RELEASING.md">Release policy</a>
+  <a href="#run-from-source">Build</a> ·
+  <a href="https://github.com/avacadorun-dev/writer-craft/milestone/2">Alpha.3</a>
 </p>
 
-> **Early alpha — engineering preview.** WriterCraft is becoming the native successor to Writers Studio. The current foundation supports plain prose and reviewed exact edits; it is not yet a complete replacement for the original product. Full workflow parity is the goal.
+> **Alpha.2 — native rich-editor preview.** A working checkpoint of the native successor to Writers Studio. Complete original-product parity continues in alpha.3. See [known limits](#what-comes-next) before using it for important work.
 
-WriterCraft brings projects, a continuous manuscript, local history and reviewable changes into one desktop workspace. There is no browser interface, WebView, Docker container or server to operate. Everyday writing works without an account or an AI provider.
+Write in a continuous, bounded manuscript, organize local documents, work with structured blocks and keep revisioned drafts on your computer. No browser, WebView, Docker container, server or account is needed for local writing.
+
+## Download and install
+
+| Platform | Download | Install |
+|---|---|---|
+| **macOS 14+, Apple silicon** | [DMG image](https://github.com/avacadorun-dev/writer-craft/releases/download/v0.1.0-alpha.2/WriterCraft-0.1.0-alpha.2-macos-arm64.dmg) | Open the image and drag **WriterCraft** into **Applications** |
+| **Windows x64** | [Setup executable](https://github.com/avacadorun-dev/writer-craft/releases/download/v0.1.0-alpha.2/WriterCraft-0.1.0-alpha.2-windows-x64-setup.exe) | Run the per-user installer |
+| **Debian 12 / Ubuntu 24.04, amd64** | [Debian package](https://github.com/avacadorun-dev/writer-craft/releases/download/v0.1.0-alpha.2/WriterCraft-0.1.0-alpha.2-linux-amd64.deb) | `sudo apt install ./WriterCraft-0.1.0-alpha.2-linux-amd64.deb` |
+
+[Release notes and checksums](https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.2) · [Installation, removal and data locations](docs/distribution/INSTALL.md)
+
+The macOS app is ad-hoc signed and **not notarized**; Windows packages are unsigned. These systems may show a first-launch security warning. macOS is the primary desktop target; Windows/Linux have hosted installation/removal checks, with full native interaction qualification still pending. There is no Intel Mac package or universal Linux AppImage in this release. Uninstalling the program preserves workspace data.
+
+## The workspace
+
+Actual compiled macOS application captures with synthetic demo content. These are application screenshots, not design mockups.
+
+<p align="center">
+  <img src="docs/images/alpha2/workspace-dark.png" alt="WriterCraft alpha.2 native rich manuscript, document navigation and formatting in dark appearance" width="100%" />
+  <sub>A bounded manuscript and a compact, reachable formatting toolbar.</sub>
+</p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/workspace-dark.png" alt="Actual WriterCraft desktop in dark appearance" /><br /><sub>Dark appearance · real application capture</sub></td>
-    <td width="50%"><img src="docs/images/workspace-light.png" alt="Actual WriterCraft desktop in light appearance" /><br /><sub>Light appearance · real application capture</sub></td>
+    <td width="50%"><img src="docs/images/alpha2/diagram-light.png" alt="A rendered Mermaid diagram inside the native light-theme manuscript" /><br /><sub>Mermaid rendered in the document</sub></td>
+    <td width="50%"><img src="docs/images/alpha2/image-light.png" alt="A local image, caption and separate following heading without overlapping blocks" /><br /><sub>Local images and measured caption flow</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/alpha2/formulas-light.png" alt="Inline and display mathematics rendered in the native editor" /><br /><sub>Inline and display formulas</sub></td>
+    <td width="50%"><img src="docs/images/alpha2/settings-light.png" alt="Categorized native preferences with independent appearance modes and palette preview cards" /><br /><sub>Native preferences and palette previews</sub></td>
   </tr>
 </table>
 
 ## What works today
 
-- **Local projects and prose.** A project library, document navigation, title search, text editing and plain-text export.
-- **Writing with context.** A bounded, continuous manuscript pane with local scrolling, text selection and a focus mode.
-- **Durable history.** SQLite storage, immutable revisions, autosave and recoverable working drafts. Revision checks prevent silent overwrites.
-- **Review before change.** Prepare an exact edit, inspect it, then Apply or Reject. Guarded Undo preserves later work. This local utility does not pretend to be an AI model.
-- **Safe archive inspection.** Check and preview `.wstudio` versions 1–8 without extracting files or changing the original. Rich JSON and the complete manifest remain intact.
-- **Appearance and language.** Independent Light, Dark and System modes; six non-green legacy palettes plus the native blue palette. Eight built-in interface languages with CJK font coverage.
-- **A shared core.** The desktop and headless CLI use the same domain commands and persistence rules.
+- **Native rich writing.** Formatting, headings, lists, tables and the currently integrated block insertion/property dialogs; local image assets, Mermaid, inline/display formulas, code with syntax decoration and callouts.
+- **A deliberate writing surface.** Continuous local scrolling, bounded text measure, Focus, adaptive document presentation and configurable font, line height and spacing.
+- **Local persistence.** SQLite workspaces, immutable revisions, autosave and recoverable rich drafts. Revision checks protect later work from stale edits. Current passage-note support is included; its complete legacy lifecycle remains in progress.
+- **Appearance and language.** Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese. Independent Light/Dark/System modes and seven non-green palettes, Lucide controls and the monk/book identity.
+- **Acknowledged preferences.** Invalid or externally changed files are preserved. Unsaved choices remain explicitly session-only, with Retry and scoped Reload.
+- **Transparent local storage.** Data-location and backup controls, archive inspection, and shared persistence/transfer foundations for the continuing migration.
+- **Reviewable changes.** The existing exact-text proposal utility uses explicit Apply/Reject and guarded Undo. Live providers and the complete rich-assistant workflow remain unfinished.
 
-The interface includes **Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese**. Changing the interface language leaves your documents unchanged.
+Interface language and appearance changes leave manuscript content unchanged. Bundled fonts provide offline Latin and CJK coverage.
 
-Rich-document editing, anchored notes and dictionary links, real AI providers, dictation and audio review, Canvas, complete project migration and publication exports remain on the [parity roadmap](docs/migration/FEATURE_PARITY.md). A text preview is not a migrated project, and an engineering test is not native UX acceptance.
+## What comes next
 
-## Get a preview
+[Alpha.3](docs/governance/NEXT_RELEASE.md) carries the remaining complete table/clipboard/input behavior, note/dictionary/source links, genuine assistant selection and rich proposal integration, full `.wstudio` import/tree/history UI, native Canvas, PDF/audio/video, Markdown/artifact export UI, canonical restore and the remaining IME/accessibility/performance matrix.
 
-Download **[WriterCraft 0.1.0-alpha.1](https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.1)** for macOS, Windows or Linux. The release includes SHA-256 checksums and platform-specific verification evidence; see the [release record](docs/verification/RELEASE_ALPHA_1.md). macOS is the first reviewed desktop platform. Windows/Linux files are additional engineering previews.
+Alpha.2 does **not** claim complete Writers Studio parity, completed Canvas/media migration, universal archive compatibility in the native UI, configured MCP/AI providers or daily-use certification. A preservation API or a rendered example is not a completed end-user workflow. Original parity requirements stay tracked in [GitHub issues](https://github.com/avacadorun-dev/writer-craft/issues) and the [migration inventory](docs/migration/EDITOR_PARITY_MATRIX.md).
 
-For continuous builds after the alpha, pushes to `main` and manual dispatch run checks and build all three targets on GitHub. Open a completed [Verify WriterCraft run](https://github.com/avacadorun-dev/writer-craft/actions/workflows/ci.yml) and download its artifact:
+## Your data
 
-| Build target | Artifact suffix | Inside |
-| --- | --- | --- |
-| macOS, Apple silicon | `macos-arm64-preview` | ZIP with `WriterCraft.app` |
-| Windows, x64 | `windows-x64-preview` | ZIP with `WriterCraft.exe` and notices |
-| Linux, x64 | `linux-x64-preview` | tar.gz with an executable and notices; built on Ubuntu 24.04 |
+The normal application uses:
 
-Each artifact includes SHA-256 checksums, build/source evidence and an engineering-preview notice. Check the actual run result; defining a workflow does not mean a hosted build passed. Extract the archive before starting the application. The Linux archive requires a compatible desktop, GNU libc and X11/Wayland/GPU runtime libraries; it is not a universal AppImage. These portable archives are not installers.
+| System | Default workspace directory |
+|---|---|
+| macOS | `~/Library/Application Support/WriterCraft/` |
+| Windows | `%APPDATA%\WriterCraft\` |
+| Linux | `$XDG_DATA_HOME/WriterCraft/`, or `~/.local/share/WriterCraft/` |
 
-The macOS app uses ad-hoc signing. Windows/Linux previews are unsigned. Developer ID notarization, platform UX qualification and automatic updates are separate work. A compiled artifact does not establish independent interaction acceptance or full workflow parity on that platform. Tagged candidates can produce a **draft prerelease with all three platform archives** after the macOS named-scope UX gate; Windows/Linux remain engineering previews. Stable releases are not published automatically. See [release and verification policy](docs/governance/RELEASING.md).
+`workspace.sqlite` contains local writing state; appearance, interface and editor preferences live beside it. Use the app's backup controls for a consistent workspace backup. An explicitly chosen custom database stays at its selected path. Isolated engineering previews use a separate workspace. Original source archives and manuscripts are never public CI fixtures.
 
 ## Run from source
 
-Use Rust **1.97 or newer** and your platform build tools (Xcode command-line tools on macOS, Visual Studio C++ build tools on Windows). On Debian/Ubuntu, install the [eframe native dependencies](https://github.com/emilk/egui/blob/49682f8baa058bf49e011035cfbd6e825f88a5ef/crates/eframe/README.md) plus `pkg-config`, `libwayland-dev` and `libx11-dev`; the hosted Linux build lists its exact packages in CI. End users downloading a built app do not need Rust.
+Use Rust **1.97+** and your platform's native development tools. macOS needs Xcode command-line tools; Windows needs the Visual Studio C++ toolchain. Debian/Ubuntu dependencies are listed in the [hosted installer workflow](.github/workflows/distribution-alpha2.yml). Downloaded packages do not require Rust or Docker.
 
 ```sh
-cargo run --locked -p studio-desktop
+cargo run --locked -p studio-desktop --features editor-preview
 ```
 
-Try the example in an isolated workspace:
+The `editor-preview` Cargo feature enables the native rich editor. It uses the normal app identity unless the isolated preview is explicitly requested. For a disposable demo workspace:
 
 ```sh
-cargo run --locked -p studio-desktop --   --database /tmp/writercraft-preview/workspace.sqlite --demo
+cargo run --locked -p studio-desktop --features editor-preview -- \
+  --database /tmp/writercraft-demo/workspace.sqlite --demo
 ```
 
-The usual macOS workspace is `~/Library/Application Support/WriterCraft/`. Appearance and interface preferences live alongside its SQLite database.
+Optimized installers build on GitHub. Local packaging defaults to debug; release scripts refuse accidental local optimized builds.
 
-| Shortcut | Action |
-| --- | --- |
-| `⌘S` | Save |
-| `⌘N` | New project |
-| `⌘O` | Preview a `.wstudio` archive |
-| `⌘⇧A` | Toggle review |
-| `⌘⇧F` | Toggle focus mode |
-| `⌘,` | Settings |
+## Architecture and contribution
 
-For a local debug bundle, use `./scripts/package-macos.sh --debug`. Its default output is `artifacts/debug/WriterCraft.app`. Optimized distribution builds run on GitHub; the macOS and portable packaging scripts refuse accidental local release builds. Windows/Linux packaging uses `python scripts/package-portable.py --target <target-triple>` inside the hosted job. Its archive/header/checksum tests can run locally with `python3 scripts/package-portable.py --self-test` without compiling a release.
-
-## Headless tools
-
-```sh
-cargo run --locked -p studio-cli -- demo --database /tmp/writercraft-demo.sqlite
-cargo run --locked -p studio-cli -- list --database /tmp/writercraft-demo.sqlite
-cargo run --locked -p studio-cli -- verify --database /tmp/writercraft-demo.sqlite
-cargo run --locked -p studio-cli -- inspect project.wstudio
-```
-
-`inspect` is read only. `verify` checks readable core state and revision consistency; it is not a full filesystem, SQLite or migration audit.
-
-## Build with evidence
-
-```sh
-./scripts/check.sh
-python3 scripts/release-check.py --mode source
-```
-
-Changes follow [OpenSpec](docs/governance/SPEC_WORKFLOW.md), architecture decisions and an [independent desktop UX gate](docs/design/UX_ACCEPTANCE.md). The [feedback log](docs/design/USER_FEEDBACK.md) records owner corrections and the regression checks they require. Review findings stay open until retested; screenshots and catalog coverage do not establish complete interaction parity.
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md), the [PRD](docs/PRD.md), [architecture decisions](docs/architecture/DECISIONS.md) and [OpenSpec validation evidence](docs/governance/OPENSPEC_VALIDATION.md). Research covers [Artcraft](docs/research/ARTCRAFT.md), [TypeScript-to-Rust options](docs/research/TS_TO_RUST.md) and the [editor-model spike](docs/research/EDITOR_SPIKE.md).
-
-| Crate | Responsibility |
-| --- | --- |
-| `studio-core` | Domain commands, revisions, proposals and local persistence |
-| `studio-transfer` | Bounded, non-destructive archive inspection |
+| Component | Responsibility |
+|---|---|
+| `studio-core` | Domain commands, revisions, draft/proposal guards and local persistence |
+| `studio-transfer` | Bounded archive inspection, validation and transfer preparation |
 | `studio-desktop` | Native application and localized interaction |
-| `studio-cli` | Headless access to the shared core |
+| `studio-cli` | Headless access to shared core commands |
+| [CraftEditor](https://github.com/avacadorun-dev/craft-editor) | Separately versioned generic rich-editor/rendering engine |
+| [CraftCanvas](https://github.com/avacadorun-dev/craft-canvas) | Separate native Canvas foundation; integration continues in alpha.3 |
 
-WriterCraft stays focused on author workflows. A substantial reusable editor or rendering engine may become a separately versioned library after its scope is validated; it will not be silently vendored as a whole application.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md), the [PRD](docs/PRD.md) and [architecture decisions](docs/architecture/DECISIONS.md). Development uses [OpenSpec](docs/governance/SPEC_WORKFLOW.md), source-backed parity contracts, exact-source hosted verification and [independent UX review](docs/design/UX_ACCEPTANCE.md). Owner-reported findings stay in GitHub issues until verified and accepted. See [release policy](docs/governance/RELEASING.md).
 
 ## License and credits
 
-WriterCraft uses the repository's [MIT License](LICENSE). Distribution archives preserve available Rust dependency notices in `THIRD_PARTY_NOTICES.txt`. Bundled Adobe Source and Noto fonts retain their own OFL notices in [assets/fonts](assets/fonts). Lucide utility icons retain their [upstream license and pinned provenance](assets/icons/lucide/NOTICE.md). Repo-local agent skills preserve their upstream licenses and provenance. Artcraft informed the architecture research; its application source and branding are not copied into this foundation.
+[MIT](LICENSE). Distributions retain Rust dependency notices and the licenses of [bundled fonts](assets/fonts) and [Lucide icons](assets/icons/lucide/NOTICE.md). Repo-local agent skills retain their own provenance. Artcraft informed the research; its application branding and source are not copied wholesale into WriterCraft.
