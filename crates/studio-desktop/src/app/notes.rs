@@ -578,7 +578,19 @@ impl StudioApp {
         Ok(())
     }
     /// Called only after explicit Discard in the close confirmation.
-    pub(super) fn discard_note_drafts(&mut self) {
+    pub(super) fn discard_note_drafts(&mut self, ctx: &egui::Context) {
+        for id in self.notes.drafts.keys() {
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("author-note-body", id)));
+        }
+        if let Some(composer) = &self.notes.composer {
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("note-composer-body", &composer.id)));
+        }
+        for composer in self.notes.paused_composers.values() {
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("note-composer-body", &composer.id)));
+        }
         self.notes.drafts.clear();
         self.notes.composer = None;
         self.notes.paused_composers.clear();
@@ -614,7 +626,7 @@ impl StudioApp {
             }
             self.record_error(result);
         } else if discard {
-            self.discard_note_drafts();
+            self.discard_note_drafts(ctx);
             self.notes.close_confirmation = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         } else if cancel || response.should_close() {
