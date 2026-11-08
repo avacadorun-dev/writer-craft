@@ -8,8 +8,8 @@
 - [x] Implement Windows user-data/unowned-file preservation verification and Debian 12/Ubuntu 24.04 install/remove/purge verification.
 - [x] Provide download, checksum, installation, removal and signing-limit documentation.
 - [x] Run synthetic fixture tests: `python3 scripts/test-package-installers.py` (11 tests at implementation checkpoint; no native builds).
-- [x] Run the hosted workflow and inspect all actual native build/install/remove results and combined artifacts. Exact-source checkpoint e9af417 passed every platform and aggregate in hosted run 42487095747; final alpha.2 version must be requalified.
-- [ ] Verify candidate normal startup uses the complete native editor; application entry point is owned by the integration task.
+- [x] Run the hosted workflow and inspect all actual native build/install/remove results and combined artifacts. Final alpha.2 runtime 8af4233 passed every native platform and aggregate in hosted run 42493462622.
+- [x] Verify candidate normal startup uses the integrated native editor under app.writercraft.desktop: final twenty normal-app capture cases passed in run42493462622; local synthetic new-document/paste/save also observed. Full editor parity remains alpha.3, not inferred.
 - [ ] Perform owner final candidate checks and retain issue #3 open until accepted.
 - [ ] Under a separate release instruction, qualify the exact final version/source against all release gates. The latest owner instruction explicitly authorizes the completed-checkpoint alpha.2 release; this checklist alone is not release acceptance.
 
