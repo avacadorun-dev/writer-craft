@@ -69,11 +69,7 @@ impl StudioApp {
                         .color(t.muted),
                     );
                 } else {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.search)
-                            .hint_text(l.text("Find a document…"))
-                            .desired_width(f32::INFINITY),
-                    );
+                    components::singleline(ui, &mut self.search, l.text("Find a document…"));
                     ui.add_space(14.0);
                     ui.horizontal(|ui| {
                         ui.add_space(8.0);

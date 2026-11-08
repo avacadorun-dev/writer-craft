@@ -1,5 +1,6 @@
 //! Bounded native writer workspace: state and command orchestration.
 mod commands;
+mod components;
 mod dialogs;
 mod library;
 mod manuscript;
@@ -687,43 +688,7 @@ fn modal(
     width: f32,
     body: impl FnOnce(&mut egui::Ui),
 ) -> egui::ModalResponse<()> {
-    egui::Modal::new(egui::Id::new(id)).show(ctx, |ui| {
-        let width = width.min(ctx.content_rect().width() - 64.0);
-        ui.set_width(width);
-        let header = ui
-            .allocate_exact_size(Vec2::new(width, 44.0), egui::Sense::hover())
-            .0;
-        let title_rect = egui::Rect::from_min_max(
-            header.min + egui::vec2(12.0, 0.0),
-            header.max - egui::vec2(48.0, 0.0),
-        );
-        ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(title_rect)
-                .layout(Layout::left_to_right(Align::Center)),
-            |ui| {
-                ui.set_clip_rect(title_rect);
-                ui.add(egui::Label::new(RichText::new(title).size(20.0).strong()).truncate());
-            },
-        );
-        let close_rect = egui::Rect::from_center_size(
-            egui::pos2(header.right() - 24.0, header.center().y),
-            Vec2::new(36.0, 36.0),
-        );
-        ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(close_rect)
-                .layout(Layout::left_to_right(Align::Center)),
-            |ui| {
-                if icons::icon_button(ui, Icon::Close, language.text("Close")).clicked() {
-                    ui.close();
-                }
-            },
-        );
-        ui.separator();
-        ui.add_space(12.0);
-        body(ui);
-    })
+    components::modal(ctx, language, id, title, width, body)
 }
 
 fn install_fonts(ctx: &egui::Context) {

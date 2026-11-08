@@ -63,6 +63,15 @@ Remove the redundant MANUSCRIPT eyebrow, hero spacing and outer toolbar card; re
 
 After implementation, independently verify actual native heights/content origin against Balanced, live pane boundaries, vertical centers and reachable controls at 1000 × 680 and 1440 × 940, with pane resizing and expanded translations. Locale/theme/type changes and menu/overflow movement preserve exact selection, active/mixed state, caret/focus, Undo and draft. The all-21-node/six-mark interactive specimen includes real image, Mermaid and formula output/editing. SVG concepts, source strings and decorative placeholders do not pass this regression or the full-editor gate.
 
+## Owner corrections F-32–F-35: complete authoring and shared presentation
+
+- [#7](https://github.com/avacadorun-dev/writer-craft/issues/7): start with an empty structured manuscript and complete create/insert/configure/re-edit/delete/Undo/Redo/save/reopen for every existing block/mark. Both full original toolbar routes and audited paste/input rules are required; a prebuilt fixture cannot pass authoring. Avoid heuristic conversion of unfenced ordinary prose into a diagram.
+- [#8](https://github.com/avacadorun-dev/writer-craft/issues/8): syntax decorations cover the source-backed programming and structured-text language set during editing and after reopen. Preserve exact Copy/source and unknown language metadata; theme colors cannot alter canonical text.
+- [#6](https://github.com/avacadorun-dev/writer-craft/issues/6): remaining center width chooses a bounded centered document or joined pane. Focus retains the same readable measure. The new adaptive design images are proposals awaiting the owner's response; they supersede only F-31's flat-only surface interpretation, not Balanced's accepted rhythm. Continuous writing and one app shell remain unchanged.
+- [#9](https://github.com/avacadorun-dev/writer-craft/issues/9): single-line fields and dialog actions have a 40 px minimum height; fields have 12/8 px inner padding and full available width. One 24 px modal inset aligns title, labels, fields and footer. Check actual compiled navigator search, New document/project and all contextual source dialogs, with focus, Enter/Escape/Cancel and long translations.
+
+Use [WORKSPACE_EDITOR_REDESIGN.md](WORKSPACE_EDITOR_REDESIGN.md) and append-only feedback F-32–F-35. Issue recording, design pictures and source fixes do not close their requirements. Native evidence and the full release gate remain pending.
+
 ## F-30 native table-capacity exception
 
 The owner explicitly accepts a maximum of 63 logical table columns for native editing in alpha.2. Do not fork WordCraft solely to increase this capacity. This is the only table-size exception selected here; all other table operations and full-editor requirements remain in scope.

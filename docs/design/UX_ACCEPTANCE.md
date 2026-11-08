@@ -31,7 +31,7 @@ Review outcomes: `not reviewed`, `changes required`, `engineering probe only`, `
 | ID | Observable acceptance |
 |---|---|
 | UX-01 One workspace | One application chrome, no URL/reload/browser-history layer and no rounded whole-app frame. Navigator, content and inspector share clear boundaries. Native window controls remain functional. |
-| UX-02 Bounded writing | Long text scrolls within the editor; navigation, command bar and status remain stable. No forced publication page breaks in everyday writing. Font measure/line spacing remain comfortable at supported sizes. |
+| UX-02 Bounded writing | Long text scrolls within the editor; navigation, command bar and status remain stable. No forced publication page breaks in everyday writing. Font measure/line spacing remain comfortable at supported sizes. Per F-34, wide and Focus views retain a centered bounded document and readable maximum measure; constrained centers join the pane structure without losing selection/scroll state. |
 | UX-03 Responsive panes | Test minimum supported window, common laptop window and wide display; inspector closed/open; navigator/inspector at both resize limits. Preserve a useful editor minimum, collapse inspector first, then offer explicit panel recovery. No clipped primary controls or horizontal-scroll workaround for ordinary writing. The toolbar identity-zone separator and visible navigator edge share one effective boundary at normal and resized widths; long project/document titles cannot overlap adjacent labels or utility controls (owner feedback F-19). |
 | UX-04 Native command behavior | File/New/Open/Save/Find/Undo/Redo have conventional macOS behavior, coherent menu/shortcut labels and accessible names. Context-specific commands operate on the focused surface. A raw shortcut handler cannot open unrelated dialogs above another active dialog, including two shortcut events received within one frame. Creating a project/document with Enter and with the button must keep the app running and show the created item. |
 | UX-05 Focus and transients | Keyboard reaches and activates every primary control. Context menus preserve the selected occurrence. Escape dismisses the innermost transient first and restores the previous caret/focus. A focus-mode button has a visible exit and restores the previous pane layout. |
@@ -94,3 +94,13 @@ Read the structured preferences contract in `DESKTOP_UX.md` before reviewing set
 - All utility glyphs use the licensed Lucide subset; product branding uses the monk/book mark. Check 28-pixel toolbar readability and light/dark contrast.
 - Appearance preview cards display actual theme colors and keep mode and palette as separate controls. Selected state is legible without relying solely on fill color.
 - Show the real complete updated interface and open the owner's isolated demonstration preview after the icon replacement.
+
+
+## Owner correction regression matrix: F-32 through F-35
+
+- Require a complete empty-document authoring journey for every existing block/mark. A known-good showcase verifies appearance only; discoverable Insert/context/keyboard commands, edit again, Cancel, Undo/Redo and durable reopen need their own interaction evidence.
+- Inspect real syntax decoration for programming and structured-text languages while editing and after reopen, in Light/Dark. Source, Copy and unknown stored labels remain exact; colorful mockups do not qualify syntax support.
+- Compare wide/Focus/joined manuscript states around the approved adaptive threshold. Keep a bounded text measure, balanced exterior gutters when present, local scroll, reachable full toolbar/overflow and a visible Focus exit. New adaptive concept pictures need owner image review before structural layout implementation.
+- Inspect actual compiled search/New document/New project/source fields and modal actions: 40 px minimum standard height, full available width, centered text, one 24 px inset grid, deliberate header/body/footer rhythm, localized long values and minimum-window fit. Exercise Tab/Enter/Escape/Cancel, disabled/error states and exact focus restoration. A larger painted border around an unchanged tiny interaction target fails this check.
+
+Do not access the owner's open preview for these checks until handoff. F-32–F-35 remain acceptance blockers until exact-source compiled/native evidence exists; the designer's source fixes and design artifacts do not change `UX_GATE.json`.
