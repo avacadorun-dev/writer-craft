@@ -109,19 +109,19 @@ impl ProjectImages {
             if !seen.insert(id) {
                 continue;
             }
-            let metadata = read_image_metadata(&connection, &self.project_id, id)?;
+            let metadata = read_reference_metadata(&connection, &self.project_id, id)?;
             total = total
                 .checked_add(usize::try_from(metadata.byte_size).map_err(|_| transfer_invalid())?)
                 .filter(|total| *total <= max_bytes)
                 .ok_or_else(transfer_invalid)?;
-            let (asset, bytes) = read_verified_image(&connection, &self.project_id, id)?;
+            let (asset, bytes) = read_verified_image(&connection, &self.project_id, &metadata.id)?;
             if asset != metadata {
                 return Err(StudioError::CorruptData(
                     "Image changed while its transfer was being captured".into(),
                 ));
             }
             output.push(ImageTransfer {
-                source_id: asset.id,
+                source_id: id.clone(),
                 original_name: asset.original_name,
                 media_type: asset.media_type,
                 sha256: asset.sha256,
@@ -153,9 +153,13 @@ impl ProjectImages {
         let mut output = Vec::with_capacity(images.len());
         for image in images {
             let existing =
-                match read_verified_image(&transaction, &self.project_id, &image.source_id) {
-                    Ok((asset, bytes)) if bytes == image.bytes => Some(asset),
-                    Ok(_) | Err(StudioError::NotFound { .. }) => None,
+                match read_reference_metadata(&transaction, &self.project_id, &image.source_id) {
+                    Ok(metadata) => {
+                        let (asset, bytes) =
+                            read_verified_image(&transaction, &self.project_id, &metadata.id)?;
+                        (bytes == image.bytes).then_some(asset)
+                    }
+                    Err(StudioError::NotFound { .. }) => None,
                     Err(error) => return Err(error),
                 };
             let asset = if let Some(asset) = existing {
@@ -190,7 +194,7 @@ pub fn validate_image_transfers(images: &[ImageTransfer], max_bytes: usize) -> R
     let mut seen = HashSet::new();
     let mut total = 0usize;
     for image in images {
-        if uuid::Uuid::parse_str(&image.source_id).is_err() || !seen.insert(&image.source_id) {
+        if !is_valid_image_reference_id(&image.source_id) || !seen.insert(&image.source_id) {
             return Err(transfer_invalid());
         }
         total = total
@@ -267,7 +271,7 @@ impl ImageAssetSnapshot {
             .connection
             .lock()
             .map_err(|_| StudioError::LockUnavailable)?;
-        let (asset, bytes) = read_verified_image(&connection, &self.project_id, id)?;
+        let (asset, bytes) = read_verified_image(&connection, &self.project_id, &expected.id)?;
         if &asset != expected {
             return Err(StudioError::CorruptData(
                 "Image changed after its renderer snapshot was captured".into(),
@@ -442,7 +446,7 @@ impl Workspace {
             if !seen.insert(id.to_owned()) {
                 continue;
             }
-            match read_image_metadata(&connection, project_id, id) {
+            match read_reference_metadata(&connection, project_id, id) {
                 Ok(asset) => {
                     snapshot.assets.insert(id.into(), asset);
                 }
@@ -472,6 +476,14 @@ fn unavailable(id: &str) -> StudioError {
         id: id.into(),
     }
 }
+/// Whether a canonical image identity fits the original project's opaque-ID bound.
+///
+/// This is syntax validation only. An identity grants no resource access; callers must use a
+/// fixed owning project's alias/asset capability and verify exact bytes and src bindings.
+pub fn is_valid_image_reference_id(id: &str) -> bool {
+    !id.trim().is_empty() && id.len() <= 512
+}
+
 fn reference_id(node: &Node) -> Result<&str> {
     let invalid =
         || StudioError::Validation("Image reference does not identify an owned local image".into());
@@ -480,7 +492,7 @@ fn reference_id(node: &Node) -> Result<&str> {
     }
     let id = node
         .string_attr("assetId")
-        .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+        .filter(|id| is_valid_image_reference_id(id))
         .ok_or_else(invalid)?;
     let source = node.string_attr("src").ok_or_else(invalid)?;
     if source != format!("asset://{id}") && source != format!("/api/media/{id}/content") {
@@ -557,6 +569,22 @@ fn safe_filename(value: &str, extension: &str) -> String {
 fn checksum(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
+/// Resolve a canonical logical identity once, inside its fixed project. Native authoring assets
+/// have no source alias and retain their UUID fallback; aliases never authorize another project.
+fn read_reference_metadata(
+    connection: &Connection,
+    project_id: &str,
+    id: &str,
+) -> Result<ImageAsset> {
+    if !is_valid_image_reference_id(id) {
+        return Err(unavailable(id));
+    }
+    let native: Option<String> = connection.query_row(
+        "SELECT native_id FROM project_resource_aliases WHERE project_id=?1 AND resource_kind='media' AND logical_id=?2",
+        params![project_id, id], |row| row.get(0),
+    ).optional()?;
+    read_image_metadata(connection, project_id, native.as_deref().unwrap_or(id))
+}
 fn read_image_metadata(connection: &Connection, project_id: &str, id: &str) -> Result<ImageAsset> {
     if uuid::Uuid::parse_str(id).is_err() {
         return Err(unavailable(id));
@@ -617,4 +645,125 @@ fn read_verified_image(
         ));
     }
     Ok((asset, bytes))
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+    use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+    type TestResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+    fn png(color: u8) -> TestResult<Vec<u8>> {
+        let image = DynamicImage::ImageRgb8(RgbImage::from_pixel(2, 3, Rgb([color, 80, 120])));
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::Png)?;
+        Ok(bytes.into_inner())
+    }
+    fn alias(workspace: &Workspace, project: &str, logical: &str, native: &str) -> TestResult {
+        workspace.connection()?.execute(
+            "INSERT INTO project_resource_aliases(project_id,resource_kind,logical_id,native_id) VALUES(?1,'media',?2,?3) ON CONFLICT(project_id,resource_kind,logical_id) DO UPDATE SET native_id=excluded.native_id",
+            params![project,logical,native],
+        )?;
+        Ok(())
+    }
+    fn tree(logical: &str) -> TestResult<RichTree> {
+        Ok(RichTree::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":2},"content":[
+                {"type":"imageBlock","attrs":{"blockId":"picture","assetId":logical,"src":format!("/api/media/{logical}/content"),"alt":"Original","caption":"Keep","vendor":{"retained":true}}}
+            ]}),
+        )?)
+    }
+    #[test]
+    fn opaque_image_aliases_remain_project_scoped_and_transfer_the_original_mapping_key()
+    -> TestResult {
+        let workspace = Workspace::memory()?;
+        let first = workspace.create_project("First")?;
+        let second = workspace.create_project("Second")?;
+        let first_bytes = png(10)?;
+        let second_bytes = png(240)?;
+        let first_asset = workspace.import_image(&first.id, "first.png", None, &first_bytes)?;
+        let second_asset = workspace.import_image(&second.id, "second.png", None, &second_bytes)?;
+        let logical = "original image 作者";
+        alias(&workspace, &first.id, logical, &first_asset.id)?;
+        alias(&workspace, &second.id, logical, &second_asset.id)?;
+        let document = tree(logical)?;
+        let original = document.to_json()?;
+        let node = document.node(&craft_editor_model::NodePath(vec![0]))?;
+        let first_snapshot = workspace.image_asset_snapshot(&first.id, &document)?;
+        let second_snapshot = workspace.image_asset_snapshot(&second.id, &document)?;
+        assert!(first_snapshot.failures().is_empty());
+        assert_eq!(first_snapshot.metadata(logical), Some(&first_asset));
+        assert_eq!(first_snapshot.load(node)?.as_ref(), &first_bytes);
+        assert_eq!(second_snapshot.load(node)?.as_ref(), &second_bytes);
+        let transfer = workspace
+            .project_images(&first.id)?
+            .export_images(&[logical.into()], MAX_IMAGE_BYTES)?;
+        assert_eq!(transfer[0].source_id, logical);
+        assert_eq!(transfer[0].bytes, first_bytes);
+        let destination = workspace.create_project("Destination")?;
+        let imported = workspace
+            .project_images(&destination.id)?
+            .import_images(&transfer, MAX_IMAGE_BYTES)?;
+        assert_eq!(imported[0].source_id, logical);
+        assert_ne!(imported[0].asset.id, first_asset.id);
+        assert_eq!(
+            workspace.image_asset_bytes(&destination.id, &imported[0].asset.id)?,
+            first_bytes
+        );
+        assert_eq!(document.to_json()?, original);
+        Ok(())
+    }
+    #[test]
+    fn captured_image_capability_keeps_its_verified_native_identity_after_alias_rebinding()
+    -> TestResult {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Images")?;
+        let original_bytes = png(10)?;
+        let newer_bytes = png(240)?;
+        let original =
+            workspace.import_image(&project.id, "original.png", None, &original_bytes)?;
+        let newer = workspace.import_image(&project.id, "newer.png", None, &newer_bytes)?;
+        alias(&workspace, &project.id, "image", &original.id)?;
+        let document = tree("image")?;
+        let node = document.node(&craft_editor_model::NodePath(vec![0]))?;
+        let captured = workspace.image_asset_snapshot(&project.id, &document)?;
+        alias(&workspace, &project.id, "image", &newer.id)?;
+        assert_eq!(captured.load(node)?.as_ref(), &original_bytes);
+        let fresh = workspace.image_asset_snapshot(&project.id, &document)?;
+        assert_eq!(fresh.load(node)?.as_ref(), &newer_bytes);
+        Ok(())
+    }
+    #[test]
+    fn foreign_alias_targets_and_mismatched_src_bindings_never_authorize_a_read() -> TestResult {
+        let workspace = Workspace::memory()?;
+        let first = workspace.create_project("First")?;
+        let other = workspace.create_project("Other")?;
+        let asset = workspace.import_image(&other.id, "foreign.png", None, &png(200)?)?;
+        alias(&workspace, &first.id, "image", &asset.id)?;
+        let document = tree("image")?;
+        let snapshot = workspace.image_asset_snapshot(&first.id, &document)?;
+        assert_eq!(snapshot.failures().len(), 1);
+        assert!(
+            snapshot
+                .load(document.node(&craft_editor_model::NodePath(vec![0]))?)
+                .is_err()
+        );
+        assert!(
+            workspace
+                .project_images(&first.id)?
+                .export_images(&["image".into()], MAX_IMAGE_BYTES)
+                .is_err()
+        );
+        assert!(
+            workspace
+                .project_images(&first.id)?
+                .export_images(&[asset.id.clone()], MAX_IMAGE_BYTES)
+                .is_err()
+        );
+        let mut forged = tree("image")?.to_json()?;
+        forged["content"][0]["attrs"]["src"] = json!(format!("asset://{}", asset.id));
+        let forged = RichTree::from_json(forged)?;
+        let snapshot = workspace.image_asset_snapshot(&other.id, &forged)?;
+        assert_eq!(snapshot.failures().len(), 1);
+        Ok(())
+    }
 }

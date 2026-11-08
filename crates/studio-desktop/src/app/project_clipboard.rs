@@ -287,7 +287,9 @@ fn references_from(references: &[AssetReference]) -> Result<References> {
                 .and_then(|value| value.strip_suffix("/content"))
         });
         if let Some(id) = source_id {
-            if reference.asset_id.as_deref() != Some(id) || uuid::Uuid::parse_str(id).is_err() {
+            if reference.asset_id.as_deref() != Some(id)
+                || !studio_core::is_valid_image_reference_id(id)
+            {
                 return Err(ProjectClipboardError::InvalidCapsule);
             }
             output.owned.insert(id.into());

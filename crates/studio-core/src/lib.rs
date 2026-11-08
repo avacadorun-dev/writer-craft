@@ -17,7 +17,8 @@ pub use annotations::{
 };
 pub use assets::{
     ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
-    ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages, validate_image_transfers,
+    ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages,
+    is_valid_image_reference_id, validate_image_transfers,
 };
 pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
