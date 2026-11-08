@@ -4635,6 +4635,7 @@ dependencies = [
 name = "studio-desktop"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "base64 0.23.1",
  "craft-editor-egui",
  "craft-editor-model",
  "craft-editor-render",
@@ -4644,6 +4645,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "studio-core",
  "studio-transfer",
  "tempfile",
