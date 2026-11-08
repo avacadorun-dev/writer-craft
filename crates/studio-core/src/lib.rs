@@ -8,6 +8,7 @@ mod assets;
 mod assistant_selection;
 mod daily_controls;
 mod project_portability;
+mod project_structure;
 mod rich;
 mod rich_review;
 mod workspace_backup;
@@ -44,6 +45,7 @@ pub use project_portability::{
     ValidatedEvidenceReference, ValidatedPortableProjectImport, ValidatedProjectImport,
     VerifiedPortableProjectStream, VerifiedPortableRecord, visit_portable_shard,
 };
+pub use project_structure::ImportedProjectStructure;
 pub use rich::{RichDraft, RichRevision};
 pub use rich_review::{RichProposal, RichProposalSummary};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
@@ -76,6 +78,16 @@ pub enum StudioError {
     /// The requested local resource does not exist.
     #[error("{kind} {id} was not found; refresh the project list")]
     NotFound { kind: &'static str, id: String },
+    /// Structure-aware creation used an outdated saved project schema.
+    #[error(
+        "The project structure changed from revision {expected} to {actual}; refresh before creating a node"
+    )]
+    ProjectStructureConflict { expected: u64, actual: u64 },
+    /// A first-content request no longer matches the exact saved project node.
+    #[error(
+        "Project node {node_id} changed in project {project_id}; refresh before writing its first content"
+    )]
+    ProjectNodeChanged { project_id: String, node_id: String },
     /// The editor is based on an older revision.
     #[error("Document changed from revision {expected} to {actual}; reload before saving")]
     RevisionConflict { expected: i64, actual: i64 },
