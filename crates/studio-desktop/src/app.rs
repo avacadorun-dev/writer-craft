@@ -1062,6 +1062,8 @@ fn nav_row(
             .max_rect(rect.shrink2(Vec2::new(8.0, 3.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
+    // Hierarchy rows suppress outer item gaps; utility icon/text spacing stays explicit.
+    child.spacing_mut().item_spacing.x = 8.0;
     icons::icon(
         &mut child,
         icon,
