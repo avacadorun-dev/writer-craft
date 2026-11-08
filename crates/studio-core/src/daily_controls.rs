@@ -17,17 +17,19 @@ pub struct DocumentStatistics {
     pub reading_minutes: usize,
 }
 
+// Source String.trim and \s share ECMAScript whitespace; Rust differs for U+0085/U+FEFF.
+pub(crate) fn is_ecmascript_whitespace(character: char) -> bool {
+    matches!(character,
+        '\u{0009}'..='\u{000d}' | ' ' | '\u{00a0}' | '\u{1680}' |
+        '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' |
+        '\u{205f}' | '\u{3000}' | '\u{feff}'
+    )
+}
+
 /// Count the supplied reader projection without modifying or normalizing it.
 pub fn document_statistics(text: &str) -> DocumentStatistics {
-    // ECMAScript \s differs from Rust whitespace for U+0085 and U+FEFF.
     let words = text
-        .split(|character| {
-            matches!(character,
-                '\u{0009}'..='\u{000d}' | ' ' | '\u{00a0}' | '\u{1680}' |
-                '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' |
-                '\u{205f}' | '\u{3000}' | '\u{feff}'
-            )
-        })
+        .split(is_ecmascript_whitespace)
         .filter(|word| !word.is_empty())
         .count();
     DocumentStatistics {

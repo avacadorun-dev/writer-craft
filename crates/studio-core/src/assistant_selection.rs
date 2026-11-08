@@ -103,7 +103,7 @@ fn quote(ranges: &[AssistantSelectionRange]) -> String {
         .map(|range| range.expected_text.as_str())
         .collect::<Vec<_>>()
         .join("\n\n")
-        .trim()
+        .trim_matches(super::daily_controls::is_ecmascript_whitespace)
         .to_owned()
 }
 fn exact_text(

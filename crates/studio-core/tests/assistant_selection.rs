@@ -251,3 +251,28 @@ fn unacknowledged_draft_and_foreign_project_are_refused_without_mutating_either_
     assert_eq!(workspace.document(&document.id)?, document);
     Ok(())
 }
+
+#[test]
+fn visible_quote_uses_original_ecmascript_trim_without_rewriting_exact_ranges() -> TestResult {
+    let workspace = Workspace::memory()?;
+    let project = workspace.create_project("Whitespace")?;
+    for (text, expected) in [
+        ("\u{feff} phrase \u{feff}", "phrase"),
+        ("\u{85}phrase\u{85}", "\u{85}phrase\u{85}"),
+    ] {
+        let content =
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[paragraph("p",text)]});
+        let document = workspace.create_rich_document(&project.id, "Exact", content)?;
+        let selected = workspace.capture_assistant_selection(
+            &project.id,
+            &document.id,
+            1,
+            &point("p", 0),
+            &point("p", text.chars().count()),
+        )?;
+        assert_eq!(selected.quote, expected);
+        assert_eq!(selected.ranges[0].expected_text, text);
+        workspace.assistant_selection_boundaries(&project.id, &selected)?;
+    }
+    Ok(())
+}
