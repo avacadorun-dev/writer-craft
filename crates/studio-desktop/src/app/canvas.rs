@@ -159,6 +159,7 @@ impl CanvasState {
         self.pending.is_some()
             || self.failed.is_some()
             || self.text_save_error
+            || self.text_composing
             || self
                 .text_editor
                 .as_ref()
@@ -1307,7 +1308,13 @@ mod tests {
         let project = workspace.create_project("Synthetic composition")?;
         let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
         let mut state = CanvasState::from_snapshot(&project.id, board)?;
-        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        state.text_editor = Some(TextCardEditor::new(&state.session, "card")?);
+        state.text_composing = true;
+        assert!(
+            state.blocks_navigation(),
+            "preedit ownership blocks navigation even before text changes"
+        );
+        let mut editor = state.text_editor.take().ok_or("editor")?;
         *editor.text_mut() = "Uncommitted composition".into();
         state.text_editor = Some(editor);
         state.text_composing = true;
