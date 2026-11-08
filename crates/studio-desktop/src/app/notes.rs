@@ -363,6 +363,15 @@ fn note_row(
     });
     response.on_hover_text(format!("{}\n{}", quote, note.note))
 }
+fn visible_menu_anchor(visible: egui::Rect, caret: Option<egui::Rect>) -> egui::Pos2 {
+    let inset = 4.0_f32
+        .min(visible.width() * 0.25)
+        .min(visible.height() * 0.25);
+    visible.shrink(inset).clamp(caret.map_or_else(
+        || visible.center(),
+        |caret| caret.left_bottom() + egui::vec2(0.0, 4.0),
+    ))
+}
 fn valid_note_body(body: &str) -> bool {
     !body.trim().is_empty() && body.chars().count() <= 10_000
 }
@@ -739,7 +748,27 @@ impl StudioApp {
         }
         let mut popup = egui::Popup::context_menu(response).id(popup_id);
         if keyboard {
-            popup = popup.at_position(response.rect.left_top() + egui::vec2(28.0, 28.0));
+            let visible = response
+                .interact_rect
+                .intersect(response.ctx.content_rect());
+            let visible = if visible.is_positive() {
+                visible
+            } else {
+                response.ctx.content_rect().shrink(24.0)
+            };
+            let caret = match self
+                .rich
+                .as_ref()
+                .map(|rich| rich.session.canvas_caret_rect(response))
+                .transpose()
+            {
+                Ok(caret) => caret.flatten(),
+                Err(error) => {
+                    self.record_error(Err(error.into()));
+                    None
+                }
+            };
+            popup = popup.at_position(visible_menu_anchor(visible, caret));
         }
         popup.show(|ui| {
             if ui
@@ -1409,5 +1438,17 @@ mod tests {
             assert_eq!(frame.take_error().is_some(), index == 0);
         }
         Ok(())
+    }
+    #[test]
+    fn keyboard_note_menu_tracks_measured_caret_and_stays_in_visible_scrolled_editor() {
+        let visible = egui::Rect::from_min_max(egui::pos2(300.0, 160.0), egui::pos2(900.0, 650.0));
+        let caret = egui::Rect::from_min_size(egui::pos2(420.0, 360.0), egui::vec2(1.0, 24.0));
+        assert_eq!(
+            visible_menu_anchor(visible, Some(caret)),
+            egui::pos2(420.0, 388.0)
+        );
+        let offscreen = caret.translate(egui::vec2(0.0, -2400.0));
+        assert!(visible.contains(visible_menu_anchor(visible, Some(offscreen))));
+        assert!(visible.contains(visible_menu_anchor(visible, None)));
     }
 }
