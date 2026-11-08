@@ -5,6 +5,7 @@
 
 mod annotations;
 mod assets;
+mod assistant_selection;
 mod daily_controls;
 mod project_portability;
 mod rich;
@@ -20,6 +21,7 @@ pub use assets::{
     ImportedImage, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION, ProjectImages,
     is_valid_image_reference_id, validate_image_transfers,
 };
+pub use assistant_selection::{AssistantSelectionAttachment, AssistantSelectionRange};
 pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
     find_first_text_match, rich_document_statistics,
