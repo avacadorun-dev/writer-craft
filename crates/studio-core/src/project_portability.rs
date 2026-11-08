@@ -7,6 +7,7 @@ mod canvas_validation;
 mod evidence;
 mod json;
 mod portable_format;
+mod portable_restore;
 mod snapshot;
 mod validation;
 
@@ -26,6 +27,7 @@ pub use portable_format::{
     PortableObjectReference, PortableProjectHeader, PortableProjectScope, PortableResourceBudget,
     PortableShardDescriptor, VerifiedPortableRecord, visit_portable_shard,
 };
+pub use portable_restore::{MAX_PORTABLE_COMPANION_V1_BYTES, ValidatedPortableProjectImport};
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 
 use std::collections::{BTreeMap, HashMap};
@@ -210,48 +212,57 @@ impl ProjectImportWorker {
         cancel.check()?;
         let mut connection = self.workspace.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let project_id = uuid::Uuid::new_v4().to_string();
-        transaction.execute(
-            "INSERT INTO projects(id,title) VALUES(?1,?2)",
-            params![project_id, project.title],
-        )?;
-        transaction.execute("INSERT INTO project_portability(project_id,logical_project_id,format_version,raw_manifest,manifest_sha256) VALUES(?1,?2,?3,?4,?5)",
-            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.as_str(),format!("{:x}",Sha256::digest(project.raw_manifest.as_bytes()))])?;
-        insert_alias(
-            &transaction,
-            &project_id,
-            "project",
-            &project.logical_project_id,
-            &project_id,
-        )?;
-        let node_map = import_documents(&transaction, &project_id, project, cancel)?;
-        import_source_records(&transaction, &project_id, project)?;
-        import_canvases(&transaction, &project_id, &project.manifest, cancel)?;
-        for attachment in &project.attachments {
-            cancel.check()?;
-            import_attachment(
-                &transaction,
-                &project_id,
-                &project.manifest,
-                attachment,
-                source,
-                cancel,
-            )?;
-        }
-        import_notes(&transaction, &project_id, &project.manifest, &node_map)?;
-        cancel.check()?;
-        let result = ImportedProject {
-            project_id,
-            logical_project_id: project.logical_project_id.clone(),
-            node_count: validation::array(&project.manifest, "nodes")?.len(),
-            document_revision_count: validation::array(&project.manifest, "documentRevisions")?
-                .len(),
-            canvas_count: validation::array(&project.manifest, "canvases")?.len(),
-            attachment_count: project.attachments.len(),
-        };
+        let result = import_in_transaction(&transaction, project, source, cancel)?;
         transaction.commit()?;
         Ok(result)
     }
+}
+
+fn import_in_transaction(
+    transaction: &Transaction<'_>,
+    project: &ValidatedProjectImport,
+    source: &mut dyn ImportAssetSource,
+    cancel: &ProjectTransferCancellation,
+) -> Result<ImportedProject> {
+    let project_id = uuid::Uuid::new_v4().to_string();
+    transaction.execute(
+        "INSERT INTO projects(id,title) VALUES(?1,?2)",
+        params![project_id, project.title],
+    )?;
+    transaction.execute("INSERT INTO project_portability(project_id,logical_project_id,format_version,raw_manifest,manifest_sha256) VALUES(?1,?2,?3,?4,?5)",
+            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.as_str(),format!("{:x}",Sha256::digest(project.raw_manifest.as_bytes()))])?;
+    insert_alias(
+        transaction,
+        &project_id,
+        "project",
+        &project.logical_project_id,
+        &project_id,
+    )?;
+    let node_map = import_documents(transaction, &project_id, project, cancel)?;
+    import_source_records(transaction, &project_id, project)?;
+    import_canvases(transaction, &project_id, &project.manifest, cancel)?;
+    for attachment in &project.attachments {
+        cancel.check()?;
+        import_attachment(
+            transaction,
+            &project_id,
+            &project.manifest,
+            attachment,
+            source,
+            cancel,
+        )?;
+    }
+    import_notes(transaction, &project_id, &project.manifest, &node_map)?;
+    cancel.check()?;
+    let result = ImportedProject {
+        project_id,
+        logical_project_id: project.logical_project_id.clone(),
+        node_count: validation::array(&project.manifest, "nodes")?.len(),
+        document_revision_count: validation::array(&project.manifest, "documentRevisions")?.len(),
+        canvas_count: validation::array(&project.manifest, "canvases")?.len(),
+        attachment_count: project.attachments.len(),
+    };
+    Ok(result)
 }
 
 fn insert_alias(

@@ -209,3 +209,11 @@ Acceptance additionally requires preflight oversize refusal before writes/public
 deduplication with stable logical identities, format-1 compatibility, source-format bounds unchanged,
 schema-7-to-8 migration preserving data, corrupt/missing/chunk/duplicate/cancel rollback, and repeated
 restore/export with flat evidence.
+
+## Alpha.3 compatibility implementation checkpoint
+
+The pre-release format-1 reader has a separate 64 MiB encoded-companion guard, with native-state and recovery components bounded at 32 MiB and 16 MiB respectively. These guards are intentionally not widened to fit large projects. `ValidatedPortableProjectImport::parse_v1` checks source raw bytes/hash/value agreement, source-scoped aliases and every activated saved note/history/opaque projection before writes. The existing original format 1–8 parser retains its nonempty-node rule; only the private native validation mode accepts empty/Canvas-only native projects. Selected documents lose outside parents only in their editable projection, while the exact selected source and outside context remain preservation evidence.
+
+`ProjectImportWorker::restore_portable` uses the same source import transaction body, then restores current note metadata, supplied validated history and read-only originals, and streams bounded raw native/recovery/extension domains into schema-8 evidence. No external draft, checkpoint, attachment snapshot or review proposal populates trusted replay/proposal tables. Note matching uses only supplied scoped identities and exact base-revision scalar anchors; an invalid or stale current attachment detaches rather than searching another occurrence. Imports create new storage handles and preserve source/native-note logical namespaces.
+
+This checkpoint is compatibility groundwork, not issue #11 completion. Paged format-2 semantic records/object export, final canonical ZIP/completed-folder adapters, stable repeated-restore evidence export, native UI and full synthetic/private/native acceptance remain required. The existing monolithic snapshot/export is not streaming format-2 evidence.

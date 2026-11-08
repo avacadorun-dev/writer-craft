@@ -85,6 +85,16 @@ pub(super) fn safe_path(path: &str) -> bool {
 }
 
 pub(super) fn validate(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
+    validate_inner(manifest, false)
+}
+
+// Canonical native projects may legitimately be empty or Canvas-only. The original source
+// archive parser retains its nonempty-node guarantee through validate above.
+pub(super) fn validate_native(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
+    validate_inner(manifest, true)
+}
+
+fn validate_inner(manifest: &Value, allow_empty: bool) -> Result<Vec<ProjectAttachment>> {
     if string(manifest, "format")? != "writers-studio-project" {
         return invalid("unsupported project envelope");
     }
@@ -149,7 +159,7 @@ pub(super) fn validate(manifest: &Value) -> Result<Vec<ProjectAttachment>> {
         }
     }
     let nodes = ids(manifest, "nodes", 20_000)?;
-    if nodes.is_empty() {
+    if nodes.is_empty() && !allow_empty {
         return invalid("project must contain at least one node");
     }
     for node in nodes.values() {
