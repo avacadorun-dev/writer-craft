@@ -43,3 +43,23 @@ A table wider than its writing column SHALL remain fully reachable through local
 #### Scenario: Typography or width changes with a visible table caret
 - **WHEN** the native component is remeasured after a width, typography, media or document revision change
 - **THEN** presentation offsets clamp to real tracks, the previously visible semantic caret remains reachable, and ordinary prose and persisted table widths remain unchanged by scrolling
+
+### Requirement: Whole-table node selection
+
+The native rich session SHALL support a guarded whole-table node selection distinct from text selection and rectangular cell selection, matching the original explicit `allowTableNodeSelection: true` configuration. Its native outline, semantic target, clipboard publication, deletion, reversible history and arrow navigation SHALL remain coherent for ordinary, wide and nested tables. A whole-table node selection SHALL NOT be silently converted into a cell rectangle.
+
+#### Scenario: A complete table is selected and copied
+- **WHEN** the author selects the table node through a native table-selection entry point
+- **THEN** one bounded table outline identifies that exact node and Copy publishes the complete structured table with spans, widths, retained metadata and nested content without modifying the document
+
+#### Scenario: A complete table is cut or deleted
+- **WHEN** Cut publication succeeds or Delete is authorized for the selected table node
+- **THEN** the exact table is removed atomically with a valid surrounding insertion target, and Undo restores its original rich tree and whole-table selection
+
+#### Scenario: A table selection is left through arrow navigation
+- **WHEN** an arrow moves before or after the selected table according to the source-compatible block navigation rule
+- **THEN** a valid nearby semantic text/node target receives focus and is revealed through the same bounded viewport projection
+
+#### Scenario: A captured selected table becomes stale
+- **WHEN** a command or clipboard acknowledgement references an older revision, a different session or a changed table snapshot
+- **THEN** it refuses mutation and preserves the current document, selection and history
