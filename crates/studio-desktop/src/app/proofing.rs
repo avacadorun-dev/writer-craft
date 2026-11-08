@@ -300,7 +300,7 @@ fn visible_chunks(document: &RichTree, visible: &[Selection]) -> Result<Vec<Chun
         if left > 0 {
             let skip = chars
                 .iter()
-                .position(|character| !character.is_alphabetic())
+                .position(|character| lexical_boundary(*character))
                 .unwrap_or(chars.len());
             chars.drain(..skip);
             start += skip;
@@ -308,7 +308,7 @@ fn visible_chunks(document: &RichTree, visible: &[Selection]) -> Result<Vec<Chun
         if !reached_end
             && let Some(last) = chars
                 .iter()
-                .rposition(|character| !character.is_alphabetic())
+                .rposition(|character| lexical_boundary(*character))
         {
             chars.truncate(last + 1);
         }
@@ -318,7 +318,7 @@ fn visible_chunks(document: &RichTree, visible: &[Selection]) -> Result<Vec<Chun
         for (index, character) in chars.iter().copied().enumerate() {
             text.push(character);
             count += character.len_utf16();
-            if count >= CHUNK_UTF16 && !character.is_alphabetic() {
+            if count >= CHUNK_UTF16 && lexical_boundary(character) {
                 if count <= CHUNK_UTF16 + 192 {
                     output.push(Chunk {
                         block_id: id.into(),
@@ -343,6 +343,33 @@ fn visible_chunks(document: &RichTree, visible: &[Selection]) -> Result<Vec<Chun
         }
     }
     Ok(output)
+}
+
+// Scheduling boundaries are deliberately independent of language-specific spelling.
+// In particular, combining marks stay with their word instead of splitting its chunk.
+fn lexical_boundary(character: char) -> bool {
+    character.is_whitespace()
+        || matches!(
+            character,
+            '.' | ','
+                | ';'
+                | ':'
+                | '!'
+                | '?'
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '、'
+                | '。'
+                | '，'
+                | '；'
+                | '：'
+                | '！'
+                | '？'
+        )
 }
 
 /// Reader scalars retain their canonical positions. Inline code and nontext atoms
@@ -476,6 +503,13 @@ mod tests {
         assert!(state.cache.is_empty());
         Ok(())
     }
+    #[test]
+    fn scheduling_never_splits_at_a_combining_mark() {
+        assert!(!lexical_boundary('\u{301}'));
+        assert!(lexical_boundary(' '));
+        assert!(lexical_boundary('。'));
+    }
+
     #[test]
     fn code_blocks_and_nonvisible_content_are_not_analyzed() -> TestResult {
         let document = RichTree::from_json(
