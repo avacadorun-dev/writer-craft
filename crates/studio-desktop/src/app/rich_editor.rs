@@ -62,6 +62,11 @@ impl RichState {
         }))
     }
 
+    #[cfg(test)]
+    pub(super) fn pending_proof_count(&self) -> usize {
+        self.pending_proofs.len()
+    }
+
     pub(super) fn dialog_open(&self) -> bool {
         self.dialog.is_some()
     }
