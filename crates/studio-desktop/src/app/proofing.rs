@@ -504,10 +504,26 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn scheduling_never_splits_at_a_combining_mark() {
-        assert!(!lexical_boundary('\u{301}'));
-        assert!(lexical_boundary(' '));
-        assert!(lexical_boundary('。'));
+    fn scheduling_keeps_a_decomposed_word_whole_at_the_chunk_boundary() -> TestResult {
+        let text = format!("{} e\u{301}clair next", "a ".repeat(511));
+        let document = RichTree::plain("p", &text)?;
+        let chunks = visible_chunks(&document, &[range(0, text.chars().count())])
+            .map_err(|_| "chunk projection")?;
+        assert!(
+            chunks
+                .iter()
+                .any(|chunk| chunk.text.ends_with("e\u{301}clair "))
+        );
+        assert!(!chunks.iter().any(|chunk| chunk.text.ends_with("e\u{301}")));
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| chunk.text.as_str())
+                .collect::<String>(),
+            text
+        );
+        assert_eq!(document.block_text("p")?, text);
+        Ok(())
     }
 
     #[test]
