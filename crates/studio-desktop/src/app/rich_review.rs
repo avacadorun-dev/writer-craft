@@ -548,3 +548,137 @@ fn excerpt(text: &str, limit: usize) -> String {
     }
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use craft_editor_model::ScalarOffset;
+
+    fn fixture() -> AppResult<(tempfile::TempDir, StudioApp, Document, Document)> {
+        let directory = tempfile::tempdir()?;
+        let creation = eframe::CreationContext::_new_kittest(egui::Context::default());
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("review.sqlite"),
+            false,
+            None,
+        )?;
+        let project = app.workspace.create_project("Synthetic review")?;
+        let first = app.workspace.create_rich_document(
+            &project.id,
+            "Repeated passage",
+            RichTree::plain("p", "Я😀 echo echo")?.to_json()?,
+        )?;
+        let second = app.workspace.create_rich_document(
+            &project.id,
+            "Another document",
+            RichTree::plain("q", "Different writing")?.to_json()?,
+        )?;
+        app.open_project(project)?;
+        app.open_document(first.clone())?;
+        app.rich
+            .as_mut()
+            .ok_or("missing rich session")?
+            .session
+            .set_selection(Selection {
+                anchor: DocPoint {
+                    block_id: "p".into(),
+                    offset: ScalarOffset(8),
+                },
+                head: DocPoint {
+                    block_id: "p".into(),
+                    offset: ScalarOffset(12),
+                },
+            })?;
+        Ok((directory, app, first, second))
+    }
+
+    #[test]
+    fn frozen_review_selection_should_reveal_its_exact_document_after_navigation() -> AppResult<()>
+    {
+        let (_directory, mut app, first, second) = fixture()?;
+        app.capture_review_selection()?;
+        let attachment = app
+            .rich_review
+            .attachment
+            .clone()
+            .ok_or("missing attachment")?;
+        assert_eq!(attachment.ranges[0].start, ScalarOffset(8));
+        app.open_document(second)?;
+        assert_eq!(app.rich_review.attachment.as_ref(), Some(&attachment));
+        app.reveal_review_selection()?;
+        assert_eq!(
+            app.document.as_ref().map(|document| document.id.as_str()),
+            Some(first.id.as_str())
+        );
+        let selection = app
+            .rich
+            .as_ref()
+            .and_then(|rich| rich.session.selection())
+            .ok_or("missing revealed selection")?;
+        assert_eq!(
+            (selection.anchor.offset, selection.head.offset),
+            (ScalarOffset(8), ScalarOffset(12))
+        );
+        assert_eq!(app.workspace.document(&first.id)?, first);
+        Ok(())
+    }
+
+    #[test]
+    fn native_review_controller_should_stage_apply_and_undo_without_flattening_or_early_save()
+    -> AppResult<()> {
+        let (_directory, mut app, first, _) = fixture()?;
+        app.capture_review_selection()?;
+        app.rich_review.replacements[0] = "changed".into();
+        app.stage_rich_selected_edit()?;
+        let proposal = app.rich_review.selected.clone().ok_or("missing proposal")?;
+        assert_eq!(app.workspace.document(&first.id)?, first);
+        app.act_rich_proposal(&proposal.summary.id, ProposalStatus::Applied)?;
+        assert_eq!(app.body, "Я😀 echo changed");
+        assert_eq!(
+            app.rich
+                .as_ref()
+                .ok_or("missing applied native session")?
+                .session
+                .document()
+                .to_json()?,
+            app.document
+                .as_ref()
+                .and_then(|document| document.rich_json.clone())
+                .ok_or("missing applied canonical tree")?
+        );
+        app.act_rich_proposal(&proposal.summary.id, ProposalStatus::Undone)?;
+        assert_eq!(
+            app.document
+                .as_ref()
+                .and_then(|document| document.rich_json.as_ref()),
+            first.rich_json.as_ref()
+        );
+        assert_eq!(app.workspace.rich_revisions(&first.id)?.len(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_selection_should_refuse_after_a_formatting_only_save_and_keep_proposed_wording()
+    -> AppResult<()> {
+        let (_directory, mut app, first, _) = fixture()?;
+        app.capture_review_selection()?;
+        app.rich_review.replacements[0] = "Preserved proposed wording".into();
+        let mut changed = first.rich_json.clone().ok_or("missing original tree")?;
+        changed["content"][0]["content"][0]["marks"] = serde_json::json!([{"type":"italic"}]);
+        let formatted = app.workspace.save_rich_document(&first.id, 1, changed)?;
+        app.open_document(formatted.clone())?;
+        assert!(app.stage_rich_selected_edit().is_err());
+        assert_eq!(
+            app.rich_review.replacements[0],
+            "Preserved proposed wording"
+        );
+        assert_eq!(app.workspace.document(&first.id)?, formatted);
+        assert!(
+            app.workspace
+                .rich_proposals(&first.project_id, &first.id, None, 16)?
+                .is_empty()
+        );
+        Ok(())
+    }
+}
