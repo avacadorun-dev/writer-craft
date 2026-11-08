@@ -176,6 +176,19 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Enter one folder name without separators or reserved filenames.",
+        [
+            "Введите одно название папки без разделителей пути и зарезервированных имён.",
+            "Enter one folder name without separators or reserved filenames.",
+            "Geben Sie einen Ordnernamen ohne Pfadtrenner oder reservierte Dateinamen ein.",
+            "Saisissez un nom de dossier sans séparateur de chemin ni nom réservé.",
+            "Introduce un nombre de carpeta sin separadores de ruta ni nombres reservados.",
+            "Introduza um nome de pasta sem separadores de caminho nem nomes reservados.",
+            "请输入一个文件夹名称，不含路径分隔符或保留名称。",
+            "パス区切り文字や予約済みファイル名を使わず、フォルダー名を1つ入力してください。",
+        ],
+    ),
+    (
         "The project structure changed. Refresh the project before continuing.",
         [
             "Структура проекта изменилась. Обновите проект перед продолжением.",
