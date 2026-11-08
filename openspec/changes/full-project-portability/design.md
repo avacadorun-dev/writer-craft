@@ -19,3 +19,9 @@ native Value. The 1 GiB native transport guard is finite and makes no universal 
 
 Schema 8 adds scoped evidence object/reference tables and migration tests after the qualified native
 baseline. No imported checkpoint or staged change populates trusted replay/proposal tables.
+
+## Streamed native Markdown/artifact folder
+
+The concrete format-2 layout/control contract is in [portable folder format2](../../../docs/architecture/PORTABLE_FOLDER_FORMAT_2.md). The current saved reading projection shares the canonical preparation transaction and persists in its private job index. Transfer materializes metadata/path maps only, then renders one saved document or current graph at a time through the established Markdown converter. Reading indexes, file inventories, digest mappings and conversion reports are paged. All canonical payloads use exact prepared object capabilities; original media files can serve both reading and canonical mapping roles without a second encoded copy solely for transport.
+
+ADR-014's exact cap-std directory capability confines member reads/writes. A new directory is created exclusively, opened and checked empty before its incomplete marker; all later I/O is relative to the pinned root and uses exclusive file creation. No recursive cleanup or merge is permitted. The final controls must still equal the prepared publication intent, then the untrusted folder validator rehashes every file and inventories actual members before the incomplete marker is removed. Restoring edited reading files is explicitly refused rather than quietly importing older canonical content. Complete-project export is the first qualified slice; selected-document stream/privacy and localized native interaction remain separate required work.

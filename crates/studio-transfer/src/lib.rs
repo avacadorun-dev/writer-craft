@@ -6,7 +6,9 @@
 #![deny(missing_docs)]
 
 mod canonical_archive;
+mod canonical_folder;
 mod canonical_reader;
+mod canonical_reading;
 mod markdown_render;
 mod portable_file;
 mod portable_markdown;
@@ -15,6 +17,9 @@ mod portable_selection;
 mod project_archive;
 pub use canonical_archive::{
     export_canonical_project_archive_file, write_canonical_project_archive,
+};
+pub use canonical_folder::{
+    CanonicalFolderReceipt, CanonicalProjectFolder, export_canonical_project_folder,
 };
 pub use canonical_reader::CanonicalProjectArchive;
 pub use portable_file::{PortableFileReceipt, export_project_archive_file};

@@ -648,7 +648,7 @@ fn reading_index(plan: &ExportPlan) -> Result<String> {
     }
     Ok(out)
 }
-fn rewrite_canvas_resources(
+pub(super) fn rewrite_canvas_resources(
     content: &mut Value,
     current: &str,
     nodes: &HashMap<String, String>,
@@ -669,7 +669,7 @@ fn rewrite_canvas_resources(
     }
     Ok(())
 }
-fn resource_path<'a>(
+pub(super) fn resource_path<'a>(
     resource: &Value,
     nodes: &'a HashMap<String, String>,
     canvases: &'a HashMap<String, String>,
@@ -690,7 +690,7 @@ fn resource_path<'a>(
 fn asset_key(kind: &str, id: &str) -> String {
     format!("{kind}:{id}")
 }
-fn artifact_extension(attachment: &ProjectAttachment) -> String {
+pub(super) fn artifact_extension(attachment: &ProjectAttachment) -> String {
     let known = extension(&attachment.media_type);
     if known != ".bin" {
         return known.into();

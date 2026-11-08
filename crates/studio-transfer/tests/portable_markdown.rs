@@ -597,3 +597,212 @@ fn changed_output_bytes_should_never_receive_a_completion_marker() {
     assert!(destination.join(".incomplete").is_file());
     assert!(!destination.join(".writercraft/export.json").exists());
 }
+
+#[test]
+fn native_stream_folder_should_render_all_source_blocks_and_restore_saved_history_and_artifacts() {
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (worker, project) = imported(&database);
+    let mut exporter = ProjectPortableExportWorker::open(&database).unwrap();
+    let captured = exporter
+        .prepare(&project, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Readable project Автор 😀");
+    let receipt = export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(receipt.scope, "complete-project");
+    assert!(!output.join(".incomplete").exists());
+    let mut reader = CanonicalProjectFolder::open(&output).unwrap();
+    let canonical: Value = serde_json::from_slice(reader.root_bytes()).unwrap();
+    assert_eq!(canonical["formatVersion"], 2);
+    let mut restored = ProjectImportWorker::open(directory.path().join("restored.sqlite")).unwrap();
+    let result = reader
+        .restore(&mut restored, &ProjectTransferCancellation::default())
+        .unwrap();
+    let native = restored
+        .workspace()
+        .resolve_project_resource(&result.project_id, "node", "selected")
+        .unwrap();
+    assert_eq!(
+        restored.workspace().rich_revisions(&native).unwrap().len(),
+        2
+    );
+    let snapshot = restored
+        .workspace()
+        .project_export_snapshot(&result.project_id)
+        .unwrap();
+    assert_eq!(snapshot.attachments().len(), 3);
+    assert_eq!(
+        snapshot
+            .assets()
+            .load("image", &ProjectTransferCancellation::default())
+            .unwrap(),
+        fixture().1.0["media/image.png"]
+    );
+    assert_eq!(
+        restored
+            .workspace()
+            .project_canvas(&result.project_id, "board")
+            .unwrap()
+            .revision
+            .content["nodes"][0]["file"],
+        "writers-studio://media/image"
+    );
+    let text = output_text(&output);
+    for required in [
+        "## Visible heading",
+        "```mermaid",
+        "flowchart LR",
+        "E=mc^2",
+        "> [!WARNING]",
+        "Image caption",
+        "```rust",
+        "Cell \\| value",
+        "original: kept",
+    ] {
+        assert!(
+            text.contains(required),
+            "Missing reading feature {required:?}"
+        );
+    }
+    assert!(receipt.conversion_count > 0);
+}
+#[test]
+fn changed_reading_file_should_stop_native_restore_before_any_project_is_created() {
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (_worker, project) = imported(&database);
+    let captured = ProjectPortableExportWorker::open(&database)
+        .unwrap()
+        .prepare(&project, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Export");
+    export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let mut reader = CanonicalProjectFolder::open(&output).unwrap();
+    std::fs::write(output.join("README.md"), "Changed reading view").unwrap();
+    let mut restored = ProjectImportWorker::memory().unwrap();
+    assert!(
+        reader
+            .restore(&mut restored, &ProjectTransferCancellation::default())
+            .is_err()
+    );
+    assert!(restored.workspace().list_projects().unwrap().is_empty());
+}
+#[test]
+fn native_folder_should_refuse_incomplete_or_unexpected_members_and_preserve_existing_destinations()
+{
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (_worker, project) = imported(&database);
+    let captured = ProjectPortableExportWorker::open(&database)
+        .unwrap()
+        .prepare(&project, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Export");
+    export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let original = std::fs::read(output.join("README.md")).unwrap();
+    assert!(
+        export_canonical_project_folder(
+            &captured,
+            &database,
+            &output,
+            &ProjectTransferCancellation::default()
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read(output.join("README.md")).unwrap(), original);
+    std::fs::write(output.join(".incomplete"), "not complete").unwrap();
+    assert!(CanonicalProjectFolder::open(&output).is_err());
+    std::fs::remove_file(output.join(".incomplete")).unwrap();
+    std::fs::write(output.join("unlisted.txt"), "Unlisted data").unwrap();
+    assert!(
+        CanonicalProjectFolder::open(&output)
+            .unwrap()
+            .preflight(&ProjectTransferCancellation::default())
+            .is_err()
+    );
+}
+#[cfg(unix)]
+#[test]
+fn opened_native_folder_should_stay_pinned_when_its_ambient_path_is_replaced() {
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (_worker, project) = imported(&database);
+    let captured = ProjectPortableExportWorker::open(&database)
+        .unwrap()
+        .prepare(&project, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Export");
+    export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let mut reader = CanonicalProjectFolder::open(&output).unwrap();
+    std::fs::rename(&output, directory.path().join("Moved original")).unwrap();
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join(".incomplete"), "Replacement path").unwrap();
+    assert!(
+        reader
+            .preflight(&ProjectTransferCancellation::default())
+            .is_ok()
+    );
+    assert!(CanonicalProjectFolder::open(&output).is_err());
+}
+#[cfg(unix)]
+#[test]
+fn native_folder_should_refuse_inner_symlink_even_when_target_bytes_match() {
+    use studio_core::ProjectPortableExportWorker;
+    use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("source.sqlite");
+    let (_worker, project) = imported(&database);
+    let captured = ProjectPortableExportWorker::open(&database)
+        .unwrap()
+        .prepare(&project, &ProjectTransferCancellation::default())
+        .unwrap();
+    let output = directory.path().join("Export");
+    export_canonical_project_folder(
+        &captured,
+        &database,
+        &output,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    let mut reader = CanonicalProjectFolder::open(&output).unwrap();
+    let outside = directory.path().join("outside.md");
+    std::fs::rename(output.join("README.md"), &outside).unwrap();
+    std::os::unix::fs::symlink(&outside, output.join("README.md")).unwrap();
+    assert!(
+        reader
+            .preflight(&ProjectTransferCancellation::default())
+            .is_err()
+    );
+}

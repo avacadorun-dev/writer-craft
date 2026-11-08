@@ -144,3 +144,37 @@ payload objects instead of repeatedly embedding complete source/native/history J
 - WHEN a native project exceeds explicit finite transport/resource guards
 - THEN the application reports the specific unsupported size/count without truncation or a universal
   portability claim and still identifies the separate whole-workspace backup capability.
+
+### Requirement: Verified native reading folder
+
+A native format-2 Markdown/artifact folder SHALL capture saved current reader projections in the
+same transaction as canonical records, retain histories as hash-addressed objects, page inventories
+and conversion reports, and keep a small completion root. Each physical path/byte SHALL count
+against explicit native transport guards even when several original artifact names share a digest.
+
+#### Scenario: Completed folder with reading changes
+
+- WHEN an author restores a folder whose Markdown, JSON Canvas, artifact, canonical object or
+  control page differs from its recorded bytes
+- THEN restoration stops before any project becomes visible and does not silently treat edited
+  reading files as unchanged canonical state.
+
+#### Scenario: Selected directory is replaced or contains a symlink
+
+- WHEN an opened folder's ambient path is renamed/replaced or an inner member/ancestor becomes a
+  symlink or special file
+- THEN relative capabilities retain the opened directory authority, no ambient member path escapes
+  it, and unsupported members stop restoration without an unsafe platform-specific shim.
+
+#### Scenario: Physical artifact aliases
+
+- WHEN separate logical artifacts share the same original bytes
+- THEN readable artifact names remain distinct, one explicit canonical digest mapping may refer to
+  a verified reading member, and physical file/byte accounting includes every emitted name.
+
+#### Scenario: Native folder boundary remains incomplete
+
+- WHEN an operation is cancelled, storage fails, a completion control changes, or an existing
+  destination collides
+- THEN no success receipt exists, an owned partial output remains visibly incomplete, existing
+  user data is not overwritten and no recursive cleanup removes unrelated files.
