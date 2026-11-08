@@ -14,7 +14,7 @@ workspace = true
 
 [features]
 default = []
-editor-preview = ["dep:craft-canvas-model", "dep:craft-canvas-egui", "dep:craft-editor-egui", "dep:craft-editor-model", "dep:craft-editor-render", "dep:uuid", "dep:base64", "dep:sha2", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+editor-preview = ["dep:craft-media-preview", "dep:craft-media-egui", "dep:craft-canvas-model", "dep:craft-canvas-egui", "dep:craft-editor-egui", "dep:craft-editor-model", "dep:craft-editor-render", "dep:uuid", "dep:base64", "dep:sha2", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 
 [dependencies]
 eframe.workspace = true
@@ -48,5 +48,13 @@ workspace = true
 optional = true
 
 [dependencies.craft-canvas-egui]
+workspace = true
+optional = true
+
+[dependencies.craft-media-preview]
+workspace = true
+optional = true
+
+[dependencies.craft-media-egui]
 workspace = true
 optional = true

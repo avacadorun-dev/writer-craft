@@ -176,6 +176,97 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Some media content could not be previewed. The original file is preserved.",
+        [
+            "Часть содержимого не удалось показать. Исходный файл сохранён.",
+            "Some media content could not be previewed. The original file is preserved.",
+            "Einige Medieninhalte konnten nicht angezeigt werden. Die Originaldatei bleibt erhalten.",
+            "Une partie du média n’a pas pu être affichée. Le fichier original est conservé.",
+            "No se pudo mostrar parte del contenido. El archivo original se conserva.",
+            "Parte do conteúdo não pôde ser exibida. O arquivo original está preservado.",
+            "部分媒体内容无法预览。原始文件已保留。",
+            "一部のメディア内容を表示できませんでした。元のファイルは保持されています。",
+        ],
+    ),
+    (
+        "Preview unavailable. The original file is preserved.",
+        [
+            "Предпросмотр недоступен. Исходный файл сохранён.",
+            "Preview unavailable. The original file is preserved.",
+            "Vorschau nicht verfügbar. Die Originaldatei bleibt erhalten.",
+            "Aperçu indisponible. Le fichier original est conservé.",
+            "Vista previa no disponible. El archivo original se conserva.",
+            "Prévia indisponível. O arquivo original está preservado.",
+            "无法预览。原始文件已保留。",
+            "プレビューを表示できません。元のファイルは保持されています。",
+        ],
+    ),
+    (
+        "Loading media preview…",
+        [
+            "Загрузка предпросмотра…",
+            "Loading media preview…",
+            "Medienvorschau wird geladen…",
+            "Chargement de l’aperçu…",
+            "Cargando vista previa…",
+            "Carregando prévia…",
+            "正在加载媒体预览…",
+            "メディアプレビューを読み込み中…",
+        ],
+    ),
+    (
+        "Media preview",
+        [
+            "Предпросмотр файла",
+            "Media preview",
+            "Medienvorschau",
+            "Aperçu du média",
+            "Vista previa del archivo",
+            "Prévia do arquivo",
+            "媒体预览",
+            "メディアプレビュー",
+        ],
+    ),
+    (
+        "Next page",
+        [
+            "Следующая страница",
+            "Next page",
+            "Nächste Seite",
+            "Page suivante",
+            "Página siguiente",
+            "Próxima página",
+            "下一页",
+            "次のページ",
+        ],
+    ),
+    (
+        "Previous page",
+        [
+            "Предыдущая страница",
+            "Previous page",
+            "Vorherige Seite",
+            "Page précédente",
+            "Página anterior",
+            "Página anterior",
+            "上一页",
+            "前のページ",
+        ],
+    ),
+    (
+        "Page {page} of {pages}",
+        [
+            "Страница {page} из {pages}",
+            "Page {page} of {pages}",
+            "Seite {page} von {pages}",
+            "Page {page} sur {pages}",
+            "Página {page} de {pages}",
+            "Página {page} de {pages}",
+            "第 {page} 页，共 {pages} 页",
+            "{pages} ページ中 {page} ページ",
+        ],
+    ),
+    (
         "Import Writers Studio project",
         [
             "Импорт проекта Студии автора",

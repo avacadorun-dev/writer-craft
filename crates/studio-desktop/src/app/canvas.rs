@@ -1,4 +1,5 @@
 //! Native board projection over one project-scoped durable authority.
+use super::native_media::{MediaCache, MediaViewer};
 use super::*;
 use craft_canvas_egui::{
     CanvasIntent, CanvasView, CanvasViewConfig, CanvasViewHost, CanvasViewLabels, NodeBodyResponse,
@@ -102,6 +103,8 @@ pub(super) struct CanvasState {
     fit_on_open: bool,
     viewport_size: Vec2,
     resource: Option<CanvasResource>,
+    media: Option<MediaCache>,
+    media_viewer: Option<MediaViewer>,
 }
 impl CanvasState {
     pub(super) fn open(workspace: &Workspace, project: &str, id: &str) -> AppResult<Self> {
@@ -129,10 +132,12 @@ impl CanvasState {
             fit_on_open: true,
             viewport_size: Vec2::new(800.0, 600.0),
             resource: None,
+            media: None,
+            media_viewer: None,
         })
     }
     pub(super) fn modal_open(&self) -> bool {
-        self.text_editor.is_some()
+        self.text_editor.is_some() || self.media_viewer.is_some()
     }
     /// Navigation must wait for acknowledgement; a source dialog must be deliberately saved/cancelled.
     pub(super) fn blocks_navigation(&self) -> bool {
@@ -339,7 +344,11 @@ impl CanvasState {
                 let resource = extension.as_ref().and_then(|value| value.get("resource"));
                 let kind = resource.and_then(|value| value["kind"].as_str());
                 let id = resource.and_then(|value| value["id"].as_str());
-                if let (Some(kind @ ("document" | "canvas" | "media")), Some(id)) = (kind, id) {
+                if let (Some("media"), Some(id)) = (kind, id) {
+                    self.view.cancel_transient();
+                    self.media_viewer = Some(MediaViewer::new(id.into()));
+                    Ok(())
+                } else if let (Some(kind @ ("document" | "canvas")), Some(id)) = (kind, id) {
                     self.resource = Some(CanvasResource { project: self.project_id.clone(), kind: kind.into(), logical_id: id.into() });
                     Ok(())
                 } else {
@@ -547,9 +556,15 @@ impl CanvasState {
             self.fit_on_open = false;
             self.set_failure(result);
         }
+        let media = self
+            .media
+            .get_or_insert_with(|| MediaCache::new(database.to_owned()));
+        media.poll(ui.ctx());
         let mut host = CardBody {
             language: l,
             tokens,
+            project: &self.project_id,
+            media,
         };
         let output = self
             .view
@@ -570,6 +585,11 @@ impl CanvasState {
         language: Language,
         tokens: Tokens,
     ) {
+        if let (Some(media), Some(viewer)) = (&mut self.media, &mut self.media_viewer)
+            && media.viewer(ctx, &self.project_id, viewer, language, tokens)
+        {
+            self.media_viewer = None;
+        }
         let Some(editor) = &mut self.text_editor else {
             return;
         };
@@ -781,11 +801,13 @@ fn persist_candidate(
     }
 }
 
-struct CardBody {
+struct CardBody<'a> {
     language: Language,
     tokens: Tokens,
+    project: &'a str,
+    media: &'a mut MediaCache,
 }
-impl CanvasViewHost for CardBody {
+impl CanvasViewHost for CardBody<'_> {
     fn paint_body(
         &mut self,
         ui: &mut egui::Ui,
@@ -793,6 +815,16 @@ impl CanvasViewHost for CardBody {
         rect: egui::Rect,
         zoom: f64,
     ) -> NodeBodyResponse {
+        if let Some(id) = media_resource(node) {
+            return self.media.card(
+                ui,
+                self.project,
+                &id,
+                rect.size(),
+                self.language,
+                self.tokens,
+            );
+        }
         let color = self.tokens.text;
         let font = egui::FontId::proportional((14.0 * zoom as f32).clamp(8.0, 42.0));
         let text = match node.kind() {
@@ -809,11 +841,35 @@ impl CanvasViewHost for CardBody {
     }
 }
 
+/// Read only a source project logical reference; never turn the raw file body into a path.
+fn media_resource(node: &NodeRecord) -> Option<String> {
+    let extension: serde_json::Value =
+        serde_json::from_str(node.field("x-writers-studio")?.get()).ok()?;
+    let resource = extension.get("resource")?;
+    (resource["kind"].as_str()? == "media")
+        .then(|| resource["id"].as_str().map(str::to_owned))
+        .flatten()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    #[test]
+    fn media_reference_should_require_project_metadata_instead_of_trusting_a_raw_file_path()
+    -> TestResult {
+        let limits = CanvasLimits::default();
+        let json = r#"{"nodes":[{"id":"raw","type":"file","x":0,"y":0,"width":300,"height":180,"file":"/private/original.png"},{"id":"scoped","type":"file","x":320,"y":0,"width":300,"height":180,"file":"inert/path","x-writers-studio":{"resource":{"kind":"media","id":"original-media"},"future":{"keep":true}}}],"edges":[]}"#;
+        let document = CanvasDocument::parse(json, &limits)?;
+        assert_eq!(document.node("raw").and_then(media_resource), None);
+        assert_eq!(
+            document.node("scoped").and_then(media_resource).as_deref(),
+            Some("original-media")
+        );
+        assert_eq!(document.raw_json(), json);
+        Ok(())
+    }
     fn graph() -> serde_json::Value {
         json!({"nodes":[{"id":"card","type":"text","x":0,"y":0,"width":300,"height":180,"text":"Old 😀 text","x-writers-studio":{"card":{"typeId":"unknown","fields":{"opaque":[1,null]}},"future":{"keep":true}}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"keep":true}}})
     }

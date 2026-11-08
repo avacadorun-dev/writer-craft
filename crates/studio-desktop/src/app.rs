@@ -13,6 +13,8 @@ mod library;
 mod manuscript;
 mod native_capture;
 #[cfg(feature = "editor-preview")]
+mod native_media;
+#[cfg(feature = "editor-preview")]
 mod native_services;
 mod navigator;
 #[cfg(feature = "editor-preview")]

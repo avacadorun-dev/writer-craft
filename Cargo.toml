@@ -27,6 +27,8 @@ craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", re
 craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "26e71d1c2e0b611e0c46fc21980eccef4e01ab92" }
 craft-canvas-model = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "ca8b74aed8df0ab5db38308a3cf0ef235f3443a1" }
 craft-canvas-egui = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "ca8b74aed8df0ab5db38308a3cf0ef235f3443a1" }
+craft-media-preview = { git = "https://github.com/avacadorun-dev/craft-media-preview", rev = "f3705126177b694c4609f4e66799021000618bee", default-features = false, features = ["images", "pdf"] }
+craft-media-egui = { git = "https://github.com/avacadorun-dev/craft-media-preview", rev = "f3705126177b694c4609f4e66799021000618bee" }
 studio-core = { path = "crates/studio-core" }
 studio-transfer = { path = "crates/studio-transfer" }
 
@@ -49,3 +51,13 @@ strip = "none"
 [profile.release]
 lto = "thin"
 strip = "none"
+
+# Craft PDF's patched reader and raster must use the identical reviewed source.
+# Cargo ignores dependency-local patches; no upstream UI/window graph is adopted.
+[patch.crates-io]
+hayro = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
+hayro-interpret = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
+hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
+hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
+hayro-cmap = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
+hayro-postscript = { git = "https://github.com/storytold/craft-libs", rev = "0a9d1f48da9e0e61a2c7b602ba96ef1c4672bcd9" }
