@@ -117,6 +117,8 @@ struct Job {
 pub(super) struct ClipboardJobs {
     sender: SyncSender<Job>,
     receiver: Receiver<ClipboardCompletion>,
+    #[cfg(test)]
+    ready: std::collections::VecDeque<ClipboardCompletion>,
     epochs: Arc<Epochs>,
 }
 impl ClipboardJobs {
@@ -140,6 +142,8 @@ impl ClipboardJobs {
         Ok(Self {
             sender,
             receiver,
+            #[cfg(test)]
+            ready: std::collections::VecDeque::new(),
             epochs,
         })
     }
@@ -195,8 +199,25 @@ impl ClipboardJobs {
         advance(&self.epochs.writes).ok_or(SubmitFailureKind::EpochExhausted)?;
         Ok(())
     }
-    pub fn take_completed(&self) -> Vec<ClipboardCompletion> {
-        self.receiver.try_iter().collect()
+    pub fn take_completed(&mut self) -> Vec<ClipboardCompletion> {
+        #[cfg(test)]
+        {
+            let mut ready: Vec<_> = self.ready.drain(..).collect();
+            ready.extend(self.receiver.try_iter());
+            ready
+        }
+        #[cfg(not(test))]
+        {
+            self.receiver.try_iter().collect()
+        }
+    }
+    #[cfg(test)]
+    pub(super) fn wait_ready(&mut self) -> std::result::Result<(), mpsc::RecvTimeoutError> {
+        let completed = self
+            .receiver
+            .recv_timeout(std::time::Duration::from_secs(10))?;
+        self.ready.push_back(completed);
+        Ok(())
     }
     /// Apply only on the UI thread through the live session's one-shot guard. An absent session,
     /// superseding Copy/Cut intent or cancellation cannot delete or retarget writing.

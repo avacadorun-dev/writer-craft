@@ -596,3 +596,151 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod completion_save_tests {
+    use super::*;
+    use craft_editor_egui::clipboard::{ClipboardProvider, ClipboardResult};
+    use craft_editor_egui::{DocPoint, Selection};
+    use craft_editor_model::{Document as RichDocument, ScalarOffset};
+    use std::sync::Mutex;
+    #[derive(Default)]
+    struct Provider {
+        bytes: Mutex<ClipboardBundle>,
+    }
+    impl ClipboardProvider for Provider {
+        fn read(&self) -> ClipboardResult<ClipboardBundle> {
+            Err(ClipboardError::Read)
+        }
+        fn write(&self, bundle: &ClipboardBundle) -> ClipboardResult<()> {
+            *self.bytes.lock().map_err(|_| ClipboardError::Write)? = bundle.clone();
+            Ok(())
+        }
+        fn max_bytes(&self) -> usize {
+            1_000_000
+        }
+    }
+    fn complete_save_reopen_undo(cut: bool) -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let ctx = egui::Context::default();
+        let cc = eframe::CreationContext::_new_kittest(ctx.clone());
+        let mut app = StudioApp::new(
+            &cc,
+            directory.path().join("clipboard-save.sqlite"),
+            false,
+            None,
+        )?;
+        let project = app.workspace.create_project("Clipboard save")?;
+        let original = RichDocument::plain("p", "ABCDE")?;
+        let document =
+            app.workspace
+                .create_rich_document(&project.id, "Writing", original.to_json()?)?;
+        let anchor = app.workspace.capture_annotation_anchor(
+            &document.id,
+            document.revision,
+            "p",
+            ScalarOffset(4),
+            ScalarOffset(5),
+            "E",
+        )?;
+        let note = app.workspace.create_annotation(
+            &document.id,
+            document.revision,
+            anchor,
+            "Keep this tail note",
+        )?;
+        let provider = Arc::new(Provider::default());
+        app.clipboard = Some(provider.clone());
+        app.open_project(project)?;
+        let rich = app.rich.as_mut().ok_or("missing session")?;
+        rich.session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(1),
+            },
+            head: DocPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(4),
+            },
+        })?;
+        let request = if cut {
+            rich.session.begin_cut()?.ok_or("missing cut")?
+        } else {
+            rich.session.begin_paste(ClipboardBundle {
+                plain: "X".into(),
+                ..Default::default()
+            })?
+        };
+        app.submit_clipboard_request(request, Some(app.clipboard_scope()?), &ctx);
+        app.clipboard_jobs.wait_ready()?;
+        // No canvas or note decoration paint runs between worker completion and durable save.
+        app.clipboard_frame_start(&ctx);
+        assert!(app.dirty.is_some());
+        let expected_text = if cut { "AE" } else { "AXE" };
+        let expected_start = if cut { 1 } else { 2 };
+        let expected = app
+            .rich
+            .as_ref()
+            .ok_or("missing session")?
+            .session
+            .document()
+            .to_json()?;
+        app.save()?;
+        let rich = app.rich.as_mut().ok_or("missing session")?;
+        assert!(rich.session.take_pending_changes().is_empty());
+        assert_eq!(rich.pending_proof_count(), 0);
+        let reopened = Workspace::open(&app.database)?;
+        let saved = reopened.document(&document.id)?;
+        assert_eq!(saved.body, expected_text);
+        assert_eq!(saved.rich_json, Some(expected));
+        assert_eq!(saved.revision, document.revision + 1);
+        let shifted = reopened.annotation(&note.id)?;
+        assert_eq!(shifted.anchor.start, ScalarOffset(expected_start));
+        assert_eq!(shifted.anchor.end, ScalarOffset(expected_start + 1));
+        assert_eq!(shifted.anchor.exact_text, "E");
+        assert_eq!(shifted.anchor_status, studio_core::AnchorStatus::Attached);
+        assert!(reopened.rich_draft(&document.id)?.is_none());
+        drop(reopened);
+        rich.session.undo()?;
+        assert!(!rich.session.can_undo());
+        app.dirty = Some(Instant::now());
+        app.save()?;
+        let reopened = Workspace::open(&app.database)?;
+        let restored = reopened.document(&document.id)?;
+        assert_eq!(restored.rich_json, Some(original.to_json()?));
+        assert_eq!(restored.body, "ABCDE");
+        let restored_note = reopened.annotation(&note.id)?;
+        assert_eq!(restored_note.anchor, note.anchor);
+        assert_eq!(
+            restored_note.anchor_status,
+            studio_core::AnchorStatus::Attached
+        );
+        assert_eq!(restored_note.note, note.note);
+        assert!(
+            app.rich
+                .as_mut()
+                .ok_or("missing session")?
+                .session
+                .take_pending_changes()
+                .is_empty()
+        );
+        assert_eq!(
+            app.rich
+                .as_ref()
+                .ok_or("missing session")?
+                .pending_proof_count(),
+            0
+        );
+        Ok(())
+    }
+    #[test]
+    fn worker_paste_save_before_canvas_paint_reopens_exact_content_and_maps_note_then_one_undo_restores()
+    -> AppResult<()> {
+        complete_save_reopen_undo(false)
+    }
+    #[test]
+    fn acknowledged_worker_cut_save_before_canvas_paint_reopens_exact_content_and_maps_note_then_one_undo_restores()
+    -> AppResult<()> {
+        complete_save_reopen_undo(true)
+    }
+}
