@@ -26,6 +26,8 @@ mod rendering;
 mod review;
 #[cfg(feature = "editor-preview")]
 mod rich_editor;
+#[cfg(feature = "editor-preview")]
+mod rich_review;
 mod settings;
 mod storage;
 use crate::{
@@ -79,6 +81,8 @@ pub struct StudioApp {
     rich: Option<rich_editor::RichState>,
     #[cfg(feature = "editor-preview")]
     notes: notes::NotesState,
+    #[cfg(feature = "editor-preview")]
+    rich_review: rich_review::RichReviewState,
     #[cfg(feature = "editor-preview")]
     recovery: Option<recovery::RecoveryDialog>,
     #[cfg(feature = "editor-preview")]
@@ -216,6 +220,8 @@ impl StudioApp {
             rich: None,
             #[cfg(feature = "editor-preview")]
             notes: notes::NotesState::default(),
+            #[cfg(feature = "editor-preview")]
+            rich_review: rich_review::RichReviewState::default(),
             #[cfg(feature = "editor-preview")]
             recovery: None,
             #[cfg(feature = "editor-preview")]
@@ -682,7 +688,8 @@ impl StudioApp {
     fn rich_modal_open(&self) -> bool {
         #[cfg(feature = "editor-preview")]
         {
-            self.notes.modal_open()
+            self.rich_review.full_open
+                || self.notes.modal_open()
                 || self.recovery.is_some()
                 || self
                     .rich
@@ -796,6 +803,8 @@ impl eframe::App for StudioApp {
         }
         let had_modal = self.modal_open();
         self.full_review_dialog(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.rich_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
         self.storage_dialog(&ctx, t);

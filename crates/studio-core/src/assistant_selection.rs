@@ -299,4 +299,85 @@ impl Workspace {
         }
         Ok((first, last))
     }
+    /// Prepare one literal replacement per captured supported block without touching omitted blocks.
+    /// Project/revision/ranges are revalidated; typed commands are persisted by normal review authority.
+    pub fn stage_assistant_selection_replacements(
+        &self,
+        project: &str,
+        attachment: &AssistantSelectionAttachment,
+        replacements: &[String],
+        reason: &str,
+    ) -> Result<super::RichProposal> {
+        self.assistant_selection_boundaries(project, attachment)?;
+        if replacements.len() != attachment.ranges.len() {
+            return Err(unavailable());
+        }
+        let current = self.assistant_selection_document(
+            project,
+            &attachment.document_id,
+            attachment.base_revision,
+        )?;
+        let document = tree(&current)?;
+        let mut commands = Vec::new();
+        for (range, replacement) in attachment.ranges.iter().zip(replacements).rev() {
+            if replacement == &range.expected_text {
+                continue;
+            }
+            super::validate_body(replacement)?;
+            let projection = projection(&document, &range.block_id)?;
+            let from = projection
+                .point(range.start, true)
+                .map_err(|_| unavailable())?;
+            let to = projection
+                .point(range.end, false)
+                .map_err(|_| unavailable())?;
+            if from.block_id == to.block_id {
+                let expected = document
+                    .block_text(&from.block_id)
+                    .map_err(|_| unavailable())?
+                    .chars()
+                    .skip(from.offset.0)
+                    .take(to.offset.0 - from.offset.0)
+                    .collect();
+                commands.push(craft_editor_model::Command::ReplaceText {
+                    range: craft_editor_model::TextRange {
+                        block_id: from.block_id,
+                        start: from.offset,
+                        end: to.offset,
+                    },
+                    expected,
+                    replacement: replacement.clone(),
+                });
+                continue;
+            }
+            let content = if replacement.is_empty() {
+                vec![]
+            } else {
+                vec![Node::text(replacement)]
+            };
+            let (command, _) = craft_editor_model::plan_slice_replacement(
+                &document,
+                from,
+                to,
+                content,
+                0,
+                0,
+                || Ok(uuid::Uuid::new_v4().to_string()),
+            )
+            .map_err(|error| {
+                StudioError::Validation(format!("Cannot prepare selected edit: {error}"))
+            })?;
+            commands.push(command);
+        }
+        let revision = u64::try_from(attachment.base_revision).map_err(|_| unavailable())?;
+        self.stage_rich_proposal(
+            project,
+            &attachment.document_id,
+            craft_editor_model::Transaction {
+                base_revision: craft_editor_model::Revision(revision),
+                commands,
+            },
+            reason,
+        )
+    }
 }

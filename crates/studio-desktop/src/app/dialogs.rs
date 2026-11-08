@@ -154,7 +154,7 @@ impl StudioApp {
                     ui.label(&message.details);
                 });
                 ui.add_space(12.0);
-                if ui.button(l.text("Understood")).clicked() {
+                if components::action(ui, l.text("Understood"), true, Some(t)).clicked() {
                     self.error = None;
                 }
             });

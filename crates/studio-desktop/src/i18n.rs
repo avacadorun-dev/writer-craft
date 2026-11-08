@@ -176,6 +176,45 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Reveal selection",
+        [
+            "Показать выделение",
+            "Reveal selection",
+            "Auswahl anzeigen",
+            "Afficher la sélection",
+            "Mostrar selección",
+            "Mostrar seleção",
+            "显示所选内容",
+            "選択箇所を表示",
+        ],
+    ),
+    (
+        "Load more proposals",
+        [
+            "Загрузить ещё предложения",
+            "Load more proposals",
+            "Weitere Vorschläge laden",
+            "Charger plus de propositions",
+            "Cargar más propuestas",
+            "Carregar mais propostas",
+            "加载更多建议",
+            "提案をさらに読み込む",
+        ],
+    ),
+    (
+        "Revision {revision}",
+        [
+            "Версия {revision}",
+            "Revision {revision}",
+            "Revision {revision}",
+            "Révision {revision}",
+            "Revisión {revision}",
+            "Revisão {revision}",
+            "修订 {revision}",
+            "リビジョン {revision}",
+        ],
+    ),
+    (
         "Canvas",
         [
             "Доска",

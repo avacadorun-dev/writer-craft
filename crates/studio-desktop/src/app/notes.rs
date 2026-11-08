@@ -868,6 +868,22 @@ impl StudioApp {
             popup = popup.at_position(visible_menu_anchor(visible, caret));
         }
         popup.show(|ui| {
+            let review_allowed = self
+                .rich
+                .as_ref()
+                .and_then(|rich| rich.session.selection())
+                .is_some_and(|selection| selection.anchor != selection.head);
+            if ui
+                .add_enabled(
+                    review_allowed,
+                    egui::Button::new(l.text("Prepare an edit from selection")),
+                )
+                .clicked()
+            {
+                let result = self.capture_review_selection();
+                self.record_error(result);
+                ui.close();
+            }
             if ui
                 .add_enabled(allowed, egui::Button::new(l.text("Add note")))
                 .on_disabled_hover_text(l.text(reason.unwrap_or("Add note")))

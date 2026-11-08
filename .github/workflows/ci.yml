@@ -53,6 +53,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test the complete workspace
         run: cargo test --workspace --locked
+      - name: Test the native editor and integration controllers
+        run: cargo test --workspace --all-features --locked
       - name: Check all workspace targets
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Qualify the isolated editor-model hypothesis

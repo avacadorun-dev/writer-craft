@@ -500,3 +500,98 @@ fn schema_eight_upgrade_should_preserve_canonical_data_and_create_an_empty_revie
             .is_empty()
     );
 }
+
+#[test]
+fn selected_multi_block_review_should_preserve_omitted_tables_and_exact_duplicate_occurrences() {
+    use craft_editor_model::TextPoint;
+    let (workspace, project, document) = fixture();
+    let mut original = content();
+    let table = json!({"type":"table","attrs":{"blockId":"table","vendor":"keep"},"content":[{"type":"tableRow","content":[{"type":"tableCell","attrs":{"colspan":1,"rowspan":1,"colwidth":[180]},"content":[{"type":"paragraph","attrs":{"blockId":"cell"},"content":[{"type":"text","text":"Not selected"}]}]}]}]});
+    original["content"]
+        .as_array_mut()
+        .unwrap()
+        .insert(1, table.clone());
+    let document = workspace
+        .save_rich_document(&document.id, 1, original.clone())
+        .unwrap();
+    let selection = workspace
+        .capture_assistant_selection(
+            &project.id,
+            &document.id,
+            2,
+            &TextPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(8),
+            },
+            &TextPoint {
+                block_id: "q".into(),
+                offset: ScalarOffset(5),
+            },
+        )
+        .unwrap();
+    assert_eq!(selection.ranges.len(), 2);
+    let proposal = workspace
+        .stage_assistant_selection_replacements(
+            &project.id,
+            &selection,
+            &["changed".into(), "Fresh".into()],
+            "Two exact ranges",
+        )
+        .unwrap();
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    let applied = workspace
+        .apply_rich_proposal(&project.id, &proposal.summary.id)
+        .unwrap();
+    let tree = applied.rich_json.unwrap();
+    assert_eq!(tree["content"][1], table);
+    assert_eq!(tree["content"][0]["content"][0]["text"], "Я😀 echo changed");
+    assert_eq!(
+        tree["content"][0]["content"][0]["marks"],
+        original["content"][0]["content"][0]["marks"]
+    );
+    assert_eq!(tree["content"][2]["content"][0]["text"], "Fresh writing");
+}
+#[test]
+fn changed_attachment_ranges_or_replacement_count_should_refuse_without_new_authority() {
+    use craft_editor_model::TextPoint;
+    let (workspace, project, document) = fixture();
+    let selection = workspace
+        .capture_assistant_selection(
+            &project.id,
+            &document.id,
+            1,
+            &TextPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(8),
+            },
+            &TextPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(12),
+            },
+        )
+        .unwrap();
+    assert!(
+        workspace
+            .stage_assistant_selection_replacements(&project.id, &selection, &[], "Wrong count")
+            .is_err()
+    );
+    let mut forged = selection;
+    forged.ranges[0].start = ScalarOffset(3);
+    assert!(
+        workspace
+            .stage_assistant_selection_replacements(
+                &project.id,
+                &forged,
+                &["changed".into()],
+                "Altered range"
+            )
+            .is_err()
+    );
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    assert!(
+        workspace
+            .rich_proposals(&project.id, &document.id, None, 10)
+            .unwrap()
+            .is_empty()
+    );
+}
