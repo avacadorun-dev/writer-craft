@@ -39,7 +39,7 @@ The frontend atom projection also differs from native coordinates: inline math a
 
 The Go backend `internal/editor/document.go::appendInlineText` uses another projection: child paragraphs concatenate without separators, hard breaks contribute newline, and inline math contributes `[Формула: <latex>]`. Neither legacy projection can be silently interpreted as native U+FFFC/newline offsets.
 
-Legacy transfer therefore requires an explicit compatibility adapter, preserving the original anchor JSON/history. If an untagged old anchor matches more than one finite known projection at different physical occurrences, preserve it as detached/needs-attention for explicit reattachment; do not choose a matching quote or search another occurrence. That transfer integration is still a tracked requirement, not complete merely because native coordinates now work.
+The pure core adapter `AnnotationAnchor::adapt_legacy` now checks the two explicit compatibility policies, preserves the complete original anchor JSON and returns either an exact native anchor or a detached result. It verifies the stored quote and both bounded contexts at the stored offsets; it does not run the broken DOM locator. The transfer caller must retain that original JSON in import history and mark unresolved results as needs-attention. If an untagged old anchor matches more than one finite known projection at different physical occurrences, preserve it as detached/needs-attention for explicit reattachment; do not choose a matching quote or search another occurrence. Durable transfer integration is still a tracked requirement, not complete merely because this pure adapter exists.
 
 ## Native authority and immediate paint
 
@@ -51,4 +51,6 @@ The generic canvas `DecorationSource` receives canonical document/revision and n
 
 ## Remaining acceptance
 
-The native notes inspector, exact capture/edit/resolve/reopen/delete, detached reattachment, click-to-note and all eight catalogs are being integrated. Full persisted-draft recovery, legacy transfer projection conversion, full IME mark continuity, real native interaction and independent UX acceptance remain required before issue #2 or alpha.2 can close. A headless model/raster pass alone is insufficient.
+The native notes inspector, exact capture/edit/resolve/reopen/delete, detached reattachment, click-to-note and all eight catalogs have source implementations awaiting compiled integration qualification. Attached note quotes display authored math source instead of internal U+FFFC; detached unavailable embeds have a localized textual label. Full persisted-draft recovery, legacy transfer projection conversion, full IME mark continuity, real native interaction and independent UX acceptance remain required before issue #2 or alpha.2 can close. A headless model/raster pass alone is insufficient.
+
+Compatibility tests additionally cover an intentionally ambiguous untagged blockquote: a hard break at the end of its first paragraph makes frontend and backend text both `echo\necho`, but their selected newline belongs to different native leaf/container locations. The adapter preserves the original unresolved anchor rather than choosing either. Full source metadata, including unknown fields, remains available in the returned original JSON.

@@ -3,6 +3,9 @@
 //! The source permits one block per note; assistant multi-block selections are a
 //! different contract. No command locates a note by searching for matching text.
 
+mod legacy;
+pub use legacy::{LegacyAnchorProjection, LegacyAnchorResolution};
+
 use std::collections::HashMap;
 
 use craft_editor_model::{
@@ -18,12 +21,14 @@ use super::{Document, Result, StudioError, Workspace, read_document, require_rev
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnnotationAnchor {
     /// Stable block identity, independent of its current tree path.
+    #[serde(alias = "blockId")]
     pub block_id: String,
     /// Inclusive Unicode scalar boundary.
     pub start: ScalarOffset,
     /// Exclusive Unicode scalar boundary.
     pub end: ScalarOffset,
     /// Literal selected occurrence; never a substring-search instruction.
+    #[serde(alias = "exactText")]
     pub exact_text: String,
     /// Up to 32 preceding scalars, retained even after detachment.
     pub prefix: String,
@@ -740,6 +745,12 @@ fn anchor_at(
                 length,
             })
     };
+    projection
+        .point(start, true)
+        .map_err(|_| StudioError::ExpectedTextMismatch)?;
+    projection
+        .point(end, false)
+        .map_err(|_| StudioError::ExpectedTextMismatch)?;
     let start_byte = byte(start)?;
     let end_byte = byte(end)?;
     Ok(AnnotationAnchor {
