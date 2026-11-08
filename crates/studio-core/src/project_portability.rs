@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rusqlite::{DatabaseName, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{MAIN_DB, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -195,7 +195,7 @@ impl ProjectImportWorker {
             params![project_id, project.title],
         )?;
         transaction.execute("INSERT INTO project_portability(project_id,logical_project_id,format_version,raw_manifest,manifest_sha256) VALUES(?1,?2,?3,?4,?5)",
-            params![project_id,project.logical_project_id,project.format_version,project.raw_manifest.get(),format!("{:x}",Sha256::digest(project.raw_manifest.get().as_bytes()))])?;
+            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.get(),format!("{:x}",Sha256::digest(project.raw_manifest.get().as_bytes()))])?;
         insert_alias(
             &transaction,
             &project_id,
@@ -278,11 +278,11 @@ fn import_documents(
                     StudioError::CorruptData("Validated current revision is missing".into())
                 })?;
             let id = uuid::Uuid::new_v4().to_string();
-            transaction.execute("INSERT INTO documents(id,project_id,title,body,revision,read_only,source_json) VALUES(?1,?2,?3,?4,?5,0,NULL)", params![id,project_id,validation::string(node,"title")?,validation::string(current_revision,"plainText")?,current])?;
+            transaction.execute("INSERT INTO documents(id,project_id,title,body,revision,read_only,source_json) VALUES(?1,?2,?3,?4,?5,0,NULL)", params![id,project_id,validation::string(node,"title")?,validation::string(current_revision,"plainText")?,sqlite_integer(current)?])?;
             if let Some(items) = by_node.get(logical) {
                 for revision in items {
-                    transaction.execute("INSERT INTO document_revisions(document_id,revision,body,source) VALUES(?1,?2,?3,'import')",params![id,validation::number(revision,"revision")?,validation::string(revision,"plainText")?])?;
-                    transaction.execute("INSERT INTO rich_document_revisions(document_id,revision,content_json) VALUES(?1,?2,?3)",params![id,validation::number(revision,"revision")?,serde_json::to_string(&revision["content"])?])?;
+                    transaction.execute("INSERT INTO document_revisions(document_id,revision,body,source) VALUES(?1,?2,?3,'import')",params![id,sqlite_integer(validation::number(revision,"revision")?)?,validation::string(revision,"plainText")?])?;
+                    transaction.execute("INSERT INTO rich_document_revisions(document_id,revision,content_json) VALUES(?1,?2,?3)",params![id,sqlite_integer(validation::number(revision,"revision")?)?,serde_json::to_string(&revision["content"])?])?;
                 }
             }
             transaction.execute(
@@ -299,7 +299,7 @@ fn import_documents(
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         insert_alias(transaction, project_id, "node", logical, &alias)?;
         insert_alias(transaction, project_id, "document", logical, &alias)?;
-        transaction.execute("INSERT INTO project_nodes(project_id,logical_id,native_document_id,parent_logical_id,ordinal,raw_json) VALUES(?1,?2,?3,?4,?5,?6)",params![project_id,logical,native,node["parentId"].as_str(),ordinal,serde_json::to_string(node)?])?;
+        transaction.execute("INSERT INTO project_nodes(project_id,logical_id,native_document_id,parent_logical_id,ordinal,raw_json) VALUES(?1,?2,?3,?4,?5,?6)",params![project_id,logical,native,node["parentId"].as_str(),sqlite_integer(ordinal)?,serde_json::to_string(node)?])?;
     }
     Ok(handles)
 }
@@ -315,7 +315,7 @@ fn import_source_records(
         if raw.get().trim_start().starts_with('[') {
             let records: Vec<Box<RawValue>> = serde_json::from_str(raw.get())?;
             for (ordinal, record) in records.iter().enumerate() {
-                transaction.execute("INSERT INTO project_source_records(project_id,domain,ordinal,raw_json) VALUES(?1,?2,?3,?4)",params![project_id,domain,ordinal,record.get()])?;
+                transaction.execute("INSERT INTO project_source_records(project_id,domain,ordinal,raw_json) VALUES(?1,?2,?3,?4)",params![project_id,domain,sqlite_integer(ordinal)?,record.get()])?;
             }
         } else {
             transaction.execute("INSERT INTO project_source_records(project_id,domain,ordinal,raw_json) VALUES(?1,?2,0,?3)",params![project_id,domain,raw.get()])?;
@@ -347,11 +347,11 @@ fn import_canvases(
             id,
             &uuid::Uuid::new_v4().to_string(),
         )?;
-        transaction.execute("INSERT INTO project_canvases(project_id,logical_id,current_revision,raw_json) VALUES(?1,?2,?3,?4)",params![project_id,id,validation::number(canvas,"currentRevision")?,serde_json::to_string(canvas)?])?;
+        transaction.execute("INSERT INTO project_canvases(project_id,logical_id,current_revision,raw_json) VALUES(?1,?2,?3,?4)",params![project_id,id,sqlite_integer(validation::number(canvas,"currentRevision")?)?,serde_json::to_string(canvas)?])?;
     }
     for revision in validation::array(manifest, "canvasRevisions")? {
         cancel.check()?;
-        transaction.execute("INSERT INTO project_canvas_revisions(project_id,canvas_id,revision,base_revision,schema_version,content_json,raw_json) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![project_id,validation::string(revision,"canvasId")?,validation::number(revision,"revision")?,validation::number(revision,"baseRevision")?,validation::number(revision,"schemaVersion")?,serde_json::to_string(&revision["content"])?,serde_json::to_string(revision)?])?;
+        transaction.execute("INSERT INTO project_canvas_revisions(project_id,canvas_id,revision,base_revision,schema_version,content_json,raw_json) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![project_id,validation::string(revision,"canvasId")?,sqlite_integer(validation::number(revision,"revision")?)?,sqlite_integer(validation::number(revision,"baseRevision")?)?,sqlite_integer(validation::number(revision,"schemaVersion")?)?,serde_json::to_string(&revision["content"])?,serde_json::to_string(revision)?])?;
     }
     Ok(())
 }
@@ -380,10 +380,9 @@ fn import_attachment(
                 == Some(attachment.logical_id.as_str())
         })
         .ok_or_else(|| StudioError::CorruptData("Validated attachment record is missing".into()))?;
-    transaction.execute("INSERT INTO project_assets(id,project_id,media_type,original_name,sha256,byte_size,width,height,source_json,data) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,zeroblob(?6))",params![native,project,attachment.media_type,attachment.original_name,attachment.sha256,attachment.byte_size,attachment.width,attachment.height,serde_json::to_string(record)?])?;
+    transaction.execute("INSERT INTO project_assets(id,project_id,media_type,original_name,sha256,byte_size,width,height,source_json,data) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,zeroblob(?6))",params![native,project,attachment.media_type,attachment.original_name,attachment.sha256,sqlite_integer(attachment.byte_size)?,attachment.width,attachment.height,serde_json::to_string(record)?])?;
     let rowid = transaction.last_insert_rowid();
-    let mut blob =
-        transaction.blob_open(DatabaseName::Main, "project_assets", "data", rowid, false)?;
+    let mut blob = transaction.blob_open(MAIN_DB, "project_assets", "data", rowid, false)?;
     if blob.len()
         != usize::try_from(size)
             .map_err(|_| StudioError::Validation("Invalid attachment size".into()))?
@@ -445,8 +444,7 @@ fn validate_attachment_header(
         _ => None,
     };
     if let Some(format) = image_format {
-        let blob =
-            transaction.blob_open(DatabaseName::Main, "project_assets", "data", rowid, true)?;
+        let blob = transaction.blob_open(MAIN_DB, "project_assets", "data", rowid, true)?;
         let reader = image::ImageReader::new(std::io::BufReader::new(blob))
             .with_guessed_format()
             .map_err(|_| StudioError::Validation("Cannot inspect image attachment".into()))?;
@@ -506,7 +504,7 @@ fn import_notes(
         let current: u64 = transaction.query_row(
             "SELECT revision FROM documents WHERE id=?1",
             [document_id],
-            |row| row.get(0),
+            |row| read_unsigned(row, 0),
         )?;
         let attached = resolution.anchor_status == super::AnchorStatus::Attached
             && current == base
@@ -637,7 +635,7 @@ impl Workspace {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, Option<String>>(1)?,
-                    row.get::<_, u64>(2)?,
+                    read_unsigned(row, 2)?,
                     row.get::<_, String>(3)?,
                 ))
             })?
@@ -663,5 +661,58 @@ impl Workspace {
         let connection = self.connection()?;
         require_project(&connection, project)?;
         connection.query_row("SELECT native_id FROM project_resource_aliases WHERE project_id=?1 AND resource_kind=?2 AND logical_id=?3",params![project,kind,logical],|row|row.get(0)).optional()?.ok_or_else(||StudioError::NotFound {kind:"project resource",id:logical.to_owned()})
+    }
+}
+
+fn sqlite_integer(value: impl TryInto<i64>) -> Result<i64> {
+    value.try_into().map_err(|_| {
+        StudioError::Validation("Project integer exceeds SQLite signed integer bounds".into())
+    })
+}
+fn read_unsigned(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Result<u64> {
+    let value: i64 = row.get(column)?;
+    u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(column, value))
+}
+fn read_optional_unsigned(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Result<Option<u64>> {
+    let value: Option<i64> = row.get(column)?;
+    value
+        .map(|value| {
+            u64::try_from(value)
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(column, value))
+        })
+        .transpose()
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "Synthetic SQLite conversion contracts fail immediately"
+)]
+mod sqlite_boundaries {
+    use super::{read_optional_unsigned, read_unsigned, sqlite_integer};
+    #[test]
+    fn unsigned_sql_boundaries_should_reject_negative_reads_and_signed_overflow() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        assert!(
+            connection
+                .query_row("SELECT -1", [], |row| read_unsigned(row, 0))
+                .is_err()
+        );
+        assert!(
+            connection
+                .query_row("SELECT -1", [], |row| read_optional_unsigned(row, 0))
+                .is_err()
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT NULL", [], |row| read_optional_unsigned(row, 0))
+                .unwrap(),
+            None
+        );
+        assert!(sqlite_integer(u64::MAX).is_err());
+        assert_eq!(
+            sqlite_integer(u64::try_from(i64::MAX).unwrap()).unwrap(),
+            i64::MAX
+        );
     }
 }

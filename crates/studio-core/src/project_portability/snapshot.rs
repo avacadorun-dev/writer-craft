@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rusqlite::{Connection, DatabaseName, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, MAIN_DB, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -13,6 +13,7 @@ use super::validation::{array, number, string};
 use super::{
     ProjectAttachment, ProjectTransferCancellation, Result, StudioError, Workspace, require_project,
 };
+use super::{read_optional_unsigned, read_unsigned};
 
 #[derive(Clone)]
 struct CapturedAsset {
@@ -53,7 +54,7 @@ impl ProjectAssetSource {
             .connection
             .lock()
             .map_err(|_| StudioError::LockUnavailable)?;
-        let metadata:(String,u64,String)=connection.query_row("SELECT sha256,byte_size,media_type FROM project_assets WHERE rowid=?1 AND project_id=?2",params![captured.rowid,self.project_id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?)))?;
+        let metadata:(String,u64,String)=connection.query_row("SELECT sha256,byte_size,media_type FROM project_assets WHERE rowid=?1 AND project_id=?2",params![captured.rowid,self.project_id],|row|Ok((row.get(0)?,read_unsigned(row,1)?,row.get(2)?)))?;
         if metadata
             != (
                 attachment.sha256.clone(),
@@ -65,13 +66,8 @@ impl ProjectAssetSource {
                 "Export attachment metadata changed after capture".into(),
             ));
         }
-        let mut blob = connection.blob_open(
-            DatabaseName::Main,
-            "project_assets",
-            "data",
-            captured.rowid,
-            true,
-        )?;
+        let mut blob =
+            connection.blob_open(MAIN_DB, "project_assets", "data", captured.rowid, true)?;
         if blob.len() as u64 != attachment.byte_size {
             return Err(StudioError::CorruptData(
                 "Export attachment length differs from its snapshot".into(),
@@ -228,7 +224,7 @@ impl Workspace {
                 let (title, revision): (String, u64) = transaction.query_row(
                     "SELECT title,revision FROM documents WHERE id=?1 AND project_id=?2",
                     params![native, project],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| Ok((row.get(0)?, read_unsigned(row, 1)?)),
                 )?;
                 node["title"] = Value::String(title);
                 node["currentRevision"] = json!(revision);
@@ -244,7 +240,7 @@ impl Workspace {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
-                    row.get::<_, u64>(2)?,
+                    read_unsigned(row, 2)?,
                 ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -283,7 +279,7 @@ impl Workspace {
             .query_map([project], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, u64>(1)?,
+                    read_unsigned(row, 1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
@@ -327,14 +323,14 @@ impl Workspace {
         refresh_canvases(&transaction, project, &mut manifest)?;
         let (attachments, assets) = capture_assets(&transaction, project, &mut manifest)?;
         let mut drafts=transaction.prepare("SELECT d.id,w.base_revision,w.body FROM documents d JOIN working_drafts w ON w.document_id=d.id WHERE d.project_id=?1")?;
-        let prose=drafts.query_map([project],|row|Ok(json!({"documentId":row.get::<_,String>(0)?,"baseRevision":row.get::<_,u64>(1)?,"body":row.get::<_,String>(2)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        let prose=drafts.query_map([project],|row|Ok(json!({"documentId":row.get::<_,String>(0)?,"baseRevision":read_unsigned(row,1)?,"body":row.get::<_,String>(2)?})))?.collect::<std::result::Result<Vec<_>,_>>()?;
         drop(drafts);
         let mut drafts=transaction.prepare("SELECT d.id,w.base_revision,w.version,w.content_json,a.checkpoint_json FROM documents d JOIN rich_working_drafts w ON w.document_id=d.id LEFT JOIN rich_draft_annotations a ON a.document_id=w.document_id AND a.draft_version=w.version WHERE d.project_id=?1")?;
         let rich = drafts
             .query_map([project], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, u64>(1)?,
+                    read_unsigned(row, 1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
@@ -386,7 +382,7 @@ fn capture_assets(
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, u64>(3)?,
+                read_unsigned(row, 3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, String>(5)?,
                 row.get::<_, Option<u32>>(6)?,
@@ -483,7 +479,7 @@ fn refresh_canvases(connection: &Connection, project: &str, manifest: &mut Value
     )?;
     let rows = statement
         .query_map([project], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+            Ok((row.get::<_, String>(0)?, read_unsigned(row, 1)?))
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     if !rows.is_empty() {
@@ -542,8 +538,8 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         .query_map([project], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, u64>(1)?,
-                row.get::<_, u64>(2)?,
+                read_unsigned(row, 1)?,
+                read_unsigned(row, 2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, String>(5)?,
@@ -557,7 +553,7 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         .query_map([project], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, u64>(1)?,
+                read_unsigned(row, 1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
             ))
@@ -570,7 +566,7 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         .query_map([project], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, u64>(1)?,
+                read_unsigned(row, 1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
             ))
@@ -585,13 +581,13 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, u64>(2)?,
+                read_unsigned(row, 2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, String>(5)?,
                 row.get::<_, String>(6)?,
-                row.get::<_, Option<u64>>(7)?,
-                row.get::<_, Option<u64>>(8)?,
+                read_optional_unsigned(row, 7)?,
+                read_optional_unsigned(row, 8)?,
                 row.get::<_, String>(9)?,
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
