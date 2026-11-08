@@ -16,9 +16,13 @@ The native editor SHALL expose every source table command through the one rich s
 - **WHEN** an author drags a measured column boundary and releases it
 - **THEN** native tracks and persisted widths change coherently once, including cells spanning that column, and Undo/save/reopen preserve the corresponding exact tree
 
-#### Scenario: The last selected rows or columns are removed
-- **WHEN** row or column deletion covers the whole table
+#### Scenario: The author deletes the table explicitly
+- **WHEN** the Delete table command is invoked from a text, atom or cell selection inside that table
 - **THEN** the table is removed atomically, the surrounding document remains valid and a nearby insertion target survives with reversible history
+
+#### Scenario: Row or column deletion would remove the whole table
+- **WHEN** the selected row or column range covers its complete table extent
+- **THEN** that row or column command refuses mutation and the separate explicit Delete table action remains reachable
 
 #### Scenario: Native table capacity would be exceeded
 - **WHEN** any insertion, widening, paste or other guarded command would exceed 63 logical columns

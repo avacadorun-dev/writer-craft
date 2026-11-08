@@ -710,6 +710,7 @@ enum TableAction {
     AddColumn,
     DeleteRow,
     DeleteColumn,
+    DeleteTable,
     Merge,
     Split,
 }
@@ -785,45 +786,92 @@ impl TableContext {
             selected,
         })
     }
+    fn rectangle(&self) -> CellSelection {
+        self.selected.unwrap_or(CellSelection {
+            top: self.cell.row,
+            left: self.cell.column,
+            bottom: self.cell.bottom(),
+            right: self.cell.right(),
+        })
+    }
+    fn header_at(&self, row: usize, column: usize) -> bool {
+        self.grid.cell_at(row, column).is_some_and(|cell| {
+            self.target.expected.children()[cell.row].children()[cell.cell_index].node_type
+                == "tableHeader"
+        })
+    }
     fn allows(&self, action: TableAction) -> bool {
+        let selected = self.rectangle();
         match action {
             TableAction::AddColumn => self.grid.columns < 63,
-            TableAction::DeleteRow => self.grid.rows > 1,
-            TableAction::DeleteColumn => self.grid.columns > 1,
+            TableAction::DeleteRow => selected.bottom - selected.top < self.grid.rows,
+            TableAction::DeleteColumn => selected.right - selected.left < self.grid.columns,
             TableAction::Merge => self.selected.is_some_and(|selection| {
                 (selection.bottom - selection.top) * (selection.right - selection.left)
                     > self.cell.rowspan * self.cell.colspan
             }),
-            TableAction::Split => self.cell.rowspan > 1 || self.cell.colspan > 1,
-            TableAction::AddRow => true,
+            TableAction::Split => {
+                (self.cell.rowspan > 1 || self.cell.colspan > 1)
+                    && selected.top == self.cell.row
+                    && selected.left == self.cell.column
+                    && selected.bottom == self.cell.bottom()
+                    && selected.right == self.cell.right()
+            }
+            TableAction::AddRow | TableAction::DeleteTable => true,
         }
     }
     fn apply(&self, session: &mut EditorSession, action: TableAction) -> AppResult<()> {
+        if session.document().node(&self.target.path)? != self.target.expected.as_ref() {
+            return Err(craft_editor_model::Error::NodeReferenceConflict.into());
+        }
         if !self.allows(action) {
             return Err("Table operation is unavailable".into());
         }
+        if matches!(action, TableAction::DeleteTable) {
+            session.delete_current_table()?;
+            session.request_scroll_to_caret();
+            return Ok(());
+        }
+        let selected = self.rectangle();
         let document = session.document();
+        let mut commands = Vec::new();
         let command = match action {
             TableAction::AddRow => {
-                let index = self.cell.bottom();
-                let covered: usize = self
-                    .grid
-                    .cells
-                    .iter()
-                    .filter(|cell| cell.row < index && index < cell.bottom())
-                    .map(|cell| cell.colspan)
-                    .sum();
-                let row = Node::block(
-                    "tableRow",
-                    Map::new(),
-                    (covered..self.grid.columns)
-                        .map(|_| fresh_cell(false))
-                        .collect(),
-                );
-                tables::insert_table_row(document, &self.target, index, row)?
+                let index = selected.bottom;
+                let reference =
+                    if (0..self.grid.columns).all(|column| self.header_at(index - 1, column)) {
+                        (index < self.grid.rows).then_some(index)
+                    } else {
+                        Some(index - 1)
+                    };
+                let cells = (0..self.grid.columns)
+                    .filter(|column| {
+                        !self.grid.cells.iter().any(|cell| {
+                            cell.row < index
+                                && index < cell.bottom()
+                                && cell.column <= *column
+                                && *column < cell.right()
+                        })
+                    })
+                    .map(|column| {
+                        fresh_cell(reference.is_some_and(|row| self.header_at(row, column)))
+                    })
+                    .collect();
+                let row = Node::block("tableRow", Map::new(), cells);
+                Some(tables::insert_table_row(
+                    document,
+                    &self.target,
+                    index,
+                    row,
+                )?)
             }
             TableAction::AddColumn => {
-                let index = self.cell.right();
+                let index = selected.right;
+                let reference = if (0..self.grid.rows).all(|row| self.header_at(row, index - 1)) {
+                    (index < self.grid.columns).then_some(index)
+                } else {
+                    Some(index - 1)
+                };
                 let cells = (0..self.grid.rows)
                     .filter(|row| {
                         !self.grid.cells.iter().any(|cell| {
@@ -833,73 +881,137 @@ impl TableContext {
                                 && index < cell.right()
                         })
                     })
-                    .map(|row| fresh_cell(row == 0))
+                    .map(|row| {
+                        fresh_cell(reference.is_some_and(|column| self.header_at(row, column)))
+                    })
                     .collect();
-                tables::insert_table_column(document, &self.target, index, cells)?
+                Some(tables::insert_table_column(
+                    document,
+                    &self.target,
+                    index,
+                    cells,
+                )?)
             }
-            TableAction::DeleteRow => {
-                tables::delete_table_row(document, &self.target, self.cell.row)?
+            TableAction::DeleteRow | TableAction::DeleteColumn => {
+                let mut candidate =
+                    craft_editor_model::Editor::new(document.clone(), session.revision());
+                let range = if matches!(action, TableAction::DeleteRow) {
+                    selected.top..selected.bottom
+                } else {
+                    selected.left..selected.right
+                };
+                for index in range.rev() {
+                    let target = candidate.document().node_ref(&self.target.path)?;
+                    let command = if matches!(action, TableAction::DeleteRow) {
+                        tables::delete_table_row(candidate.document(), &target, index)?
+                    } else {
+                        tables::delete_table_column(candidate.document(), &target, index)?
+                    };
+                    candidate.apply(craft_editor_model::Transaction {
+                        base_revision: candidate.revision(),
+                        commands: vec![command.clone()],
+                    })?;
+                    commands.push(command);
+                }
+                None
             }
-            TableAction::DeleteColumn => {
-                tables::delete_table_column(document, &self.target, self.cell.column)?
-            }
-            TableAction::Merge => tables::merge_table_cells(
+            TableAction::Merge => Some(tables::merge_table_cells(
                 document,
                 &self.target,
                 self.selected.ok_or("No cell selection")?,
-            )?,
-            TableAction::Split => {
-                let count = self.cell.rowspan * self.cell.colspan - 1;
-                tables::split_table_cell(
-                    document,
-                    &self.target,
-                    self.cell.row,
-                    self.cell.cell_index,
-                    (0..count).map(|_| fresh_cell(false)).collect(),
-                )?
-            }
+            )?),
+            TableAction::Split => Some(tables::split_table_cell(
+                document,
+                &self.target,
+                self.cell.row,
+                self.cell.cell_index,
+                (0..self.cell.rowspan * self.cell.colspan - 1)
+                    .map(|_| fresh_cell(false))
+                    .collect(),
+            )?),
+            TableAction::DeleteTable => return Err("Table operation is unavailable".into()),
         };
+        commands.extend(command);
         if matches!(action, TableAction::DeleteRow | TableAction::DeleteColumn) {
             let mut candidate =
-                craft_editor_model::Editor::new(session.document().clone(), session.revision());
+                craft_editor_model::Editor::new(document.clone(), session.revision());
             candidate.apply(craft_editor_model::Transaction {
                 base_revision: candidate.revision(),
-                commands: vec![command.clone()],
+                commands: commands.clone(),
             })?;
             let previous = session.selection().map(|selection| &selection.head);
-            let point = if let Some(point) =
+            if let Some(point) =
                 previous.filter(|point| candidate.document().block(&point.block_id).is_ok())
             {
-                point.clone()
+                session.apply_commands_with_selection(
+                    commands,
+                    Selection {
+                        anchor: point.clone(),
+                        head: point.clone(),
+                    },
+                )?;
             } else {
                 let table = candidate.document().node(&self.target.path)?;
                 let grid = TableGrid::new(table)?;
-                let row = self.cell.row.min(grid.rows.saturating_sub(1));
-                let column = self.cell.column.min(grid.columns.saturating_sub(1));
+                let row = selected.top.min(grid.rows - 1);
+                let column = selected.left.min(grid.columns - 1);
                 let cell = grid.cell_at(row, column).ok_or("Missing adjacent cell")?;
-                let node = table
-                    .children()
-                    .get(cell.row)
-                    .and_then(|row| row.children().get(cell.cell_index))
-                    .ok_or("Missing adjacent cell content")?;
-                DocPoint {
-                    block_id: first_text_identity(node)
-                        .ok_or("Missing adjacent text identity")?
-                        .to_owned(),
-                    offset: ScalarOffset(0),
+                let path = self.target.path.child(cell.row).child(cell.cell_index);
+                let node = candidate.document().node(&path)?;
+                if let Some(id) = first_text_identity(node) {
+                    let point = DocPoint {
+                        block_id: id.into(),
+                        offset: ScalarOffset(0),
+                    };
+                    session.apply_commands_with_selection(
+                        commands,
+                        Selection {
+                            anchor: point.clone(),
+                            head: point,
+                        },
+                    )?;
+                } else {
+                    fn atom(node: &Node, path: NodePath) -> Option<NodePath> {
+                        if matches!(
+                            node.node_type.as_str(),
+                            "imageBlock"
+                                | "mermaidBlock"
+                                | "mathBlock"
+                                | "horizontalRule"
+                                | "sceneBreak"
+                        ) {
+                            Some(path)
+                        } else {
+                            node.children()
+                                .iter()
+                                .enumerate()
+                                .find_map(|(index, node)| atom(node, path.child(index)))
+                        }
+                    }
+                    let path = atom(node, path).ok_or("Missing adjacent content")?;
+                    let target = candidate.document().node_ref(&path)?;
+                    session.apply_commands_with_node_selection(commands, target)?;
                 }
-            };
-            session.apply_commands_with_selection(
-                vec![command],
-                Selection {
-                    anchor: point.clone(),
-                    head: point,
+            }
+        } else if matches!(action, TableAction::Split) && session.cell_selection().is_some() {
+            session.apply_commands_with_cell_selection(
+                commands,
+                craft_editor_egui::TableSelection {
+                    table_path: self.target.path.clone(),
+                    anchor: craft_editor_egui::CellPoint {
+                        row: self.cell.row,
+                        column: self.cell.column,
+                    },
+                    head: craft_editor_egui::CellPoint {
+                        row: self.cell.bottom() - 1,
+                        column: self.cell.right() - 1,
+                    },
                 },
             )?;
-            session.request_scroll_to_caret();
         } else {
-            session.apply_commands(vec![command])?;
+            session.apply_commands(commands)?;
         }
+        session.request_scroll_to_caret();
         Ok(())
     }
 }
@@ -1546,6 +1658,187 @@ mod tests {
         assert_eq!(session.cell_selection(), Some(&cells));
         session.redo()?;
         assert_eq!(session.cell_selection(), Some(&cells));
+        Ok(())
+    }
+
+    fn rectangular_table_session() -> AppResult<EditorSession> {
+        let rows = (0..3)
+            .map(|row| {
+                Node::block(
+                    "tableRow",
+                    Map::new(),
+                    (0..3)
+                        .map(|column| {
+                            let mut cell =
+                                tables::empty_table_cell(&format!("r{row}c{column}"), row == 0);
+                            cell.content = Some(vec![Node::paragraph(
+                                format!("r{row}c{column}"),
+                                format!("Row {row}, column {column} 😀"),
+                            )]);
+                            cell.attrs
+                                .get_or_insert_default()
+                                .insert("preserve".into(), json!({"row":row,"column":column}));
+                            cell
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let document = RichDocument::from_root(Node::block(
+            "doc",
+            Map::from_iter([("schemaVersion".into(), json!(4))]),
+            vec![
+                Node::paragraph("before", "Before"),
+                Node::block(
+                    "table",
+                    Map::from_iter([("blockId".into(), json!("table"))]),
+                    rows,
+                ),
+                Node::paragraph("after", "After"),
+            ],
+        ))?;
+        let mut session = EditorSession::new(document, Revision(0));
+        session.set_table_column_limit(Some(63))?;
+        Ok(session)
+    }
+
+    #[test]
+    fn table_row_and_column_actions_cover_the_entire_reverse_rectangle_atomically() -> AppResult<()>
+    {
+        for rows in [true, false] {
+            let mut session = rectangular_table_session()?;
+            let cells = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: craft_editor_egui::CellPoint { row: 2, column: 1 },
+                head: craft_editor_egui::CellPoint { row: 1, column: 0 },
+            };
+            session.set_cell_selection(cells.clone())?;
+            let before = session.document().to_json()?;
+            let context = TableContext::current(&session).ok_or("Missing range")?;
+            context.apply(
+                &mut session,
+                if rows {
+                    TableAction::DeleteRow
+                } else {
+                    TableAction::DeleteColumn
+                },
+            )?;
+            let after = session.document().to_json()?;
+            let grid = TableGrid::new(session.document().node(&NodePath(vec![1]))?)?;
+            assert_eq!(
+                (grid.rows, grid.columns),
+                if rows { (1, 3) } else { (3, 1) }
+            );
+            if rows {
+                assert_eq!(
+                    after["content"][1]["content"][0],
+                    before["content"][1]["content"][0]
+                );
+            } else {
+                for row in 0..3 {
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][0],
+                        before["content"][1]["content"][row]["content"][2]
+                    );
+                }
+            }
+            assert_eq!(session.revision(), Revision(1));
+            assert!(session.selection().is_some());
+            session.undo()?;
+            assert_eq!(session.document().to_json()?, before);
+            assert_eq!(session.cell_selection(), Some(&cells));
+            assert!(!session.can_undo());
+            session.redo()?;
+            assert_eq!(session.document().to_json()?, after);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn table_insertion_uses_the_rectangle_end_and_source_header_reference() -> AppResult<()> {
+        for rows in [true, false] {
+            let mut session = rectangular_table_session()?;
+            let cells = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: craft_editor_egui::CellPoint { row: 1, column: 1 },
+                head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+            };
+            session.set_cell_selection(cells.clone())?;
+            let before = session.document().to_json()?;
+            TableContext::current(&session)
+                .ok_or("Missing range")?
+                .apply(
+                    &mut session,
+                    if rows {
+                        TableAction::AddRow
+                    } else {
+                        TableAction::AddColumn
+                    },
+                )?;
+            let after = session.document().to_json()?;
+            if rows {
+                assert_eq!(
+                    after["content"][1]["content"][3],
+                    before["content"][1]["content"][2]
+                );
+                assert!(
+                    session
+                        .document()
+                        .node(&NodePath(vec![1, 2]))?
+                        .children()
+                        .iter()
+                        .all(|cell| cell.node_type == "tableCell")
+                );
+            } else {
+                for row in 0..3 {
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][3],
+                        before["content"][1]["content"][row]["content"][2]
+                    );
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][2]["type"],
+                        if row == 0 { "tableHeader" } else { "tableCell" }
+                    );
+                }
+            }
+            assert_eq!(session.cell_selection(), Some(&cells));
+            session.undo()?;
+            assert_eq!(session.document().to_json()?, before);
+            assert_eq!(session.cell_selection(), Some(&cells));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn deleting_the_whole_table_is_explicit_and_restores_original_selection_on_undo()
+    -> AppResult<()> {
+        let mut session = rectangular_table_session()?;
+        let cells = craft_editor_egui::TableSelection {
+            table_path: NodePath(vec![1]),
+            anchor: craft_editor_egui::CellPoint { row: 2, column: 2 },
+            head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+        };
+        session.set_cell_selection(cells.clone())?;
+        let before = session.document().to_json()?;
+        let context = TableContext::current(&session).ok_or("Missing table")?;
+        for action in [TableAction::DeleteRow, TableAction::DeleteColumn] {
+            assert!(!context.allows(action));
+            assert!(context.apply(&mut session, action).is_err());
+            assert_eq!(session.document().to_json()?, before);
+            assert!(!session.can_undo());
+        }
+        context.apply(&mut session, TableAction::DeleteTable)?;
+        assert_eq!(session.document().plain_text(), "Before\n\nAfter");
+        assert_eq!(
+            session
+                .selection()
+                .map(|selection| selection.head.block_id.as_str()),
+            Some("after")
+        );
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert_eq!(session.cell_selection(), Some(&cells));
+        assert!(!session.can_undo());
         Ok(())
     }
 }

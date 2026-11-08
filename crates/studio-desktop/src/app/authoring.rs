@@ -865,6 +865,7 @@ pub(super) fn toolbar(
                                     ("Delete column", TableAction::DeleteColumn),
                                     ("Merge selected cells", TableAction::Merge),
                                     ("Split cell", TableAction::Split),
+                                    ("Delete table", TableAction::DeleteTable),
                                 ] {
                                     if ui
                                         .add_enabled(

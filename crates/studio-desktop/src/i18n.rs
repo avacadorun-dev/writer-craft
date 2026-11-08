@@ -3003,6 +3003,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Delete table",
+        [
+            "Удалить таблицу",
+            "Delete table",
+            "Tabelle löschen",
+            "Supprimer le tableau",
+            "Eliminar tabla",
+            "Excluir tabela",
+            "删除表格",
+            "表を削除",
+        ],
+    ),
+    (
         "Merge selected cells",
         [
             "Объединить выбранные ячейки",
