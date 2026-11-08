@@ -742,7 +742,7 @@ fn anchor_at(
         });
     }
     let byte = |offset| {
-        scalar_to_byte(&text, offset)
+        scalar_to_byte(text, offset)
             .map(|offset| offset.0)
             .map_err(|_| StudioError::InvalidTextRange {
                 start: start.0,
