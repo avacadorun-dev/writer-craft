@@ -29,3 +29,11 @@ WriterCraft's new structured persistence has 13 semantic tests in addition to it
 ## Still required
 
 Complete structural/list/table/atom operations, rendering, a genuine nested/table native layout, input/IME/rich clipboard/accessibility, media/provenance/note integration and all source/UX matrix cases. A linear cell traversal is only a projection checkpoint, never an accepted WYSIWYG table editor. No alpha.2 release may pass from model/storage tests alone. See the [source matrix](../migration/EDITOR_PARITY_MATRIX.md), [UX contract](../design/EDITOR_UX_PARITY.md) and [full change](../../openspec/changes/full-editor-parity/tasks.md).
+
+## Qualified authoring integration checkpoint (2026-11-08)
+
+Application source `758b3461821e1807147a0cef5375dd62b0096f2b` pins engine `414cbeaa9257b1b28f1e6f5dd56b440bf6195adf`. [Hosted all-feature preview verification](https://github.com/avacadorun-dev/writer-craft/actions/runs/42461984019) passed 144 workspace tests (79 core, 54 desktop, 11 transfer), strict all-target/all-feature Clippy, committed-lock verification and ARM64 native packaging. [Source CI](https://github.com/avacadorun-dev/writer-craft/actions/runs/42461987414) passed macOS source/spec/helper checks and Linux/Windows portable-core tests/Clippy. No local Cargo build was used.
+
+The eight new desktop authoring regressions cover empty-document insertion and durable reopen with a removed original image file, exact diagram properties/opaque metadata/history, stale source dialogs, cancellation, inline-formula node selection, shortening code with Unicode/caret clamping, original link boundary/prefill/cancel/Undo, and captured insert targets after transient caret movement. Fourteen new core asset fixtures cover owned image validation, immutable byte persistence and scoped lazy reads. Source/static design review is recorded in `docs/design/AUTHORING_SOURCE_REVIEW.md`.
+
+This checkpoint qualifies those tests and native compilation/package construction, not observed complete native UX. Full-editor issues #2/#4/#6–#11 remain open. Native clipboard, syntax/application/font integration, nonblocking per-atom rendering, annotation/decorations/handoffs, original remaining input rules and independent exact-source interaction evidence are still required. The running owner preview was not replaced; the published alpha.1 remains immutable.

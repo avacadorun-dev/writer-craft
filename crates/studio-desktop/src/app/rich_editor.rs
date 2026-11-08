@@ -6,8 +6,8 @@ use super::*;
 use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::CanvasStyle};
 use craft_editor_model as tables;
 use craft_editor_model::{
-    CellRect, CellSelection, Command, Document as RichDocument, Mark, Node, NodePath, NodeRef,
-    ReplayProof, Revision, ScalarOffset, TableGrid,
+    CellRect, CellSelection, Document as RichDocument, Mark, Node, NodePath, NodeRef, ReplayProof,
+    Revision, ScalarOffset, TableGrid,
 };
 use serde_json::{Map, json};
 
@@ -111,11 +111,40 @@ impl StudioApp {
         {
             return Ok(document);
         }
-        Ok(self.workspace.create_rich_document(
+        let asset = self.workspace.import_image(
             &project.id,
-            "00. All editor blocks",
-            serde_json::from_str(include_str!("editor_showcase.json"))?,
-        )?)
+            "lighthouse.png",
+            Some("image/png"),
+            include_bytes!("../../../../assets/demo/lighthouse.png"),
+        )?;
+        let mut content: serde_json::Value =
+            serde_json::from_str(include_str!("editor_showcase.json"))?;
+        fn bind_owned_image(value: &mut serde_json::Value, asset: &studio_core::ImageAsset) {
+            if value.get("type").and_then(serde_json::Value::as_str) == Some("imageBlock")
+                && value
+                    .pointer("/attrs/assetId")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("showcase-lighthouse")
+                && let Some(attrs) = value
+                    .get_mut("attrs")
+                    .and_then(serde_json::Value::as_object_mut)
+            {
+                attrs.insert("assetId".into(), json!(asset.id));
+                attrs.insert("src".into(), json!(asset.source()));
+            }
+            if let Some(children) = value
+                .get_mut("content")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for child in children {
+                    bind_owned_image(child, asset);
+                }
+            }
+        }
+        bind_owned_image(&mut content, &asset);
+        Ok(self
+            .workspace
+            .create_rich_document(&project.id, "00. All editor blocks", content)?)
     }
 
     pub(super) fn save_rich_editor(&mut self) -> AppResult<()> {
@@ -172,118 +201,137 @@ impl StudioApp {
             .rect_filled(bounds, 0, if floating { t.bg } else { t.editor });
         let mut changed = false;
         ui.scope_builder(egui::UiBuilder::new().max_rect(surface_rect), |ui| {
-            egui::Frame::new().fill(t.editor)
+            egui::Frame::new()
+                .fill(t.editor)
                 .corner_radius(if floating { 12 } else { 0 })
                 .stroke(Stroke::new(if floating { 1.0 } else { 0.0 }, t.border))
                 .show(ui, |ui| {
                     ui.set_min_size(surface_rect.size());
                     ui.set_max_size(surface_rect.size());
-        egui::Panel::top("rich-formatting")
-            .exact_size(40.0)
-            .resizable(false)
-            .frame(
-                egui::Frame::new()
-                    .fill(t.editor)
-                    .inner_margin(egui::Margin::symmetric(24, 4))
-                    .corner_radius(if floating { egui::CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 } } else { egui::CornerRadius::ZERO }),
-            )
-            .show(ui, |ui| {
-                let boundary = ui.max_rect();
-                ui.painter().hline(
-                    boundary.x_range(),
-                    boundary.bottom() + 4.0,
-                    Stroke::new(1.0, t.border),
-                );
-                if let Err(error) = authoring::toolbar(ui, &mut rich, l, t) {
-                    operation_error = Some(error);
-                }
-            });
-        let media_ready = match rich.media.update(
-            rich.session.document(),
-            rich.session.revision(),
-            rendering::RenderHost {
-                language: l, tokens: t, font_size: self.font_size,
-                pixel_scale: ui.ctx().pixels_per_point(), workspace: &self.workspace,
-                project_id: self.project.as_ref().map_or("", |project| project.id.as_str()),
-            },
-        ) {
-            Ok(ready) => ready,
-            Err(error) => {
-                let diagnostic = error.to_string();
-                if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
-                    rich.last_diagnostic = Some(diagnostic);
-                    operation_error = Some(error);
-                }
-                false
-            }
-        };
-        if !media_ready {
-            ui.ctx().request_repaint_after(Duration::from_millis(50));
-        }
-        egui::ScrollArea::vertical()
-            .id_salt(("rich-scroll", rich.session.options.id))
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                let available = ui.available_width();
-                let width = (available - 56.0).clamp(160.0, 760.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(((available - width) * 0.5).max(0.0));
-                    ui.vertical(|ui| {
-                        ui.set_width(width);
-                        ui.add_space(28.0);
-                        if rich.read_only {
-                            ui.label(
-                                RichText::new(l.text("Original format · read only"))
-                                    .color(t.warning),
+                    egui::Panel::top("rich-formatting")
+                        .exact_size(40.0)
+                        .resizable(false)
+                        .frame(
+                            egui::Frame::new()
+                                .fill(t.editor)
+                                .inner_margin(egui::Margin::symmetric(24, 4))
+                                .corner_radius(if floating {
+                                    egui::CornerRadius {
+                                        nw: 12,
+                                        ne: 12,
+                                        sw: 0,
+                                        se: 0,
+                                    }
+                                } else {
+                                    egui::CornerRadius::ZERO
+                                }),
+                        )
+                        .show(ui, |ui| {
+                            let boundary = ui.max_rect();
+                            ui.painter().hline(
+                                boundary.x_range(),
+                                boundary.bottom() + 4.0,
+                                Stroke::new(1.0, t.border),
                             );
-                        }
-                        let style = CanvasStyle {
-                            foreground: t.text,
-                            background: t.editor,
-                            selection: t.accent,
-                            caret: t.accent,
-                            table_border: t.border,
-                            table_header: t.panel,
-                            font_size: self.font_size,
-                            font_family: Some("Source Serif 4".into()),
-                            line_height: 1.65,
-                            paragraph_spacing: 14.0,
-                            min_height: 500.0,
-                            read_only: rich.read_only || rich.dialog.is_some(),
-                        };
-                        if !media_ready {
-                            if rich.media.failed() {
-                                ui.label(l.text("Document blocks could not be prepared. Your text is preserved."));
-                                if ui.button(l.text("Retry rendering")).clicked() { rich.media.retry(); }
-                            } else {
-                                ui.horizontal(|ui| { ui.spinner(); ui.label(l.text("Rendering document blocks…")); });
+                            if let Err(error) = authoring::toolbar(ui, &mut rich, l, t) {
+                                operation_error = Some(error);
                             }
-                            return;
-                        }
-                        let output = if let Some(catalog) = rich.media.catalog() {
-                            rich.session.show_canvas_with_resolver(ui, &style, catalog)
-                        } else {
-                            rich.session.show_canvas(ui, &style)
-                        };
-                        if self.focus_manuscript {
-                            output.response.request_focus();
-                            self.focus_manuscript = false;
-                        }
-                        changed = !output.changes.is_empty();
-                        for change in output.changes { rich.pending_proofs.push(change.replay_proof()); }
-                        if let Some(error) = output.errors.into_iter().next() {
+                        });
+                    let media_ready = match rich.media.update(
+                        rich.session.document(),
+                        rich.session.revision(),
+                        rendering::RenderHost {
+                            language: l,
+                            tokens: t,
+                            font_size: self.font_size,
+                            pixel_scale: ui.ctx().pixels_per_point(),
+                            workspace: &self.workspace,
+                            project_id: self
+                                .project
+                                .as_ref()
+                                .map_or("", |project| project.id.as_str()),
+                        },
+                    ) {
+                        Ok(ready) => ready,
+                        Err(error) => {
                             let diagnostic = error.to_string();
                             if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
                                 rich.last_diagnostic = Some(diagnostic);
-                                operation_error = Some(error.into());
+                                operation_error = Some(error);
                             }
-                        } else {
-                            rich.last_diagnostic = None;
+                            false
                         }
-                        ui.add_space(60.0);
-                    });
-                });
-            });
+                    };
+                    if !media_ready {
+                        ui.ctx().request_repaint_after(Duration::from_millis(50));
+                    }
+                    egui::ScrollArea::vertical()
+                        .id_salt(("rich-scroll", rich.session.options.id))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            let available = ui.available_width();
+                            let width = (available - 56.0).clamp(160.0, 760.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(((available - width) * 0.5).max(0.0));
+                                ui.vertical(|ui| {
+                                    ui.set_width(width);
+                                    ui.add_space(28.0);
+                                    if rich.read_only {
+                                        ui.label(
+                                            RichText::new(l.text("Original format · read only"))
+                                                .color(t.warning),
+                                        );
+                                    }
+                                    let style = CanvasStyle {
+                                        foreground: t.text,
+                                        background: t.editor,
+                                        selection: t.accent,
+                                        caret: t.accent,
+                                        table_border: t.border,
+                                        table_header: t.panel,
+                                        font_size: self.font_size,
+                                        font_family: Some("Source Serif 4".into()),
+                                        line_height: 1.65,
+                                        paragraph_spacing: 14.0,
+                                        min_height: 500.0,
+                                        read_only: rich.read_only || rich.dialog.is_some(),
+                                    };
+                                    if rich.media.failed() {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(l.text("Some blocks could not be rendered."));
+                                            if ui.button(l.text("Retry rendering")).clicked() {
+                                                rich.media.retry();
+                                            }
+                                        });
+                                    }
+                                    // Media readiness changes only its opaque atom's native status box. The
+                                    // shared prose/table selection and input surface always remains mounted.
+                                    let output = rich.session.show_canvas_with_resolver(
+                                        ui,
+                                        &style,
+                                        rich.media.catalog(),
+                                    );
+                                    if self.focus_manuscript {
+                                        output.response.request_focus();
+                                        self.focus_manuscript = false;
+                                    }
+                                    changed = !output.changes.is_empty();
+                                    for change in output.changes {
+                                        rich.pending_proofs.push(change.replay_proof());
+                                    }
+                                    if let Some(error) = output.errors.into_iter().next() {
+                                        let diagnostic = error.to_string();
+                                        if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
+                                            rich.last_diagnostic = Some(diagnostic);
+                                            operation_error = Some(error.into());
+                                        }
+                                    } else {
+                                        rich.last_diagnostic = None;
+                                    }
+                                    ui.add_space(60.0);
+                                });
+                            });
+                        });
                 });
         });
         if let Some(project) = &self.project {
@@ -613,6 +661,7 @@ fn first_text_identity(node: &Node) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use craft_editor_model::Command;
     use craft_editor_model::MarkMode;
 
     fn fixture() -> AppResult<(tempfile::TempDir, StudioApp)> {
@@ -908,6 +957,12 @@ mod tests {
         let (_directory, mut app) = fixture()?;
         let project = app.project.clone().ok_or("Missing project")?;
         let first = app.ensure_editor_showcase(&project)?;
+        let owned = RichDocument::from_json(first.rich_json.clone().ok_or("Missing gallery")?)?;
+        let snapshot = app.workspace.image_asset_snapshot(&project.id, &owned)?;
+        assert!(
+            snapshot.failures().is_empty(),
+            "New gallery uses real owned image data"
+        );
         let mut content = first.rich_json.clone().ok_or("Missing showcase source")?;
         content["content"][1]["content"][0]["text"] =
             serde_json::json!("The owner edited this demonstration.");

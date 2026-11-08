@@ -147,22 +147,7 @@ impl BlockDialog {
                 MarkMode::Remove
             } else {
                 let href = self.source.trim();
-                if href.chars().any(char::is_control)
-                    || href.split_once(':').is_some_and(|(scheme, _)| {
-                        !matches!(
-                            scheme.to_ascii_lowercase().as_str(),
-                            "https"
-                                | "http"
-                                | "mailto"
-                                | "tel"
-                                | "ftp"
-                                | "ftps"
-                                | "sms"
-                                | "cid"
-                                | "xmpp"
-                        )
-                    })
-                {
+                if !craft_editor_model::is_allowed_link_uri(href) {
                     return Err("invalid_link_protocol".into());
                 }
                 mark.attrs = Some(Map::from_iter([("href".into(), json!(href))]));
@@ -348,73 +333,8 @@ fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     let node = session.document().node_ref(&path).ok()?;
     (node.expected.node_type == "codeBlock").then_some(node)
 }
-/// Plan the expanded source link range without changing the live pre-transaction
-/// selection: Undo must return to the original caret, not the temporary range.
 fn apply_link(session: &mut EditorSession, mark: Mark, mode: MarkMode) -> AppResult<()> {
-    let mut probe = EditorSession::new(session.document().clone(), session.revision());
-    probe.set_selection(session.selection().ok_or("missing_link_selection")?.clone())?;
-    probe.extend_mark_range("link")?;
-    let selection = probe.selection().ok_or("missing_link_selection")?.clone();
-    if selection.anchor == selection.head {
-        session.format_selection(mark, mode)?;
-        return Ok(());
-    }
-    fn visit<'a>(node: &'a Node, blocks: &mut Vec<(&'a str, usize)>) -> AppResult<()> {
-        if matches!(
-            node.node_type.as_str(),
-            "paragraph" | "heading" | "codeBlock"
-        ) {
-            blocks.push((
-                node.block_id().ok_or("missing_text_identity")?,
-                node.inline_text().chars().count(),
-            ));
-        } else {
-            for child in node.children() {
-                visit(child, blocks)?;
-            }
-        }
-        Ok(())
-    }
-    let mut blocks = vec![];
-    visit(session.document().root(), &mut blocks)?;
-    let a = blocks
-        .iter()
-        .position(|(id, _)| *id == selection.anchor.block_id)
-        .ok_or("missing_link_anchor")?;
-    let b = blocks
-        .iter()
-        .position(|(id, _)| *id == selection.head.block_id)
-        .ok_or("missing_link_head")?;
-    let (first, last, start, end) = if a <= b {
-        (a, b, selection.anchor.offset, selection.head.offset)
-    } else {
-        (b, a, selection.head.offset, selection.anchor.offset)
-    };
-    let mut commands = vec![];
-    for (index, (id, length)) in blocks.iter().enumerate().take(last + 1).skip(first) {
-        let from = if index == first {
-            start
-        } else {
-            ScalarOffset(0)
-        };
-        let to = if index == last {
-            end
-        } else {
-            ScalarOffset(*length)
-        };
-        if from.0 < to.0 {
-            commands.push(Command::ApplyMarks {
-                range: craft_editor_model::TextRange {
-                    block_id: (*id).into(),
-                    start: from,
-                    end: to,
-                },
-                marks: vec![mark.clone()],
-                mode,
-            });
-        }
-    }
-    session.apply_commands_with_selection(commands, selection)?;
+    session.format_mark_range(mark, mode)?;
     Ok(())
 }
 
@@ -875,10 +795,18 @@ pub(super) fn show_dialog(
                                 "Source"
                             }),
                         );
+                        let syntax_language = match dialog.kind {
+                            Kind::Code => dialog.language.as_str(),
+                            Kind::Mermaid => "mermaid",
+                            Kind::Math | Kind::InlineMath => "latex",
+                            _ => "",
+                        };
                         let field = components::source(
                             ui,
                             &mut dialog.source,
                             if dialog.kind == Kind::Mermaid { 10 } else { 6 },
+                            syntax_language,
+                            l,
                         );
                         if dialog.focus {
                             field.response.request_focus();

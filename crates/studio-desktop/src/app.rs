@@ -4,6 +4,8 @@ mod components;
 mod dialogs;
 mod library;
 mod manuscript;
+#[cfg(feature = "editor-preview")]
+mod native_services;
 mod navigator;
 #[cfg(feature = "editor-preview")]
 mod rendering;
@@ -57,6 +59,8 @@ pub struct StudioApp {
     body: String,
     #[cfg(feature = "editor-preview")]
     rich: Option<rich_editor::RichState>,
+    #[cfg(feature = "editor-preview")]
+    clipboard: Option<std::sync::Arc<dyn craft_editor_egui::clipboard::ClipboardProvider>>,
     dirty: Option<Instant>,
     autosave_paused: bool,
     library: bool,
@@ -116,6 +120,23 @@ impl StudioApp {
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
+        #[cfg(feature = "editor-preview")]
+        native_services::manuscript_fonts()?;
+        #[cfg(all(feature = "editor-preview", not(test)))]
+        let (clipboard, clipboard_error) = match native_services::clipboard() {
+            Ok(provider) => (Some(provider), None),
+            Err(error) => (
+                None,
+                Some(UiError {
+                    msgid: "The system clipboard is unavailable. Reopen the application and try again.",
+                    details: error.to_string(),
+                }),
+            ),
+        };
+        #[cfg(all(feature = "editor-preview", test))]
+        let (clipboard, clipboard_error) = (None, None);
+        #[cfg(feature = "editor-preview")]
+        let preferences_error = preferences_error.or(clipboard_error);
         install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx, &settings);
         let mut app = Self {
@@ -128,6 +149,8 @@ impl StudioApp {
             body: String::new(),
             #[cfg(feature = "editor-preview")]
             rich: None,
+            #[cfg(feature = "editor-preview")]
+            clipboard,
             dirty: None,
             autosave_paused: false,
             library: true,
@@ -258,7 +281,11 @@ impl StudioApp {
         self.save()?;
         let document = self.workspace.document(&document.id)?;
         #[cfg(feature = "editor-preview")]
-        let rich = rich_editor::RichState::open(&self.workspace, &document)?;
+        let mut rich = rich_editor::RichState::open(&self.workspace, &document)?;
+        #[cfg(feature = "editor-preview")]
+        if let Some(state) = &mut rich {
+            state.session.set_clipboard_provider(self.clipboard.clone());
+        }
         self.body.clone_from(&document.body);
         self.dirty = None;
         self.autosave_paused = false;
@@ -632,6 +659,25 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
                 "The file could not be read or saved. Check the folder and access permissions."
             }
             StudioError::Json(_) => "The saved data could not be decoded.",
+        };
+    }
+    #[cfg(feature = "editor-preview")]
+    if let Some(craft_editor_egui::Error::Clipboard(error)) =
+        error.downcast_ref::<craft_editor_egui::Error>()
+    {
+        use craft_editor_egui::clipboard::ClipboardError;
+        return match error {
+            ClipboardError::Unavailable => {
+                "The system clipboard is unavailable. Reopen the application and try again."
+            }
+            ClipboardError::Read => "The clipboard could not be read. Copy the content again.",
+            ClipboardError::Write => "The clipboard could not be updated. Your text was not cut.",
+            ClipboardError::ResourceLimit => {
+                "The clipboard content is too large. Copy a smaller selection."
+            }
+            ClipboardError::InvalidSlice => {
+                "The clipboard content is invalid. Copy the content again."
+            }
         };
     }
     if error.is::<studio_transfer::TransferError>() {

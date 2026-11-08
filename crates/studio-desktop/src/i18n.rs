@@ -181,6 +181,84 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Syntax highlighting is unavailable. The source is preserved.",
+        [
+            "Подсветка синтаксиса недоступна. Исходный текст сохранён.",
+            "Syntax highlighting is unavailable. The source is preserved.",
+            "Die Syntaxhervorhebung ist nicht verfügbar. Der Quelltext bleibt erhalten.",
+            "La coloration syntaxique est indisponible. Le texte source est préservé.",
+            "El resaltado de sintaxis no está disponible. El texto original se conserva.",
+            "O realce de sintaxe está indisponível. O texto original foi preservado.",
+            "语法高亮不可用。原始文本已保留。",
+            "構文の強調表示を利用できません。ソースは保持されています。",
+        ],
+    ),
+    (
+        "The system clipboard is unavailable. Reopen the application and try again.",
+        [
+            "Системный буфер обмена недоступен. Перезапустите приложение и попробуйте снова.",
+            "The system clipboard is unavailable. Reopen the application and try again.",
+            "Die Systemzwischenablage ist nicht verfügbar. Starten Sie die Anwendung neu und versuchen Sie es erneut.",
+            "Le presse-papiers système est indisponible. Relancez l’application et réessayez.",
+            "El portapapeles del sistema no está disponible. Reinicie la aplicación e inténtelo de nuevo.",
+            "A área de transferência do sistema está indisponível. Reinicie o aplicativo e tente novamente.",
+            "系统剪贴板不可用。请重新打开应用后重试。",
+            "システムのクリップボードを利用できません。アプリを再起動して再試行してください。",
+        ],
+    ),
+    (
+        "The clipboard could not be read. Copy the content again.",
+        [
+            "Не удалось прочитать буфер обмена. Скопируйте содержимое ещё раз.",
+            "The clipboard could not be read. Copy the content again.",
+            "Die Zwischenablage konnte nicht gelesen werden. Kopieren Sie den Inhalt erneut.",
+            "Impossible de lire le presse-papiers. Copiez à nouveau le contenu.",
+            "No se pudo leer el portapapeles. Copie el contenido de nuevo.",
+            "Não foi possível ler a área de transferência. Copie o conteúdo novamente.",
+            "无法读取剪贴板。请重新复制内容。",
+            "クリップボードを読み取れませんでした。内容をもう一度コピーしてください。",
+        ],
+    ),
+    (
+        "The clipboard could not be updated. Your text was not cut.",
+        [
+            "Не удалось обновить буфер обмена. Ваш текст не был вырезан.",
+            "The clipboard could not be updated. Your text was not cut.",
+            "Die Zwischenablage konnte nicht aktualisiert werden. Ihr Text wurde nicht ausgeschnitten.",
+            "Impossible de mettre à jour le presse-papiers. Votre texte n’a pas été coupé.",
+            "No se pudo actualizar el portapapeles. El texto no se ha cortado.",
+            "Não foi possível atualizar a área de transferência. O texto não foi recortado.",
+            "无法更新剪贴板。您的文本未被剪切。",
+            "クリップボードを更新できませんでした。テキストは切り取られていません。",
+        ],
+    ),
+    (
+        "The clipboard content is too large. Copy a smaller selection.",
+        [
+            "Содержимое буфера обмена слишком велико. Скопируйте меньший фрагмент.",
+            "The clipboard content is too large. Copy a smaller selection.",
+            "Der Inhalt der Zwischenablage ist zu groß. Kopieren Sie eine kleinere Auswahl.",
+            "Le contenu du presse-papiers est trop volumineux. Copiez une sélection plus petite.",
+            "El contenido del portapapeles es demasiado grande. Copie una selección más pequeña.",
+            "O conteúdo da área de transferência é muito grande. Copie uma seleção menor.",
+            "剪贴板内容过大。请复制较小的选区。",
+            "クリップボードの内容が大きすぎます。選択範囲を小さくしてコピーしてください。",
+        ],
+    ),
+    (
+        "The clipboard content is invalid. Copy the content again.",
+        [
+            "Содержимое буфера обмена некорректно. Скопируйте его ещё раз.",
+            "The clipboard content is invalid. Copy the content again.",
+            "Der Inhalt der Zwischenablage ist ungültig. Kopieren Sie den Inhalt erneut.",
+            "Le contenu du presse-papiers est invalide. Copiez-le à nouveau.",
+            "El contenido del portapapeles no es válido. Cópielo de nuevo.",
+            "O conteúdo da área de transferência é inválido. Copie-o novamente.",
+            "剪贴板内容无效。请重新复制内容。",
+            "クリップボードの内容が無効です。内容をもう一度コピーしてください。",
+        ],
+    ),
+    (
         "Cancel",
         [
             "Отмена",
@@ -616,6 +694,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Rendering…",
+        [
+            "Подготовка…",
+            "Rendering…",
+            "Wird vorbereitet…",
+            "Préparation…",
+            "Preparando…",
+            "Preparando…",
+            "正在准备…",
+            "準備中…",
+        ],
+    ),
+    (
         "Rendering document blocks…",
         [
             "Подготавливаем блоки документа…",
@@ -678,6 +769,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
             "Não foi possível preparar os blocos. Seu texto foi preservado.",
             "无法准备文档块。您的文本已保留。",
             "文書ブロックを準備できませんでした。テキストは保持されています。",
+        ],
+    ),
+    (
+        "Some blocks could not be rendered.",
+        [
+            "Некоторые блоки не удалось отобразить.",
+            "Some blocks could not be rendered.",
+            "Einige Blöcke konnten nicht dargestellt werden.",
+            "Certains blocs n’ont pas pu être affichés.",
+            "No se pudieron mostrar algunos bloques.",
+            "Não foi possível exibir alguns blocos.",
+            "部分块无法显示。",
+            "一部のブロックを表示できませんでした。",
         ],
     ),
     (
