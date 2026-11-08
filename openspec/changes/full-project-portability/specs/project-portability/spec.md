@@ -144,13 +144,3 @@ payload objects instead of repeatedly embedding complete source/native/history J
 - WHEN a native project exceeds explicit finite transport/resource guards
 - THEN the application reports the specific unsupported size/count without truncation or a universal
   portability claim and still identifies the separate whole-workspace backup capability.
-
-#### Scenario: Selected opaque extensions and physical transport aliases
-
-- WHEN selected export encounters root/shard/source/evidence extension data whose document ownership
-  cannot be proved
-- THEN it omits or refuses that opaque data with an explicit non-content-bearing conversion report,
-  preserves owned selected canonical writing and never expands unselected project bodies.
-- WHEN equal hashes occur under different authorized file paths or reading views
-- THEN transfer counts every physical member and expanded byte plus actual encoded container length
-  independently of unique-object and materialized-row budgets.

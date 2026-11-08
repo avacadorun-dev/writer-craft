@@ -29,17 +29,12 @@ pub use daily_controls::{
 pub use project_portability::{
     EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary, ImportAssetSource,
     ImportedProject, ImportedProjectAnnotation, MAX_EVIDENCE_METADATA_BYTES,
-    MAX_EVIDENCE_OBJECT_BYTES, MAX_PORTABLE_MATERIALIZED_BYTES, MAX_PORTABLE_MEMBERS,
-    MAX_PORTABLE_RECORD_BYTES, MAX_PORTABLE_RECORDS, MAX_PORTABLE_ROOT_BYTES,
-    MAX_PORTABLE_SHARD_BYTES, MAX_PORTABLE_SHARD_RECORDS, MAX_PORTABLE_SHARDS,
-    MAX_PORTABLE_TRANSPORT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
-    PortableObjectReference, PortableProjectHeader, PortableProjectScope, PortableResourceBudget,
-    PortableShardDescriptor, ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft,
-    ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
+    MAX_EVIDENCE_OBJECT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
+    ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo,
+    ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
     ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
     ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
-    ValidatedEvidenceReference, ValidatedProjectImport, VerifiedPortableRecord,
-    visit_portable_shard,
+    ValidatedEvidenceReference, ValidatedProjectImport,
 };
 pub use rich::{RichDraft, RichRevision};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
