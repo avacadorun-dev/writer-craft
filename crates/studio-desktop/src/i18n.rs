@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "[Embedded content]",
+        [
+            "[Встроенное содержимое]",
+            "[Embedded content]",
+            "[Eingebetteter Inhalt]",
+            "[Contenu intégré]",
+            "[Contenido incrustado]",
+            "[Conteúdo incorporado]",
+            "[嵌入内容]",
+            "[埋め込みコンテンツ]",
+        ],
+    ),
+    (
         "Add note",
         [
             "Добавить заметку",

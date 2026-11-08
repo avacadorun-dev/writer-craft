@@ -4,7 +4,10 @@ use craft_editor_egui::{
     DocPoint, Selection,
     decorations::{DecorationSource, TextDecoration},
 };
-use craft_editor_model::{Document as RichTree, ReplayProof, Revision, ScalarOffset, TextPoint};
+use craft_editor_model::{
+    BlockTextProjection, Document as RichTree, InlineAtomText, ReplayProof, Revision, ScalarOffset,
+    TextPoint, TextProjectionOptions, scalar_to_byte,
+};
 use std::{collections::HashMap, sync::Arc};
 use studio_core::{
     AnchorStatus, AnnotationAnchor, AnnotationPatch, AnnotationPreviewSnapshot, AnnotationStatus,
@@ -205,6 +208,35 @@ fn selection_for(note: &PassageAnnotation, tree: &RichTree) -> AppResult<Selecti
             block_id: last.block_id,
             offset: last.offset,
         },
+    })
+}
+fn displayed_quote(anchor: &AnnotationAnchor, tree: Option<&RichTree>, l: Language) -> String {
+    let displayed = tree.and_then(|tree| {
+        let (a, b) = anchor.selection(tree).ok()?;
+        let projection = BlockTextProjection::with_options(
+            tree,
+            &anchor.block_id,
+            TextProjectionOptions {
+                block_separator: "\n",
+                hard_break: "\n",
+                inline_math: InlineAtomText::WithAffixes {
+                    prefix: "$",
+                    suffix: "$",
+                },
+                block_atom: "",
+            },
+        )
+        .ok()?;
+        let start = projection.offset(&a).ok()?;
+        let end = projection.offset(&b).ok()?;
+        let start = scalar_to_byte(projection.text(), start).ok()?.0;
+        let end = scalar_to_byte(projection.text(), end).ok()?.0;
+        projection.text().get(start..end).map(str::to_owned)
+    });
+    displayed.unwrap_or_else(|| {
+        anchor
+            .exact_text
+            .replace('\u{fffc}', l.text("[Embedded content]"))
     })
 }
 fn excerpt(text: &str, limit: usize) -> String {
@@ -512,38 +544,57 @@ impl StudioApp {
         let mut remove = false;
         let mut reveal = false;
         let mut reload_draft = false;
-        egui::ScrollArea::vertical().id_salt("document-note-details").auto_shrink([false,false]).show(ui,|ui|{
-            egui::Frame::new().fill(t.surface).stroke(Stroke::new(1.0,t.border)).inner_margin(12).corner_radius(6).show(ui,|ui|{
-                ui.label(RichText::new(excerpt(&note.anchor.exact_text,420)).size(14.0).strong());
-            });
-            ui.add_space(12.0);
-            if note.anchor_status==AnchorStatus::Detached || note.status==AnnotationStatus::NeedsAttention {
-                ui.colored_label(t.warning,l.text("The passage changed. The note is preserved; select text to attach it again."));
-                let allowed=self.rich.as_ref().is_some_and(|rich|captured_selection(&rich.session).is_ok());
-                reattach=ui.add_enabled(allowed,egui::Button::new(l.text("Attach to selection"))).clicked();ui.add_space(12.0);
-            }
-            ui.label(RichText::new(l.text("Author note")).strong());
-            let draft=self.notes.drafts.entry(note.id.clone()).or_insert_with(||NoteDraft{original:note.clone(),body:note.note.clone()});
-            let conflicted = draft.original.revision != note.revision;
-            if conflicted {
-                ui.colored_label(t.warning, l.text("This note changed elsewhere. Your draft is preserved."));
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button(l.text("Copy draft")).clicked() {
-                        ui.ctx().copy_text(draft.body.clone());
-                    }
-                    reload_draft = ui.button(l.text("Reload current note")).clicked();
-                });
+        let quote = displayed_quote(
+            &note.anchor,
+            self.rich.as_ref().map(|rich| rich.session.document()),
+            l,
+        );
+        egui::ScrollArea::vertical()
+            .id_salt("document-note-details")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Frame::new()
+                    .fill(t.surface)
+                    .stroke(Stroke::new(1.0, t.border))
+                    .inner_margin(12)
+                    .corner_radius(6)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(excerpt(&quote, 420)).size(14.0).strong());
+                    });
                 ui.add_space(12.0);
-            }
-            ui.add(egui::TextEdit::multiline(&mut draft.body).desired_width(f32::INFINITY).desired_rows(6).margin(12).char_limit(10_000));
-            ui.add_space(12.0);
-            ui.horizontal_wrapped(|ui|{
-                if draft.body.trim()!=note.note.trim(){save=components::action(ui,l.text("Save note"),!draft.body.trim().is_empty() && !conflicted,Some(t)).clicked();}
-                toggle=components::action(ui,l.text(if note.status==AnnotationStatus::Resolved{"Reopen note"}else{"Resolve note"}),true,None).clicked();
-                reveal=components::action(ui,l.text("Show passage"),note.anchor_status==AnchorStatus::Attached,None).clicked();
-                remove=components::action(ui,l.text("Delete note"),true,None).clicked();
+                if note.anchor_status == AnchorStatus::Detached || note.status == AnnotationStatus::NeedsAttention {
+                    ui.colored_label(t.warning, l.text("The passage changed. The note is preserved; select text to attach it again."));
+                    let allowed = self.rich.as_ref().is_some_and(|rich| captured_selection(&rich.session).is_ok());
+                    reattach = components::action(ui, l.text("Attach to selection"), allowed, None).clicked();
+                    ui.add_space(12.0);
+                }
+                ui.label(RichText::new(l.text("Author note")).strong());
+                let draft = self.notes.drafts.entry(note.id.clone()).or_insert_with(|| NoteDraft {
+                    original: note.clone(), body: note.note.clone(),
+                });
+                let conflicted = draft.original.revision != note.revision;
+                if conflicted {
+                    ui.colored_label(t.warning, l.text("This note changed elsewhere. Your draft is preserved."));
+                    ui.horizontal_wrapped(|ui| {
+                        if components::action(ui, l.text("Copy draft"), true, None).clicked() {
+                            ui.ctx().copy_text(draft.body.clone());
+                        }
+                        reload_draft = components::action(ui, l.text("Reload current note"), true, None).clicked();
+                    });
+                    ui.add_space(12.0);
+                }
+                ui.add(egui::TextEdit::multiline(&mut draft.body)
+                    .desired_width(f32::INFINITY).desired_rows(6).margin(12).char_limit(10_000));
+                ui.add_space(12.0);
+                ui.horizontal_wrapped(|ui| {
+                    if draft.body.trim() != note.note.trim() {
+                        save = components::action(ui, l.text("Save note"), !draft.body.trim().is_empty() && !conflicted, Some(t)).clicked();
+                    }
+                    toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), true, None).clicked();
+                    reveal = components::action(ui, l.text("Show passage"), note.anchor_status == AnchorStatus::Attached, None).clicked();
+                    remove = components::action(ui, l.text("Delete note"), true, None).clicked();
+                });
             });
-        });
         if reload_draft {
             self.notes.drafts.insert(
                 note.id.clone(),
@@ -594,7 +645,14 @@ impl StudioApp {
                 540.0,
                 |ui| {
                     ui.label(RichText::new(l.text("Selected passage")).strong());
-                    ui.label(excerpt(&composer.anchor.exact_text, 480));
+                    ui.label(excerpt(
+                        &displayed_quote(
+                            &composer.anchor,
+                            self.rich.as_ref().map(|rich| rich.session.document()),
+                            l,
+                        ),
+                        480,
+                    ));
                     ui.add_space(16.0);
                     ui.label(l.text("Author note"));
                     let field = ui.add(
@@ -802,6 +860,33 @@ mod tests {
         assert!(state.selected.is_none());
         assert!(state.drafts.is_empty());
         assert!(state.preview.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn displayed_note_quote_uses_authored_math_and_never_exposes_native_atom_scalars() -> TestResult
+    {
+        let tree = RichTree::from_json(
+            serde_json::json!({"type":"doc","attrs":{"schemaVersion":4},"content":[{"type":"paragraph","attrs":{"blockId":"p"},"content":[{"type":"text","text":"中"},{"type":"inlineMath","attrs":{"latex":"x^2"}},{"type":"text","text":"文"}]}]}),
+        )?;
+        let anchor = AnnotationAnchor::from_selection(
+            &tree,
+            &TextPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(0),
+            },
+            &TextPoint {
+                block_id: "p".into(),
+                offset: ScalarOffset(3),
+            },
+        )?;
+        assert_eq!(anchor.exact_text, "中\u{fffc}文");
+        assert_eq!(
+            displayed_quote(&anchor, Some(&tree), Language::English),
+            "中$x^2$文"
+        );
+        for language in Language::ALL {
+            assert!(!displayed_quote(&anchor, None, language).contains('\u{fffc}'));
+        }
         Ok(())
     }
 }
