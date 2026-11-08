@@ -156,7 +156,7 @@ impl ClipboardJobs {
         scope: ProjectClipboard,
         provider: Arc<dyn ClipboardProvider>,
         context: &egui::Context,
-    ) -> std::result::Result<(), SubmitFailure> {
+    ) -> std::result::Result<(), Box<SubmitFailure>> {
         let write_epoch = if matches!(
             &request,
             ClipboardRequest::Copy { .. } | ClipboardRequest::Cut { .. }
@@ -164,10 +164,10 @@ impl ClipboardJobs {
             match advance(&self.epochs.writes) {
                 Some(epoch) => Some(epoch),
                 None => {
-                    return Err(SubmitFailure {
+                    return Err(Box::new(SubmitFailure {
                         kind: SubmitFailureKind::EpochExhausted,
                         request,
-                    });
+                    }));
                 }
             }
         } else {
@@ -181,15 +181,17 @@ impl ClipboardJobs {
             write_epoch,
             cancel_epoch: self.epochs.cancel.load(Ordering::Acquire),
         };
-        self.sender.try_send(job).map_err(|error| match error {
-            TrySendError::Full(job) => SubmitFailure {
-                kind: SubmitFailureKind::Busy,
-                request: job.request,
-            },
-            TrySendError::Disconnected(job) => SubmitFailure {
-                kind: SubmitFailureKind::Closed,
-                request: job.request,
-            },
+        self.sender.try_send(job).map_err(|error| {
+            Box::new(match error {
+                TrySendError::Full(job) => SubmitFailure {
+                    kind: SubmitFailureKind::Busy,
+                    request: job.request,
+                },
+                TrySendError::Disconnected(job) => SubmitFailure {
+                    kind: SubmitFailureKind::Closed,
+                    request: job.request,
+                },
+            })
         })
     }
     /// Cancel queued work before its native write when possible, and invalidate all completed
@@ -590,12 +592,15 @@ mod tests {
         );
         *provider.released.lock().map_err(|_| "mock lock")? = true;
         provider.ready.notify_all();
-        let Err(SubmitFailure {
+        let Err(failure) = result else {
+            return Err("queue did not preserve paste".into());
+        };
+        let SubmitFailure {
             kind: SubmitFailureKind::Busy,
             request: ClipboardRequest::Paste { bundle, .. },
-        }) = result
+        } = *failure
         else {
-            return Err("queue did not preserve paste".into());
+            return Err("queue returned another failure".into());
         };
         assert_eq!(bundle.plain, "retain me");
         Ok(())

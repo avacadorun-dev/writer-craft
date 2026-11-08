@@ -435,7 +435,7 @@ mod tests {
             workspace.image_asset_bytes(&project.id, &new_id)?.len() as u64,
             workspace.image_asset(&project.id, &new_id)?.byte_size
         );
-        assert!(pasted.formats.get(IMAGE_CAPSULE_MIME).is_none());
+        assert!(!pasted.formats.contains_key(IMAGE_CAPSULE_MIME));
         Ok(())
     }
     #[test]
