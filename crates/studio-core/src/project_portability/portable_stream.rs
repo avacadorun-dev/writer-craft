@@ -72,8 +72,8 @@ impl ProjectPortableExportWorker {
 /// A bounded prepared format-2 project. Paths and database handles are private capabilities.
 /// Dropping it removes only its own temporary directory.
 pub struct PreparedPortableProject {
-    directory: TempDir,
     index: Connection,
+    directory: TempDir,
     root: Vec<u8>,
     object_count: u64,
     object_bytes: u64,
@@ -137,8 +137,8 @@ impl PreparedPortableProject {
     }
 }
 struct Builder {
-    directory: TempDir,
     index: Connection,
+    directory: TempDir,
     cancel: ProjectTransferCancellation,
     budget: PortableResourceBudget,
     shards: Vec<PortableShardDescriptor>,
@@ -152,7 +152,7 @@ impl Builder {
             .prefix("writercraft-portable-")
             .tempdir()?;
         let index = Connection::open(directory.path().join("index.sqlite"))?;
-        index.execute_batch("CREATE TABLE objects(sha256 TEXT PRIMARY KEY,byte_size INTEGER NOT NULL); PRAGMA cache_size=-2048;")?;
+        index.execute_batch("CREATE TABLE objects(sha256 TEXT PRIMARY KEY,byte_size INTEGER NOT NULL); PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-2048;")?;
         Ok(Self {
             directory,
             index,
