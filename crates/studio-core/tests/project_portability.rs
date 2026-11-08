@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 #![expect(
     clippy::unwrap_used,
     reason = "Synthetic portability contracts must fail immediately"
