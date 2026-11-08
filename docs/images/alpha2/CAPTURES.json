@@ -27,8 +27,8 @@
     },
     {
       "path": "docs/images/alpha2/image-light.png",
-      "case": "compact-light-en-image",
-      "sha256": "4047ef81ecef7c5019ec6388bad3850bcd9d806cf89042401a12aab164936b01",
+      "case": "compact-light-en-21-image",
+      "sha256": "90e526a610c54d3bbd318d01ca2232c956481337501ed52bb24fbec237fc3fe8",
       "observed_inner_size_points": [
         1000.0,
         680.0
