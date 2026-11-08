@@ -15,3 +15,23 @@ All tasks remain open until exact-source evidence exists. P identifiers refer to
 - [ ] Implement actual storage-location/open-folder/consistent-backup UI in eight locales; cover P20.
 - [ ] Run exact-source hosted format/tests/Clippy/schema/dependency checks with synthetic fixtures; cover P21.
 - [ ] Complete native/independent/private full-project acceptance and owner review; cover P22. Keep #10/#11 open until then.
+
+## Canonical native restore checkpoint
+
+- [ ] Implement format-2 small-root/shard/object descriptors and private semantic constructors with
+  the exact budgets in CANONICAL_PROJECT_RESTORE_ALPHA2.md; preserve source format 1–8 limits.
+- [ ] Implement a bounded format-1 companion compatibility converter through the same internal stream.
+- [ ] Add schema-8 evidence object/reference DDL and fresh/upgrade/ownership/integrity migration tests;
+  root wires the shared schema hook only after the qualified native baseline.
+- [ ] Implement dedicated transaction workers, metadata paging/private disk index and checked
+  streaming object/asset writes with cancellation and no wholesale native-state Value.
+- [ ] Restore saved rich/Canvas deltas, current notes/tombstones/history and read-only opaque sources;
+  verify exact anchors and preserve detached data without search or UTF-16 inference.
+- [ ] Preserve external draft/checkpoint/review/unknown domains as flat scoped deduplicated evidence;
+  implement explicit conservative recovery without importing replay or Apply authority.
+- [ ] Add canonical ZIP and completed-folder adapters, preflight count/size/reference guards, original
+  byte verification, safe paths and no-clobber final publication.
+- [ ] Prove full/selected/import-twice/reopen/recovery/round-trip with synthetic source and native data,
+  unknown fields, precise numbers, scoped privacy and corruption/cancellation rollback.
+- [ ] Measure separate source/native peak memory and responsiveness on hosted synthetic workloads,
+  including 512 MiB streamed media, before claiming memory qualification.

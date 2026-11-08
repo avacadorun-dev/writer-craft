@@ -90,3 +90,57 @@ The application MUST qualify synthetic complete-domain fixtures on hosted CI and
 
 - WHEN verification uses the owner's reference archive
 - THEN the archive, manuscript, screenshots and media remain local and read-only, public evidence records sanitized outcomes only and repository/CI fixtures are synthetic.
+
+### Requirement: Canonical native round trip
+
+The application SHALL export and restore complete or selected native projects through a versioned
+canonical representation with exact immutable artifact bytes and independently scoped semantic
+validation. Native format 2 SHALL use a small root, bounded metadata shards and hash-referenced
+payload objects instead of repeatedly embedding complete source/native/history JSON values.
+
+#### Scenario: Native source, history and recovery
+
+- WHEN saved native edits, current notes/tombstones/events, Canvas history, opaque sources or durable
+  unfinished work exceed the source-compatible envelope's semantics
+- THEN canonical restore recreates the saved project in a fresh namespace, retains unknown data and
+  exact logical identities, and keeps external drafts/checkpoints/staged changes as readable
+  untrusted evidence requiring explicit conservative recovery.
+
+#### Scenario: Component and transport bounds
+
+- WHEN a native bundle is prepared
+- THEN its root is at most 1 MiB, each metadata shard at most 1 MiB, each metadata record at most
+  256 KiB, and native ZIP compressed/expanded totals at most 1 GiB; original format 1–8 limits remain
+  unchanged and oversize is refused before project writes or completed output publication.
+
+#### Scenario: Large or repeated native payload
+
+- WHEN a payload exceeds the inline record budget or appears in current/history/snapshot records
+- THEN records use content-addressed references, readers validate only bounded relevant objects,
+  raw evidence streams without a wholesale native-state Value, and logical identity remains separate
+  from content deduplication.
+
+#### Scenario: Unknown native domain and repeated restore
+
+- WHEN native or extension data is not understood by the current semantic model
+- THEN its exact raw object and scoped metadata remain flat hash-identified evidence, cannot become
+  replay or Apply authority, and repeated restore/export does not recursively nest prior envelopes.
+
+#### Scenario: Pre-release format-1 companion
+
+- WHEN the author restores a supported bounded pre-release single-JSON companion
+- THEN it converts through the same semantic validation and fresh-namespace transaction; an oversized
+  old encoding produces an actionable re-export/backup error without silently widening allocation
+  bounds or changing original archive behavior.
+
+#### Scenario: Streaming integrity failure
+
+- WHEN a root, shard, object, scope mapping, checksum, storage operation or cancellation check fails
+- THEN no partial project is visible, no input or unrelated output is overwritten, and retained
+  evidence does not populate trusted recovery/proposal tables.
+
+#### Scenario: Large workspace outside portable bounds
+
+- WHEN a native project exceeds explicit finite transport/resource guards
+- THEN the application reports the specific unsupported size/count without truncation or a universal
+  portability claim and still identifies the separate whole-workspace backup capability.
