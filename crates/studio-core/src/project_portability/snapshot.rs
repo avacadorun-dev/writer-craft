@@ -193,13 +193,23 @@ impl Workspace {
             transaction.query_row("SELECT title FROM projects WHERE id=?1", [project], |row| {
                 row.get(0)
             })?;
-        let original: Option<String> = transaction
+        let original: Option<(String, String)> = transaction
             .query_row(
-                "SELECT raw_manifest FROM project_portability WHERE project_id=?1",
+                "SELECT raw_manifest,manifest_sha256 FROM project_portability WHERE project_id=?1",
                 [project],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
+        let original = original
+            .map(|(raw, hash)| -> Result<String> {
+                if !format!("{:x}", Sha256::digest(raw.as_bytes())).eq_ignore_ascii_case(&hash) {
+                    return Err(StudioError::CorruptData(
+                        "Retained source manifest checksum changed".into(),
+                    ));
+                }
+                Ok(raw)
+            })
+            .transpose()?;
         let mut manifest: Value = match &original {
             Some(raw) => serde_json::from_str(raw)?,
             None => native_manifest(project, &title),
@@ -455,6 +465,30 @@ fn capture_assets(
         media.extend(new_media);
         manifest["media"] = Value::Array(media);
     }
+    for domain in ["media", "audio"] {
+        for record in array(manifest, domain)? {
+            let path = string(record, "path")?;
+            let captured = assets.get(path).ok_or_else(|| {
+                StudioError::CorruptData(
+                    "A declared project artifact is missing from owned storage".into(),
+                )
+            })?;
+            let expected_id = string(record, if domain == "audio" { "sessionId" } else { "id" })?;
+            if captured.descriptor.resource_kind != domain
+                || captured.descriptor.logical_id != expected_id
+                || captured.descriptor.byte_size != number(record, "byteSize")?
+                || captured.descriptor.media_type != string(record, "mediaType")?
+                || !captured
+                    .descriptor
+                    .sha256
+                    .eq_ignore_ascii_case(string(record, "sha256")?)
+            {
+                return Err(StudioError::CorruptData(
+                    "A declared project artifact differs from captured owned storage".into(),
+                ));
+            }
+        }
+    }
     Ok((attachments, assets))
 }
 fn extension(mime: &str) -> &str {
@@ -523,7 +557,17 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(statement);
-    let mut changed = false;
+    let mut opaque_statement = connection.prepare(
+        "SELECT id,source_json FROM documents WHERE project_id=?1 AND read_only=1 ORDER BY rowid",
+    )?;
+    let opaque_rows = opaque_statement
+        .query_map([project], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(opaque_statement);
+    let mut changed = !opaque_rows.is_empty();
+    let opaque_documents=opaque_rows.into_iter().map(|(document,raw)|->Result<Value>{Ok(json!({"nativeDocumentId":document,"readOnly":true,"sourceJsonRaw":raw,"sourceJson":serde_json::from_str::<Value>(&raw)?}))}).collect::<Result<Vec<_>>>()?;
     let mut annotations = Vec::new();
     for (native, document, raw, logical, baseline) in rows {
         let current: Value = serde_json::from_str(&raw)?;
@@ -597,7 +641,7 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
     changed |= !rows.is_empty();
     let proposals=rows.into_iter().map(|(id,document,base,before,after,reason,status,applied,undone,anchor,before_hash,after_hash)|->Result<Value>{Ok(json!({"nativeId":id,"nativeDocumentId":document,"baseRevision":base,"before":before,"after":after,"reason":reason,"status":status,"appliedRevision":applied,"undoneRevision":undone,"anchor":serde_json::from_str::<Value>(&anchor)?,"beforeHash":before_hash,"afterHash":after_hash}))}).collect::<Result<Vec<_>>>()?;
     Ok((
-        json!({"authority":"untrusted-on-import","annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
+        json!({"authority":"untrusted-on-import","opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
         changed,
     ))
 }

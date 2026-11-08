@@ -151,7 +151,7 @@ impl ImportAssetSource for ZipSource<'_> {
             .archive
             .by_index(index)
             .map_err(std::io::Error::other)?;
-        if entry.size() != attachment.byte_size || entry.name() != attachment.path {
+        if entry.size() != attachment.byte_size || entry.name_raw() != attachment.path.as_bytes() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Captured attachment identity changed",

@@ -459,3 +459,87 @@ fn changed_native_note_and_tombstone_should_require_and_survive_the_canonical_co
         true
     );
 }
+
+#[test]
+fn changed_retained_manifest_checksum_should_refuse_export_before_writing() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("workspace.sqlite");
+    let (raw, mut assets) = fixture();
+    let validated = ValidatedProjectImport::parse(&raw).unwrap();
+    let mut worker = ProjectImportWorker::open(&path).unwrap();
+    let imported = worker
+        .import(
+            &validated,
+            &mut assets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let corrupt = std::str::from_utf8(&raw)
+        .unwrap()
+        .replace("Synthetic only", "Changed source");
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "UPDATE project_portability SET raw_manifest=?2 WHERE project_id=?1",
+            rusqlite::params![imported.project_id, corrupt],
+        )
+        .unwrap();
+    assert!(
+        worker
+            .workspace()
+            .project_export_snapshot(&imported.project_id)
+            .is_err()
+    );
+}
+
+#[test]
+fn missing_declared_storage_row_should_refuse_an_incomplete_export_snapshot() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("workspace.sqlite");
+    let (raw, mut assets) = fixture();
+    let validated = ValidatedProjectImport::parse(&raw).unwrap();
+    let mut worker = ProjectImportWorker::open(&path).unwrap();
+    let imported = worker
+        .import(
+            &validated,
+            &mut assets,
+            &ProjectTransferCancellation::default(),
+        )
+        .unwrap();
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("PRAGMA foreign_keys=OFF").unwrap();
+    connection.execute("DELETE FROM project_assets WHERE project_id=?1 AND media_type='application/x-synthetic'",[&imported.project_id]).unwrap();
+    assert!(
+        worker
+            .workspace()
+            .project_export_snapshot(&imported.project_id)
+            .is_err()
+    );
+}
+
+#[test]
+fn older_opaque_import_should_preserve_its_complete_json_and_require_the_companion() {
+    let workspace = studio_core::Workspace::memory().unwrap();
+    let project = workspace.create_project("Opaque source").unwrap();
+    let original = json!({"type":"future-document","opaque":{"keep":[1,null,true]},"sourceLinks":["original-source"],"notes":["retained note"]});
+    workspace
+        .import_document(
+            &project.id,
+            "Read-only original",
+            "Preview only",
+            original.clone(),
+        )
+        .unwrap();
+    let snapshot = workspace.project_export_snapshot(&project.id).unwrap();
+    assert!(snapshot.requires_canonical_companion());
+    let canonical: Value =
+        serde_json::from_slice(&snapshot.canonical_manifest_bytes().unwrap()).unwrap();
+    assert_eq!(
+        canonical["nativeState"]["opaqueDocuments"][0]["sourceJson"],
+        original
+    );
+    assert_eq!(
+        canonical["nativeState"]["opaqueDocuments"][0]["readOnly"],
+        true
+    );
+}

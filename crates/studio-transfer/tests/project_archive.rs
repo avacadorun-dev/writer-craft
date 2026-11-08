@@ -119,3 +119,32 @@ fn undeclared_members_should_fail_without_extraction_or_workspace_mutation() {
     assert!(ProjectArchive::open(&source).is_err());
     assert!(!directory.path().join("undeclared.bin").exists());
 }
+
+#[test]
+fn legacy_only_writer_should_refuse_opaque_native_state_without_emitting_any_bytes() {
+    let worker = ProjectImportWorker::memory().unwrap();
+    let project = worker.workspace().create_project("Opaque source").unwrap();
+    worker
+        .workspace()
+        .import_document(
+            &project.id,
+            "Original",
+            "Preview only",
+            json!({"futureSchema":99,"keep":{"notes":["synthetic"]}}),
+        )
+        .unwrap();
+    let snapshot = worker
+        .workspace()
+        .project_export_snapshot(&project.id)
+        .unwrap();
+    let mut output = Cursor::new(Vec::new());
+    assert!(
+        write_project_archive(
+            &snapshot,
+            &mut output,
+            &ProjectTransferCancellation::default()
+        )
+        .is_err()
+    );
+    assert!(output.get_ref().is_empty());
+}
