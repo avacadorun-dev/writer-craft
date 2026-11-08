@@ -118,3 +118,10 @@ Required evidence and checks:
 - Exercise pending→ready, source edit→rerender, failure→retry, theme invalidation, font/measure reflow and cache eviction/reentry. Verify sufficient space during transitions, stable meaningful scroll/caret/selection, correct hit targets, and no stale pixels or late result entering another block/document.
 - Preserve and compare exact canonical JSON/assets, semantic selection, Undo history and revision state around presentation-only changes. Verify insertion/property edit/delete/Undo/Redo, save and reopen for each affected block family. A presentation repair must not rewrite the manuscript to hide overlap.
 - Supply a fresh exact-source independent retest with complete affected block captures and interaction evidence. The owner review, implementation source fix, abstract geometry assertion or startup-only screenshot is not a substitute. `UX_GATE.json` remains pending until the required review actually passes; product issues remain open for final owner acceptance.
+
+
+### Capture coverage audit after 182c9a3 review
+
+Record effective logical viewport, device scale and PNG dimensions alongside the requested size. The three 182c9a3 startup cases labelled wide requested 1440×940 but produced 1024×684 PNGs without effective viewport/scale metadata; they cannot qualify wide geometry. See `UX_CAPTURE_REVIEW_182C9A3.md` for observed narrow states and the minimal target topology.
+
+An opaque-block capture must name expected nonzero visible atom IDs/types, establish current ready outputs and stable resolver/layout state across rendered frames, and bind its sidecar to the captured frame. Empty or wrong-target visibility, failed valid-fixture rendering, mismatched viewport/state and startup-only readiness must explicitly degrade the affected coverage claim. Preserve PNG integrity checks and separate native interaction evidence.
