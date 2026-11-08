@@ -304,3 +304,119 @@ fn metadata_only_since(
     }
     Ok(expected == note.revision)
 }
+
+/// One consistent, immutable preservation snapshot for a blocked draft recovery.
+///
+/// This is data-only evidence. It deliberately cannot be deserialized into a
+/// trusted workspace command, private checkpoint or native replay authority.
+/// Unknown JSON in rich content, notes, history and the stored checkpoint remains intact.
+#[derive(Clone, Debug, Serialize)]
+pub struct RichRecoverySnapshot {
+    document: crate::Document,
+    draft: RichDraft,
+    annotations: Vec<Value>,
+    annotation_history: Vec<Value>,
+    attachment_checkpoint: Option<Value>,
+    #[serde(skip)]
+    guard: String,
+}
+impl RichRecoverySnapshot {
+    /// Exact canonical document captured under the same read transaction.
+    pub fn document(&self) -> &crate::Document {
+        &self.document
+    }
+    /// Exact durable draft and version; this is never a replacement canonical document.
+    pub fn draft(&self) -> &RichDraft {
+        &self.draft
+    }
+    /// All saved note records, including deleted notes and unknown metadata.
+    pub fn annotations(&self) -> &[Value] {
+        &self.annotations
+    }
+    /// Append-only history of all captured note records, including deleted notes.
+    pub fn annotation_history(&self) -> &[Value] {
+        &self.annotation_history
+    }
+    /// Data-only private checkpoint evidence, including otherwise lost detached quotes.
+    pub fn attachment_checkpoint(&self) -> Option<&Value> {
+        self.attachment_checkpoint.as_ref()
+    }
+}
+impl Workspace {
+    /// Read one consistent preserved document/draft/note/history state without recovery writes.
+    /// The checkpoint is exported only as untrusted evidence, never replay authority.
+    pub fn rich_recovery_snapshot(&self, document_id: &str) -> Result<RichRecoverySnapshot> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Deferred)?;
+        let document = read_document(&transaction, document_id)?;
+        let (base_revision, version, encoded) = transaction.query_row(
+            "SELECT base_revision,version,content_json FROM rich_working_drafts WHERE document_id=?1", [document_id],
+            |row| Ok((row.get::<_,i64>(0)?, row.get::<_,String>(1)?, row.get::<_,String>(2)?)),
+        ).optional()?.ok_or(StudioError::DraftChanged)?;
+        let checkpoint = transaction.query_row("SELECT draft_version,checkpoint_json FROM rich_draft_annotations WHERE document_id=?1", [document_id], |row| Ok((row.get::<_,String>(0)?, row.get::<_,String>(1)?))).optional()?;
+        let has_annotation_checkpoint = checkpoint
+            .as_ref()
+            .is_some_and(|(checkpoint_version, _)| checkpoint_version == &version);
+        let attachment_checkpoint = checkpoint.map(|(draft_version, encoded)| {
+            // Preserve even malformed checkpoint bytes as inspectable data rather
+            // than discarding the only surviving detached quote/context.
+            let value = serde_json::from_str::<Value>(&encoded).unwrap_or_else(|_| Value::String(encoded));
+            serde_json::json!({ "draft_version": draft_version, "data_only": true, "checkpoint": value })
+        });
+        let draft = RichDraft {
+            base_revision,
+            version,
+            content: serde_json::from_str(&encoded)?,
+            has_annotation_checkpoint,
+        };
+        let annotations = {
+            let mut statement = transaction.prepare(
+                "SELECT annotation_json FROM document_annotations WHERE document_id=?1 ORDER BY id",
+            )?;
+            statement
+                .query_map([document_id], |row| row.get::<_, String>(0))?
+                .map(|row| Ok(serde_json::from_str(&row?)?))
+                .collect::<Result<Vec<Value>>>()?
+        };
+        let annotation_history = {
+            let mut statement = transaction.prepare("SELECT h.annotation_id,h.annotation_revision,h.document_revision,h.source,h.before_json,h.after_json FROM document_annotation_history h JOIN document_annotations a ON a.id=h.annotation_id WHERE a.document_id=?1 ORDER BY h.annotation_id,h.annotation_revision")?;
+            let rows = statement
+                .query_map([document_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, String>(5)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            rows.into_iter().map(|(id, revision, document_revision, source, before, after)| {
+                let before = before.map(|value| serde_json::from_str::<Value>(&value)).transpose()?;
+                let after: Value = serde_json::from_str(&after)?;
+                Ok(serde_json::json!({ "annotation_id": id, "annotation_revision": revision, "document_revision": document_revision, "source": source, "before": before, "after": after }))
+            }).collect::<Result<Vec<_>>>()?
+        };
+        let mut snapshot = RichRecoverySnapshot {
+            document,
+            draft,
+            annotations,
+            annotation_history,
+            attachment_checkpoint,
+            guard: String::new(),
+        };
+        snapshot.guard = digest(&serde_json::to_string(&snapshot)?);
+        transaction.commit()?;
+        Ok(snapshot)
+    }
+    /// Revalidate exact frozen data before explicit open/export actions.
+    /// Any live change requires an explicit reload; the caller keeps its frozen copy.
+    pub fn verify_rich_recovery_snapshot(&self, snapshot: &RichRecoverySnapshot) -> Result<()> {
+        let current = self.rich_recovery_snapshot(&snapshot.document.id)?;
+        if current.guard != snapshot.guard {
+            return Err(StudioError::DraftChanged);
+        }
+        Ok(())
+    }
+}

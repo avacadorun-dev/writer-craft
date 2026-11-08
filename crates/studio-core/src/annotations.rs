@@ -6,6 +6,7 @@
 mod legacy;
 mod recovery;
 pub use legacy::{LegacyAnchorProjection, LegacyAnchorResolution};
+pub use recovery::RichRecoverySnapshot;
 
 use std::collections::HashMap;
 

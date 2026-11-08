@@ -291,14 +291,26 @@ fn note_input(
     id: egui::Id,
     l: Language,
     t: Tokens,
+    read_only: bool,
 ) -> egui::Response {
-    let response = ui.add(
-        egui::TextEdit::multiline(body)
-            .id(id)
-            .desired_width(f32::INFINITY)
-            .desired_rows(6)
-            .margin(12),
-    );
+    let response = if read_only {
+        let mut text: &str = body;
+        ui.add(
+            egui::TextEdit::multiline(&mut text)
+                .id(id)
+                .desired_width(f32::INFINITY)
+                .desired_rows(6)
+                .margin(12),
+        )
+    } else {
+        ui.add(
+            egui::TextEdit::multiline(body)
+                .id(id)
+                .desired_width(f32::INFINITY)
+                .desired_rows(6)
+                .margin(12),
+        )
+    };
     note_length(ui, body, l, t);
     response
 }
@@ -446,7 +458,24 @@ fn captured_selection(
 }
 
 impl StudioApp {
+    fn ensure_note_writable(&self) -> AppResult<()> {
+        if self.is_recovery_read_only() {
+            return Err(recovery::ReadOnlyRecoveryView.into());
+        }
+        if !self.can_edit_manuscript() {
+            return Err(studio_core::StudioError::ReadOnly {
+                document_id: self
+                    .document
+                    .as_ref()
+                    .map(|document| document.id.clone())
+                    .unwrap_or_default(),
+            }
+            .into());
+        }
+        Ok(())
+    }
     pub(super) fn begin_note(&mut self) -> AppResult<()> {
+        self.ensure_note_writable()?;
         if self.notes.invalid {
             return Err("annotation_preview_unverified".into());
         }
@@ -517,7 +546,14 @@ impl StudioApp {
     }
     /// Explicit Save only; partial conflicts keep all still-unsaved bodies reachable.
     pub(super) fn save_note_drafts(&mut self) -> AppResult<()> {
-        self.save()?;
+        let blocked_document = self
+            .is_recovery_read_only()
+            .then(|| self.document.as_ref().map(|document| document.id.clone()))
+            .flatten();
+        let mut blocked = false;
+        if blocked_document.is_none() {
+            self.save()?;
+        }
         let drafts: Vec<_> = self
             .notes
             .drafts
@@ -527,6 +563,10 @@ impl StudioApp {
             .collect();
         self.notes.invalidate();
         for (id, draft) in drafts {
+            if blocked_document.as_ref() == Some(&draft.original.document_id) {
+                blocked = true;
+                continue;
+            }
             let document = self.workspace.document(&draft.original.document_id)?;
             self.workspace.update_annotation(
                 &id,
@@ -553,9 +593,13 @@ impl StudioApp {
                 )
             });
         if let Some((id, revision, anchor, body)) = active {
-            self.workspace
-                .create_annotation(&id, revision, anchor, &body)?;
-            self.notes.composer = None;
+            if blocked_document.as_ref() == Some(&id) {
+                blocked = true;
+            } else {
+                self.workspace
+                    .create_annotation(&id, revision, anchor, &body)?;
+                self.notes.composer = None;
+            }
         }
         let paused: Vec<_> = self
             .notes
@@ -573,6 +617,10 @@ impl StudioApp {
             })
             .collect();
         for (key, id, revision, anchor, body) in paused {
+            if blocked_document.as_ref() == Some(&id) {
+                blocked = true;
+                continue;
+            }
             self.workspace
                 .create_annotation(&id, revision, anchor, &body)?;
             self.notes.paused_composers.remove(&key);
@@ -583,6 +631,9 @@ impl StudioApp {
             .is_some_and(|document| document.rich_json.is_some())
         {
             self.refresh_notes()?;
+        }
+        if blocked {
+            return Err(recovery::ReadOnlyRecoveryView.into());
         }
         Ok(())
     }
@@ -646,6 +697,7 @@ impl StudioApp {
         }
     }
     fn note_guard_after_flush(&mut self, before: &PassageAnnotation) -> AppResult<(i64, i64)> {
+        self.ensure_note_writable()?;
         if self.notes.invalid {
             return Err("annotation_preview_unverified".into());
         }
@@ -733,7 +785,8 @@ impl StudioApp {
     }
     pub(super) fn rich_note_selection_menu(&mut self, response: &egui::Response) {
         let l = self.language;
-        let allowed = !self.notes.invalid
+        let allowed = self.can_edit_manuscript()
+            && !self.notes.invalid
             && self
                 .rich
                 .as_ref()
@@ -792,6 +845,7 @@ impl StudioApp {
     /// A bounded list/detail inspector; the parent must not wrap this in another ScrollArea.
     pub(super) fn notes_panel(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
+        let writable = self.can_edit_manuscript();
         if self
             .document
             .as_ref()
@@ -807,7 +861,8 @@ impl StudioApp {
             );
         }
         ui.horizontal(|ui| {
-            let allowed = !self.notes.invalid
+            let allowed = writable
+                && !self.notes.invalid
                 && self
                     .rich
                     .as_ref()
@@ -926,7 +981,7 @@ impl StudioApp {
                 ui.add_space(12.0);
                 if note.anchor_status == AnchorStatus::Detached || note.status == AnnotationStatus::NeedsAttention {
                     ui.colored_label(t.warning, l.text("The passage changed. The note is preserved; select text to attach it again."));
-                    let allowed = !self.notes.invalid && self.rich.as_ref().is_some_and(|rich| captured_selection(&rich.session).is_ok());
+                    let allowed = writable && !self.notes.invalid && self.rich.as_ref().is_some_and(|rich| captured_selection(&rich.session).is_ok());
                     reattach = components::action(ui, l.text("Attach to selection"), allowed, None).clicked();
                     ui.add_space(12.0);
                 }
@@ -945,15 +1000,15 @@ impl StudioApp {
                     });
                     ui.add_space(12.0);
                 }
-                note_input(ui, &mut draft.body, egui::Id::new(("author-note-body", &note.id)), l, t);
+                note_input(ui, &mut draft.body, egui::Id::new(("author-note-body", &note.id)), l, t, !writable);
                 ui.add_space(12.0);
                 ui.horizontal_wrapped(|ui| {
                     if draft.body.trim() != note.note.trim() {
-                        save = components::action(ui, l.text("Save note"), valid_note_body(&draft.body) && !conflicted && !self.notes.invalid, Some(t)).clicked();
+                        save = components::action(ui, l.text("Save note"), valid_note_body(&draft.body) && !conflicted && !self.notes.invalid && writable, Some(t)).clicked();
                     }
-                    toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), !self.notes.invalid, None).clicked();
+                    toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), !self.notes.invalid && writable, None).clicked();
                     reveal = components::action(ui, l.text("Show passage"), note.anchor_status == AnchorStatus::Attached && !self.notes.invalid, None).clicked();
-                    remove = components::action(ui, l.text("Delete note"), !self.notes.invalid, None).clicked();
+                    remove = components::action(ui, l.text("Delete note"), !self.notes.invalid && writable, None).clicked();
                 });
             });
         if reload_draft {
@@ -997,6 +1052,7 @@ impl StudioApp {
 
     pub(super) fn notes_dialogs(&mut self, ctx: &egui::Context, t: Tokens) {
         let l = self.language;
+        let writable = self.can_edit_manuscript();
         if self.notes.close_confirmation {
             self.confirm_notes_close(ctx, t);
             return;
@@ -1033,6 +1089,7 @@ impl StudioApp {
                                 egui::Id::new(("note-composer-body", &composer.id)),
                                 l,
                                 t,
+                                !writable,
                             );
                             if composer.focus {
                                 field.request_focus();
@@ -1043,7 +1100,7 @@ impl StudioApp {
                         save = components::action(
                             ui,
                             l.text("Add note"),
-                            valid_note_body(&composer.body) && !self.notes.invalid,
+                            valid_note_body(&composer.body) && !self.notes.invalid && writable,
                             Some(t),
                         )
                         .clicked();
@@ -1054,6 +1111,7 @@ impl StudioApp {
             if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
                 && valid_note_body(&composer.body)
                 && !self.notes.invalid
+                && writable
             {
                 save = true;
             }
@@ -1113,7 +1171,7 @@ impl StudioApp {
                         confirm = components::action(
                             ui,
                             l.text("Delete note"),
-                            !self.notes.invalid,
+                            !self.notes.invalid && writable,
                             Some(t),
                         )
                         .clicked();
@@ -1318,7 +1376,7 @@ mod tests {
             },
             |root| {
                 egui::CentralPanel::default().show(root, |ui| {
-                    note_input(ui, body, id, Language::English, theme::tokens(ctx));
+                    note_input(ui, body, id, Language::English, theme::tokens(ctx), false);
                 });
             },
         );
@@ -1450,5 +1508,90 @@ mod tests {
         let offscreen = caret.translate(egui::vec2(0.0, -2400.0));
         assert!(visible.contains(visible_menu_anchor(visible, Some(offscreen))));
         assert!(visible.contains(visible_menu_anchor(visible, None)));
+    }
+    #[test]
+    fn saved_recovery_view_preserves_blocked_note_drafts_and_can_save_other_documents() -> TestResult
+    {
+        let directory = tempfile::tempdir()?;
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context);
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("readonly-recovery.sqlite"),
+            false,
+            None,
+        )?;
+        let project = app.workspace.create_project("Recovery guard")?;
+        let a = app.workspace.create_rich_document(
+            &project.id,
+            "Saved",
+            RichTree::plain("a", "echo")?.to_json()?,
+        )?;
+        let b = app.workspace.create_rich_document(
+            &project.id,
+            "Other",
+            RichTree::plain("b", "other")?.to_json()?,
+        )?;
+        let aa = app.workspace.capture_annotation_anchor(
+            &a.id,
+            a.revision,
+            "a",
+            ScalarOffset(0),
+            ScalarOffset(4),
+            "echo",
+        )?;
+        let ba = app.workspace.capture_annotation_anchor(
+            &b.id,
+            b.revision,
+            "b",
+            ScalarOffset(0),
+            ScalarOffset(5),
+            "other",
+        )?;
+        let an = app
+            .workspace
+            .create_annotation(&a.id, a.revision, aa, "Saved note")?;
+        let bn = app
+            .workspace
+            .create_annotation(&b.id, b.revision, ba, "Other note")?;
+        let draft = app.workspace.save_rich_draft(
+            &a.id,
+            a.revision,
+            None,
+            RichTree::plain("a", "Unsaved preserved prose")?.to_json()?,
+        )?;
+        let snapshot = app.workspace.rich_recovery_snapshot(&a.id)?;
+        app.open_saved_recovery(&snapshot)?;
+        assert!(app.is_recovery_read_only());
+        assert!(!app.can_edit_manuscript());
+        app.notes.drafts.insert(
+            an.id.clone(),
+            NoteDraft {
+                original: an.clone(),
+                body: "Preserved local note".into(),
+            },
+        );
+        app.notes.drafts.insert(
+            bn.id.clone(),
+            NoteDraft {
+                original: bn.clone(),
+                body: "Saved parked note".into(),
+            },
+        );
+        assert!(app.begin_note().is_err());
+        assert!(app.save_note_drafts().is_err());
+        assert_eq!(app.workspace.annotation(&an.id)?, an);
+        assert_eq!(app.workspace.annotation(&bn.id)?.note, "Saved parked note");
+        assert_eq!(
+            app.notes
+                .drafts
+                .get(&an.id)
+                .ok_or("missing blocked draft")?
+                .body,
+            "Preserved local note"
+        );
+        assert_eq!(app.workspace.rich_draft(&a.id)?, Some(draft));
+        assert_eq!(app.workspace.document(&a.id)?, a);
+        Ok(())
     }
 }

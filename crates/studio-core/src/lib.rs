@@ -10,6 +10,7 @@ mod rich;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
     AnnotationStatus, LegacyAnchorProjection, LegacyAnchorResolution, PassageAnnotation,
+    RichRecoverySnapshot,
 };
 pub use assets::{
     ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
@@ -17,7 +18,7 @@ pub use assets::{
 };
 pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
-    find_first_text_match,
+    find_first_text_match, rich_document_statistics,
 };
 pub use rich::{RichDraft, RichRevision};
 
