@@ -16,6 +16,13 @@ use super::portable_markdown::{
 use super::portable_paths::{NameAllocator, relative_link};
 use super::{Result, TransferError};
 
+/// One current reading file and its explicit semantic conversion differences.
+type ReadingFileVisitor<'a> =
+    dyn FnMut(&str, &[u8], &BTreeSet<MarkdownConversion>) -> Result<()> + 'a;
+struct ReadingOrder {
+    indices: Vec<usize>,
+    children: HashMap<String, Vec<usize>>,
+}
 pub(super) struct ReadingArtifact {
     pub(super) descriptor: ProjectAttachment,
     pub(super) object: PortableObjectReference,
@@ -62,7 +69,10 @@ impl ReadingPlan {
                 Ok(())
             })
             .map_err(core_error)?;
-        let (ordered, children) = ordered_tree(&nodes)?;
+        let ReadingOrder {
+            indices: ordered,
+            children,
+        } = ordered_tree(&nodes)?;
         let mut allocator = NameAllocator::default();
         let mut node_paths = HashMap::new();
         let mut folders: HashMap<String, String> = HashMap::new();
@@ -187,7 +197,7 @@ impl ReadingPlan {
         &self,
         prepared: &PreparedPortableProject,
         cancel: &ProjectTransferCancellation,
-        visitor: &mut dyn FnMut(&str, &[u8], &BTreeSet<MarkdownConversion>) -> Result<()>,
+        visitor: &mut ReadingFileVisitor<'_>,
     ) -> Result<()> {
         for index in &self.ordered {
             check_cancel(cancel)?;
@@ -318,7 +328,7 @@ impl ReadingPlan {
     fn visit_index_files(
         &self,
         cancel: &ProjectTransferCancellation,
-        visitor: &mut dyn FnMut(&str, &[u8], &BTreeSet<MarkdownConversion>) -> Result<()>,
+        visitor: &mut ReadingFileVisitor<'_>,
     ) -> Result<()> {
         // A large project index is independently paged. README and completion root stay small.
         let mut page = String::new();
@@ -381,7 +391,7 @@ impl ReadingPlan {
         visitor("README.md", readme.as_bytes(), &BTreeSet::new())
     }
 }
-fn ordered_tree(nodes: &[ProjectReadingNode]) -> Result<(Vec<usize>, HashMap<String, Vec<usize>>)> {
+fn ordered_tree(nodes: &[ProjectReadingNode]) -> Result<ReadingOrder> {
     let known = nodes
         .iter()
         .map(|node| node.logical_id.as_str())
@@ -428,7 +438,10 @@ fn ordered_tree(nodes: &[ProjectReadingNode]) -> Result<(Vec<usize>, HashMap<Str
         return invalid("Captured reading tree has an unreachable cycle");
     }
     children.remove("");
-    Ok((output, children))
+    Ok(ReadingOrder {
+        indices: output,
+        children,
+    })
 }
 fn visit_records(
     prepared: &PreparedPortableProject,
