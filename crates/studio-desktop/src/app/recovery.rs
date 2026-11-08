@@ -1,6 +1,6 @@
 //! Explicit preservation choices after automatic rich-draft recovery was refused.
 use super::*;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::path::{Path, PathBuf};
 use studio_core::{RichRecoverySnapshot, StudioError};
 
@@ -195,7 +195,7 @@ fn read_only_preview(
                                 .id(id.with("text"))
                                 .font(egui::FontId::proportional(14.0))
                                 .desired_width(f32::INFINITY)
-                                .frame(false),
+                                .frame(egui::Frame::NONE),
                         );
                     } else {
                         ui.label(l.text(

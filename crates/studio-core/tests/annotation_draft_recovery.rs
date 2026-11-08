@@ -277,7 +277,7 @@ fn deleted_passage_undo_checkpoint_restores_exact_attachments_after_restart() {
         (workspace, document, note, editor)
     };
     let deletion = replace(&mut editor, 8, 12, "");
-    let undo = editor.undo().unwrap().replay_proof();
+    let undo = editor.undo(editor.revision()).unwrap().replay_proof();
     let draft = workspace
         .save_rich_editor_draft(
             &document.id,

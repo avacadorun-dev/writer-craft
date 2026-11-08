@@ -144,6 +144,14 @@ impl StudioApp {
             });
     }
 
+    fn document_statistics(&self) -> studio_core::DocumentStatistics {
+        #[cfg(feature = "editor-preview")]
+        if let Some(rich) = &self.rich {
+            return rich.statistics();
+        }
+        studio_core::document_statistics(&self.body)
+    }
+
     pub(super) fn status_bar(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
         egui::Panel::bottom("status")
@@ -193,17 +201,50 @@ impl StudioApp {
                         if let Some(document) = &self.document
                             && !self.library
                         {
-                            ui.label(
-                                RichText::new(l.format(
-                                    "Words: {count}   ·   Revision {revision}",
-                                    &[
-                                        ("count", self.body.split_whitespace().count().to_string()),
-                                        ("revision", document.revision.to_string()),
-                                    ],
-                                ))
-                                .size(12.0)
-                                .color(t.muted),
+                            let statistics = self.document_statistics();
+                            let label = l.format(
+                                "Words: {count}   ·   Revision {revision}",
+                                &[
+                                    ("count", statistics.words.to_string()),
+                                    ("revision", document.revision.to_string()),
+                                ],
                             );
+                            let response = ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new(label).size(12.0).color(t.muted),
+                                    )
+                                    .frame(false),
+                                )
+                                .on_hover_text(l.text("Document statistics"));
+                            egui::Popup::menu(&response).show(|ui| {
+                                ui.set_min_width(240.0);
+                                ui.label(RichText::new(l.text("Document statistics")).strong());
+                                ui.add_space(8.0);
+                                egui::Grid::new("document-statistics")
+                                    .num_columns(2)
+                                    .spacing([24.0, 12.0])
+                                    .show(ui, |ui| {
+                                        for (msgid, value) in [
+                                            ("Words", statistics.words.to_string()),
+                                            ("Characters", statistics.characters.to_string()),
+                                            (
+                                                "Reading time",
+                                                l.format(
+                                                    "≈ {minutes} min read",
+                                                    &[(
+                                                        "minutes",
+                                                        statistics.reading_minutes.to_string(),
+                                                    )],
+                                                ),
+                                            ),
+                                        ] {
+                                            ui.label(l.text(msgid));
+                                            ui.label(value);
+                                            ui.end_row();
+                                        }
+                                    });
+                            });
                         }
                     });
                 });

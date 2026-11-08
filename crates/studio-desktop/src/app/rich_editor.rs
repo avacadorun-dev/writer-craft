@@ -22,6 +22,7 @@ pub(super) struct RichState {
     last_diagnostic: Option<String>,
     dialog: Option<authoring::BlockDialog>,
     find_requested: bool,
+    statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
 
 impl RichState {
@@ -63,7 +64,22 @@ impl RichState {
             last_diagnostic: None,
             dialog: None,
             find_requested: false,
+            statistics: std::cell::Cell::new(None),
         }))
+    }
+
+    /// Count the live native tree rather than a lossy autosave/reader projection.
+    /// Metadata, selection and repaint changes do not rewalk the manuscript.
+    pub(super) fn statistics(&self) -> studio_core::DocumentStatistics {
+        let revision = self.session.revision();
+        if let Some((known_revision, statistics)) = self.statistics.get()
+            && known_revision == revision
+        {
+            return statistics;
+        }
+        let statistics = studio_core::rich_document_statistics(self.session.document());
+        self.statistics.set(Some((revision, statistics)));
+        statistics
     }
 
     pub(super) fn is_read_only(&self) -> bool {
@@ -94,6 +110,7 @@ impl RichState {
             last_diagnostic: None,
             dialog: None,
             find_requested: false,
+            statistics: std::cell::Cell::new(None),
         })
     }
 

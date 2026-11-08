@@ -31,3 +31,11 @@ The shared presentation SHALL remain unaccepted until independent review verifie
 #### Scenario: A design concept passes visual review
 - **WHEN** the owner reviews adaptive workspace or modal illustrations
 - **THEN** that review selects an implementation direction while the compiled interaction and release gates remain pending
+
+### Requirement: Live manuscript statistics
+
+The editor SHALL expose word count, Unicode scalar character count and estimated reading time from the original editor's reader-text projection of the live document. Saved note bodies and nontext atom attributes SHALL NOT enter these counts. Unsaved native edits SHALL update statistics; changing selection or presentation SHALL NOT mutate document history.
+
+#### Scenario: Inspect statistics before autosave
+- **WHEN** the author edits text in a table or formatted paragraph and opens document statistics before autosave
+- **THEN** the count reflects that exact live tree, the Unicode character count and reading estimate are available, and no save, annotation or Undo entry is created by inspection

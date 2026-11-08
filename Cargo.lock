@@ -875,13 +875,15 @@ dependencies = [
 [[package]]
 name = "craft-editor-egui"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=f5dc0648021c4cc328892b54ff0fd354c9000d59#f5dc0648021c4cc328892b54ff0fd354c9000d59"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=cb52dc7489d977019160e074d478fc6367660fe0#cb52dc7489d977019160e074d478fc6367660fe0"
 dependencies = [
  "clipboard-rs",
  "craft-editor-model",
  "ego-tree",
  "egui",
+ "linkify",
  "scraper",
+ "serde",
  "serde_json",
  "skrifa 0.47.0",
  "syntect",
@@ -897,7 +899,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-model"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=f5dc0648021c4cc328892b54ff0fd354c9000d59#f5dc0648021c4cc328892b54ff0fd354c9000d59"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=cb52dc7489d977019160e074d478fc6367660fe0#cb52dc7489d977019160e074d478fc6367660fe0"
 dependencies = [
  "prosemirror",
  "serde",
@@ -908,7 +910,7 @@ dependencies = [
 [[package]]
 name = "craft-editor-render"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/avacadorun-dev/craft-editor?rev=f5dc0648021c4cc328892b54ff0fd354c9000d59#f5dc0648021c4cc328892b54ff0fd354c9000d59"
+source = "git+https://github.com/avacadorun-dev/craft-editor?rev=cb52dc7489d977019160e074d478fc6367660fe0#cb52dc7489d977019160e074d478fc6367660fe0"
 dependencies = [
  "craft-editor-egui",
  "craft-editor-model",
@@ -2329,6 +2331,15 @@ name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
+
+[[package]]
+name = "linkify"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92f9ae2f3d31697697311f016320fe984127e636b45cf5eb5c175b7eb103dadb"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "linux-raw-sys"
