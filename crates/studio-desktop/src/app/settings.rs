@@ -1280,12 +1280,20 @@ mod tests {
                         .accesskit_update
                         .take()
                         .ok_or("missing accessibility update")?;
+                    // Each pass emits a fresh tree. Do not retain earlier positioning frames.
+                    bounds.clear();
                     for (_, node) in update.nodes {
-                        if let Some(label) = node.label()
-                            && labels.contains(&label)
+                        // egui exposes static label text as its accessible value; commands use labels.
+                        let text = match node.role() {
+                            egui::accesskit::Role::Label => node.value(),
+                            egui::accesskit::Role::Button => node.label(),
+                            _ => None,
+                        };
+                        if let Some(text) = text
+                            && labels.contains(&text)
                             && let Some(rect) = node.bounds()
                         {
-                            bounds.insert(label.to_owned(), rect);
+                            bounds.insert(text.to_owned(), rect);
                         }
                     }
                     output.textures_delta.clear();
