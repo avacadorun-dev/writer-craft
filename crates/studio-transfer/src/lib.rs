@@ -1,9 +1,12 @@
-//! Read-only, bounded inspection of Writers Studio project archives.
+//! Bounded Writers Studio archive inspection, validated migration and preservation exports.
 //!
-//! This crate never extracts files or creates a project. It preserves the complete manifest
-//! and each current rich document alongside its text preview. Archive integrity is checked;
-//! editor-schema and all project-domain migration semantics are separate acceptance work.
+//! The original inspector remains read-only. Full import uses separately validated project
+//! commands and a dedicated database worker; export refuses unsupported loss rather than
+//! flattening the original rich documents, histories or owned artifacts.
 #![deny(missing_docs)]
+
+mod project_archive;
+pub use project_archive::{ProjectArchive, write_project_archive};
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;

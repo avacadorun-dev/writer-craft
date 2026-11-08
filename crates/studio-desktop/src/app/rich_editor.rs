@@ -321,9 +321,30 @@ impl StudioApp {
         };
         let before = rich.session.revision();
         let mut operation_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+        let preferences = &self.editor_preferences.values;
+        let measure = match craft_editor_egui::fonts::zero_advance(
+            preferences.font_family.family(),
+            "Regular",
+            self.font_size,
+        ) {
+            Ok(zero) => zero * f32::from(preferences.manuscript_width) + 36.0,
+            Err(error) => {
+                let diagnostic = error.to_string();
+                if rich.last_diagnostic.as_ref() != Some(&diagnostic) {
+                    rich.last_diagnostic = Some(diagnostic);
+                    operation_error = Some(error.into());
+                }
+                760.0
+            }
+        };
         let bounds = ui.available_rect_before_wrap();
-        let floating = bounds.width() >= 984.0;
-        let width = if floating { 920.0 } else { bounds.width() };
+        let desired_surface = (measure + 160.0).max(920.0);
+        let floating = bounds.width() >= desired_surface + 64.0;
+        let width = if floating {
+            desired_surface
+        } else {
+            bounds.width()
+        };
         let gutter = if floating { 28.0 } else { 0.0 };
         let surface_rect = egui::Rect::from_min_size(
             egui::pos2(bounds.center().x - width * 0.5, bounds.top() + gutter),
@@ -367,7 +388,9 @@ impl StudioApp {
                                 boundary.bottom() + 4.0,
                                 Stroke::new(1.0, t.border),
                             );
-                            if let Err(error) = authoring::toolbar(ui, &mut rich, l, t) {
+                            if let Err(error) =
+                                authoring::toolbar(ui, &mut rich, l, t, preferences.toolbar_mode)
+                            {
                                 operation_error = Some(error);
                             }
                         });
@@ -404,7 +427,7 @@ impl StudioApp {
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             let available = ui.available_width();
-                            let width = (available - 56.0).clamp(160.0, 760.0);
+                            let width = (available - 56.0).clamp(160.0, measure.max(160.0));
                             ui.horizontal(|ui| {
                                 ui.add_space(((available - width) * 0.5).max(0.0));
                                 ui.vertical(|ui| {
@@ -428,9 +451,16 @@ impl StudioApp {
                                         table_border: t.border,
                                         table_header: t.panel,
                                         font_size: self.font_size,
-                                        font_family: Some("Source Serif 4".into()),
-                                        line_height: 1.65,
-                                        paragraph_spacing: 14.0,
+                                        font_family: Some(preferences.font_family.family().into()),
+                                        line_height: preferences.line_height,
+                                        line_height_basis:
+                                            craft_editor_egui::canvas::LineHeightBasis::FontSize,
+                                        paragraph_spacing: preferences.paragraph_spacing
+                                            * self.font_size,
+                                        list_item_spacing: Some(
+                                            preferences.list_item_spacing * self.font_size,
+                                        ),
+                                        standard_ligatures: Some(false),
                                         min_height: 500.0,
                                         read_only: rich.read_only || rich.dialog.is_some(),
                                     };

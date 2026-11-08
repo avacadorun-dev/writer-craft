@@ -568,9 +568,12 @@ pub(super) fn toolbar(
     rich: &mut RichState,
     l: Language,
     t: Tokens,
+    mode: crate::editor_preferences::ToolbarMode,
 ) -> AppResult<()> {
     let mut error = None;
-    let expanded = ui.available_width() >= 790.0;
+    // Expanded remains bounded by physical space; all hidden actions stay in More.
+    let expanded =
+        mode != crate::editor_preferences::ToolbarMode::Compact && ui.available_width() >= 790.0;
     let minimal = ui.available_width() < 560.0;
     ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;

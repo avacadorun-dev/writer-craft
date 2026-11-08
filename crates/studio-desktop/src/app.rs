@@ -105,6 +105,7 @@ pub struct StudioApp {
     settings_section: settings::Section,
     focus_manuscript: bool,
     font_size: f32,
+    editor_preferences: crate::editor_preferences::EditorPreferenceStore,
     project_dialog: bool,
     project_name: String,
     document_dialog: bool,
@@ -141,6 +142,28 @@ impl StudioApp {
                     }),
                 ),
             };
+        let editor_path = database.with_file_name("editor.json");
+        let legacy_size = (database.with_file_name("interface.json").is_file()
+            && preferences_error.is_none())
+        .then_some(preferences.font_size);
+        let (editor_preferences, editor_error) =
+            match crate::editor_preferences::EditorPreferenceStore::load(
+                editor_path.clone(),
+                legacy_size,
+            ) {
+                Ok(store) => (store, None),
+                Err(error) => (
+                    crate::editor_preferences::EditorPreferenceStore::blocked(
+                        editor_path,
+                        legacy_size,
+                    ),
+                    Some(UiError {
+                        msgid: "The saved data could not be decoded.",
+                        details: error.to_string(),
+                    }),
+                ),
+            };
+        let preferences_error = preferences_error.or(editor_error);
         let workspace = Workspace::open(&database)?;
         let settings = std::fs::read(database.with_file_name("appearance.json"))
             .ok()
@@ -211,7 +234,8 @@ impl StudioApp {
             settings_open: false,
             settings_section: settings::Section::Appearance,
             focus_manuscript: false,
-            font_size: preferences.font_size,
+            font_size: editor_preferences.values.font_size,
+            editor_preferences,
             project_dialog: false,
             project_name: String::new(),
             document_dialog: false,

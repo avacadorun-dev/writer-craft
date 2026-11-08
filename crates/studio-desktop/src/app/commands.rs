@@ -244,6 +244,23 @@ impl StudioApp {
                                             ui.end_row();
                                         }
                                     });
+                                let goal = self.editor_preferences.values.word_goal;
+                                if goal > 0 {
+                                    ui.add_space(12.0);
+                                    ui.label(RichText::new(l.text("Word goal")).strong());
+                                    ui.add(
+                                        egui::ProgressBar::new(
+                                            (statistics.words as f32 / goal as f32).clamp(0.0, 1.0),
+                                        )
+                                        .text(l.format(
+                                            "{words} / {goal}",
+                                            &[
+                                                ("words", statistics.words.to_string()),
+                                                ("goal", goal.to_string()),
+                                            ],
+                                        )),
+                                    );
+                                }
                             });
                         }
                     });

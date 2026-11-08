@@ -39,3 +39,15 @@ The editor SHALL expose word count, Unicode scalar character count and estimated
 #### Scenario: Inspect statistics before autosave
 - **WHEN** the author edits text in a table or formatted paragraph and opens document statistics before autosave
 - **THEN** the count reflects that exact live tree, the Unicode character count and reading estimate are available, and no save, annotation or Undo entry is created by inspection
+
+### Requirement: Source backed native reading preferences
+
+The editor SHALL provide the original three font roles, text sizes, line and paragraph spacing, independent list spacing, 60/70/80-character measures, toolbar modes and word-goal preference through usable persisted native controls. Character measure SHALL use the selected font's actual zero advance; font-size line-height semantics SHALL remain distinct from natural font metrics. Presentation changes SHALL preserve canonical content, selection and Undo.
+
+#### Scenario: Change reading presentation
+- **WHEN** the author changes manuscript family, text size, spacing, width or toolbar mode
+- **THEN** the live native document reflows without resetting its editing session, constrained windows retain reachable overflow commands, and restart restores the acknowledged choices
+
+#### Scenario: Existing custom size or invalid preference file
+- **WHEN** the author opens an earlier native workspace with a custom size, or the saved editor preferences are invalid, newer or changed externally
+- **THEN** a valid existing size is retained, unsupported data is preserved with a readable error, and no settings interaction silently overwrites the unacknowledged file

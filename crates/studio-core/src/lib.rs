@@ -6,6 +6,7 @@
 mod annotations;
 mod assets;
 mod daily_controls;
+mod project_portability;
 mod rich;
 mod workspace_backup;
 pub use annotations::{
@@ -21,6 +22,11 @@ pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
     find_first_text_match, rich_document_statistics,
 };
+pub use project_portability::{
+    ImportAssetSource, ImportedProject, ImportedProjectAnnotation, MAX_PROJECT_MANIFEST_BYTES,
+    MAX_PROJECT_TRANSFER_BYTES, ProjectAssetSource, ProjectAttachment, ProjectExportSnapshot,
+    ProjectImportWorker, ProjectTransferCancellation, ProjectTreeNode, ValidatedProjectImport,
+};
 pub use rich::{RichDraft, RichRevision};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
 
@@ -35,7 +41,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -315,6 +321,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("annotations.sql"))?;
             transaction.execute_batch(include_str!("assets.sql"))?;
             transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
+            transaction.execute_batch(include_str!("project_portability.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -334,6 +341,9 @@ impl Workspace {
             }
             if version < 6 {
                 transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
+            }
+            if version < 7 {
+                transaction.execute_batch(include_str!("project_portability.sql"))?;
             }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }

@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "The saved editor settings are preserved. Repair the file and reopen the application before saving changes.",
+        [
+            "Сохранённые настройки редактора оставлены без изменений. Исправьте файл и откройте приложение заново, чтобы сохранять изменения.",
+            "The saved editor settings are preserved. Repair the file and reopen the application before saving changes.",
+            "Die gespeicherten Editoreinstellungen bleiben erhalten. Reparieren Sie die Datei und öffnen Sie die Anwendung erneut, bevor Sie Änderungen speichern.",
+            "Les réglages enregistrés de l’éditeur sont préservés. Réparez le fichier et rouvrez l’application avant d’enregistrer des modifications.",
+            "Los ajustes guardados del editor se conservan. Repara el archivo y vuelve a abrir la aplicación antes de guardar cambios.",
+            "As preferências salvas do editor foram preservadas. Corrija o arquivo e reabra o aplicativo antes de salvar alterações.",
+            "已保留编辑器设置。请修复设置文件并重新打开应用，然后再保存更改。",
+            "保存済みのエディター設定は保持されています。変更を保存するには、ファイルを修復してアプリを開き直してください。",
+        ],
+    ),
+    (
         "Workspace database",
         [
             "База данных студии",

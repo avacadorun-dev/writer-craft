@@ -11,20 +11,20 @@ license = "MIT"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value", "arbitrary_precision"] }
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 sha2 = "0.10"
-rusqlite = { version = "0.41.1", features = ["bundled", "backup"] }
+rusqlite = { version = "0.41.1", features = ["bundled", "backup", "blob"] }
 tempfile = "3"
 zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
 eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "accesskit", "default_fonts", "x11", "wayland"] }
 egui = "=0.36.2"
 rfd = "=0.18.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
-craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "cb52dc7489d977019160e074d478fc6367660fe0" }
-craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "cb52dc7489d977019160e074d478fc6367660fe0", features = ["wordcraft-canvas", "native-clipboard"] }
-craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "cb52dc7489d977019160e074d478fc6367660fe0" }
+craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4" }
+craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4", features = ["wordcraft-canvas", "native-clipboard"] }
+craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "63853f216dfa6b76ad1cf7e2e10378a29fb9c5d4" }
 studio-core = { path = "crates/studio-core" }
 studio-transfer = { path = "crates/studio-transfer" }
 

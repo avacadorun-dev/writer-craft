@@ -1,6 +1,7 @@
 //! WriterCraft native executable; the domain engine is shared with the CLI.
 mod app;
 mod brand;
+mod editor_preferences;
 pub mod i18n;
 pub mod icons;
 pub mod theme;
