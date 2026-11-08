@@ -334,6 +334,47 @@ impl RenderState {
         }
         self.surface.generation = self.surface.generation.saturating_add(1);
     }
+    pub(super) fn capture_readiness(
+        &self,
+        target: Option<&NodePath>,
+    ) -> super::native_capture::CaptureReadiness {
+        let visible = self.surface.visible_ids();
+        let pending_atoms = visible
+            .iter()
+            .filter(|identity| {
+                self.surface
+                    .entries
+                    .get(*identity)
+                    .is_none_or(|entry| matches!(entry.state, AtomState::Pending))
+            })
+            .count();
+        let failed_atoms = visible
+            .iter()
+            .filter(|identity| {
+                self.surface
+                    .entries
+                    .get(*identity)
+                    .is_some_and(CacheEntry::failed)
+            })
+            .count();
+        let target_visible = target.is_none_or(|target| {
+            self.surface
+                .visible
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .as_ref()
+                .is_some_and(|paths| paths.iter().any(|path| path.0.starts_with(&target.0)))
+        });
+        super::native_capture::CaptureReadiness {
+            generation: self.surface.generation,
+            scroll_offset_bits: 0,
+            visible_atoms: visible.len(),
+            pending_atoms,
+            failed_atoms,
+            target_visible,
+            settled: self.surface.visible_settled(),
+        }
+    }
     pub fn catalog(&self) -> &impl AtomResolver {
         &self.surface
     }

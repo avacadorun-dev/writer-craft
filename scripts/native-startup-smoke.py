@@ -91,6 +91,24 @@ def run_child(command: list[str], env: dict[str, str], stdout: Path, stderr: Pat
     return {"returncode": returncode, "timed_out": timed_out, "elapsed_seconds": round(time.monotonic() - start, 3)}
 
 
+def validate_capture_state(state: dict, target: str | None) -> None:
+    """Reject vacuous readiness, target misses, failed renderers and mutated synthetic content."""
+    ready = state.get("render_readiness") or {}
+    if state.get("schema_version") != 1 or state.get("status") != "captured":
+        raise ValueError("Native capture did not acknowledge a completed readback")
+    if state.get("target_block") != target or state.get("canonical_unchanged") is not True:
+        raise ValueError("Capture target or canonical preservation did not match")
+    if state.get("stable_frames", 0) < 3 or not ready.get("settled") or not ready.get("target_visible"):
+        raise ValueError("Visible native render/scroll state did not settle")
+    if ready.get("pending_atoms") != 0 or ready.get("failed_atoms") != 0:
+        raise ValueError("Valid synthetic native atoms remain pending or failed")
+    if target and ready.get("visible_atoms", 0) <= 0:
+        raise ValueError("Opaque target was not present in the observed native viewport")
+    size = state.get("observed_inner_size_points")
+    if not isinstance(size, list) or len(size) != 2 or not all(isinstance(v, (int, float)) and v > 0 for v in size):
+        raise ValueError("Observed native viewport dimensions are missing")
+
+
 def main(bundle: Path) -> int:
     runner_temp = Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)
     output = runner_temp / OUTPUT_NAME
@@ -103,8 +121,8 @@ def main(bundle: Path) -> int:
         "runner_image_version": os.environ.get("ImageVersion"),
         "os_version": platform.mac_ver()[0],
         "architecture": platform.machine(),
-        "capture_kind": "native WGPU viewport startup readback after frame 8",
-        "media_settled": False,
+        "capture_kind": "native WGPU viewport readback after visible render and scroll stability",
+        "all_captures_settled": False,
         "editor_acceptance": False,
         "native_interaction_acceptance": False,
         "cases": [],
@@ -128,6 +146,20 @@ def main(bundle: Path) -> int:
         probe = subprocess.run(["pgrep", "-x", "WindowServer"], capture_output=True, timeout=5)
         evidence["window_server_observed"] = probe.returncode == 0
         save()
+        targets = {
+            "compact-light-en-image": "showcase-image",
+            "compact-dark-en-image": "showcase-image",
+            "compact-light-en-flowchart": "showcase-flowchart",
+            "compact-dark-en-sequence": "showcase-sequence",
+            "compact-light-en-formula": "showcase-quadratic",
+            "compact-dark-en-inline-formula": "showcase-inline-equation",
+            "compact-dark-en-large-serif-image": "showcase-image",
+            "wide-light-en-small-inter-flowchart": "showcase-flowchart",
+        }
+        profiles = {
+            "compact-dark-en-large-serif-image": {"font_family": "source-serif", "font_size": 28.0, "line_height": 2.0, "paragraph_spacing": 1.1, "list_item_spacing": 0.5, "manuscript_width": 60},
+            "wide-light-en-small-inter-flowchart": {"font_family": "inter", "font_size": 17.0, "line_height": 1.5, "paragraph_spacing": 0.65, "list_item_spacing": 0.0, "manuscript_width": 80},
+        }
         for name, language, section, compact, flags in (
             ("compact-dark-en-manuscript", "en", None, True, []),
             ("compact-light-de-settings", "de", None, True, ["--light", "--settings"]),
@@ -139,8 +171,17 @@ def main(bundle: Path) -> int:
             ("wide-light-pt-manuscript", "pt", None, False, ["--light"]),
             ("compact-dark-de-notes", "de", None, True, ["--capture-notes"]),
             ("wide-dark-en-editor", "en", "editor", False, ["--settings"]),
+            ("compact-light-en-image", "en", None, True, ["--light"]),
+            ("compact-dark-en-image", "en", None, True, []),
+            ("compact-light-en-flowchart", "en", None, True, ["--light"]),
+            ("compact-dark-en-sequence", "en", None, True, []),
+            ("compact-light-en-formula", "en", None, True, ["--light"]),
+            ("compact-dark-en-inline-formula", "en", None, True, []),
+            ("compact-dark-en-large-serif-image", "en", None, True, []),
+            ("wide-light-en-small-inter-flowchart", "en", None, False, ["--light"]),
         ):
-            case = {"name": name, "language": language, "requested_inner_size_points": [1000, 680] if compact else [1440, 940], "flags": flags, "section": section, "status": "starting"}
+            target = targets.get(name)
+            case = {"target_block": target, "name": name, "language": language, "requested_inner_size_points": [1000, 680] if compact else [1440, 940], "flags": flags, "section": section, "status": "starting"}
             evidence["cases"].append(case)
             save()
             try:
@@ -148,19 +189,39 @@ def main(bundle: Path) -> int:
                 with tempfile.TemporaryDirectory(prefix="writercraft-startup-workspace-", dir=runner_temp) as scratch:
                     capture = output / (name + ".png")
                     capture.unlink(missing_ok=True)
+                    capture_state = capture.with_suffix(".capture.json")
+                    capture_state.unlink(missing_ok=True)
+                    if name in profiles:
+                        (Path(scratch) / "editor.json").write_text(json.dumps({"version": 1, "preferences": profiles[name]}))
                     env = os.environ.copy()
-                    env.update(WRITERCRAFT_EDITOR_PREVIEW="1", WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance")
+                    env.update(WRITERCRAFT_EDITOR_PREVIEW="1", WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "")
                     command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", "--editor-preview", *(["--compact"] if compact else []), "--capture", str(capture), *flags]
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
                         raise ValueError("Native startup timed out" if case["timed_out"] else "Native startup exited unsuccessfully")
                     case["capture_size_pixels"] = png_dimensions(capture)
                     case["capture_sha256"] = sha256(capture)
-                    case["status"] = "captured-startup-only"
+                    if not 0 < capture_state.stat().st_size <= 64 * 1024:
+                        raise ValueError("Missing or oversized native capture state")
+                    state = json.loads(capture_state.read_text())
+                    validate_capture_state(state, target)
+                    if state.get("image_size_pixels") != list(case["capture_size_pixels"]):
+                        raise ValueError("Native state/readback pixel dimensions disagree")
+                    case["native_state"] = state
+                    case["state_sha256"] = sha256(capture_state)
+                    observed = state["observed_inner_size_points"]
+                    requested = case["requested_inner_size_points"]
+                    case["requested_size_observed"] = all(abs(a - b) <= 4 for a, b in zip(observed, requested))
+                    case["observed_layout_coverage"] = "wide" if observed[0] >= 1200 else "constrained"
+                    if not compact and case["observed_layout_coverage"] != "wide":
+                        case["coverage_limitation"] = "Hosted window-server viewport constrained the requested wide state; actual wide app acceptance remains pending."
+                    case["status"] = "captured-settled-native-view"
             except (OSError, ValueError, subprocess.SubprocessError, zlib.error, struct.error) as error:
                 case.update(status="failed", error=str(error))
             save()
-        evidence["status"] = "startup-captures-complete" if all(case["status"] == "captured-startup-only" for case in evidence["cases"]) else "startup-capture-unavailable"
+        evidence["all_captures_settled"] = all(case["status"] == "captured-settled-native-view" for case in evidence["cases"])
+        evidence["actual_wide_coverage"] = any(case.get("observed_layout_coverage") == "wide" for case in evidence["cases"])
+        evidence["status"] = "startup-captures-complete" if all(case["status"] == "captured-settled-native-view" for case in evidence["cases"]) else "startup-capture-unavailable"
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         evidence.update(status="startup-capture-unavailable", error=str(error))
     save()
@@ -185,6 +246,14 @@ def self_test() -> None:
                 path.write_bytes(data[:40])
                 with self.assertRaises(ValueError):
                     png_dimensions(path)
+        def test_capture_state_refuses_unready_empty_failed_or_changed_content(self):
+            good = {"schema_version": 1, "status": "captured", "target_block": "image", "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1024, 684], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "pending_atoms": 0, "failed_atoms": 0}}
+            validate_capture_state(good, "image")
+            for field, value in (("pending_atoms", 1), ("failed_atoms", 1), ("visible_atoms", 0), ("target_visible", False), ("settled", False)):
+                bad = dict(good, render_readiness=dict(good["render_readiness"], **{field: value}))
+                with self.assertRaises(ValueError): validate_capture_state(bad, "image")
+            for field, value in (("canonical_unchanged", False), ("stable_frames", 2), ("target_block", "different"), ("observed_inner_size_points", None)):
+                with self.assertRaises(ValueError): validate_capture_state(dict(good, **{field: value}), "image")
         def test_child_exit_and_timeout_are_recorded(self):
             with tempfile.TemporaryDirectory(prefix="writercraft-smoke-test-") as directory:
                 output = Path(directory)

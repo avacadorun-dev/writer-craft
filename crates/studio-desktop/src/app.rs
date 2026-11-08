@@ -9,6 +9,7 @@ mod daily_controls;
 mod dialogs;
 mod library;
 mod manuscript;
+mod native_capture;
 #[cfg(feature = "editor-preview")]
 mod native_services;
 mod navigator;
@@ -123,6 +124,7 @@ pub struct StudioApp {
     >,
     import_preview: Option<studio_transfer::ImportPreview>,
     capture: Option<PathBuf>,
+    capture_probe: native_capture::CaptureProbe,
     frames: u32,
 }
 
@@ -251,6 +253,7 @@ impl StudioApp {
             import_job: None,
             import_preview: None,
             capture,
+            capture_probe: native_capture::CaptureProbe::default(),
             frames: 0,
         };
         app.projects = app.workspace.list_projects()?;
@@ -327,6 +330,9 @@ impl StudioApp {
             app.inspector_visible = true;
             app.prefer_inspector = true;
             app.stage()?;
+        }
+        if app.capture.is_some() {
+            app.initialize_capture(demo)?;
         }
         Ok(app)
     }
@@ -754,6 +760,7 @@ impl eframe::App for StudioApp {
                 self.import_job = None;
             }
         }
+        self.prepare_capture_frame();
         self.toolbar(ui, t);
         self.status_bar(ui, t);
         #[cfg(feature = "editor-preview")]
@@ -789,43 +796,7 @@ impl eframe::App for StudioApp {
         #[cfg(feature = "editor-preview")]
         self.clipboard_frame_end(&ctx);
 
-        self.frames += 1;
-        if self.capture.is_some() && self.frames >= 8 {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
-        }
-        let screenshots = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|event| {
-                    if let egui::Event::Screenshot { image, .. } = event {
-                        Some(image.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        });
-        if !screenshots.is_empty()
-            && let Some(path) = self.capture.take()
-            && let Some(image) = screenshots.first()
-        {
-            let result = image::save_buffer(
-                &path,
-                image.as_raw(),
-                image.width() as u32,
-                image.height() as u32,
-                image::ColorType::Rgba8,
-            )
-            .map_err(Into::into);
-            let saved = result.is_ok();
-            self.record_error(result);
-            if saved {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-        }
-        if self.capture.is_some() {
-            ctx.request_repaint();
-        }
+        self.advance_capture(&ctx);
     }
 }
 

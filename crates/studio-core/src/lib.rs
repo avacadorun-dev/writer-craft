@@ -25,8 +25,10 @@ pub use daily_controls::{
 };
 pub use project_portability::{
     ImportAssetSource, ImportedProject, ImportedProjectAnnotation, MAX_PROJECT_MANIFEST_BYTES,
-    MAX_PROJECT_TRANSFER_BYTES, ProjectAssetSource, ProjectAttachment, ProjectExportSnapshot,
-    ProjectImportWorker, ProjectTransferCancellation, ProjectTreeNode, ValidatedProjectImport,
+    MAX_PROJECT_TRANSFER_BYTES, ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft,
+    ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
+    ProjectExportSnapshot, ProjectImportWorker, ProjectTransferCancellation, ProjectTreeNode,
+    ValidatedProjectImport,
 };
 pub use rich::{RichDraft, RichRevision};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};

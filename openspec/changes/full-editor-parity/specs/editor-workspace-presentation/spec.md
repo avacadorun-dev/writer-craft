@@ -51,3 +51,15 @@ The editor SHALL provide the original three font roles, text sizes, line and par
 #### Scenario: Existing custom size or invalid preference file
 - **WHEN** the author opens an earlier native workspace with a custom size, or the saved editor preferences are invalid, newer or changed externally
 - **THEN** a valid existing size is retained, unsupported data is preserved with a readable error, and no settings interaction silently overwrites the unacknowledged file
+
+### Requirement: Opaque content participates in document flow
+
+Image, diagram, block-formula and inline-formula paint, captions and status placeholders SHALL fit their allocated document flow. Font-size-based prose line spacing SHALL remain distinct from natural font metrics without clipping or collapsing object extent. Async render completion, retry, theme, typography and width changes SHALL preserve canonical content, exact selection, annotations and Undo.
+
+#### Scenario: A large rendered object follows text or a table
+- **WHEN** a mixed manuscript contains code, tables, a large image, two different Mermaid diagrams, block formulas and an inline formula, and its native rendering completes
+- **THEN** painted objects and captions remain within allocated flow, following content does not overlap them, and reflow preserves the canonical document and editing history
+
+#### Scenario: Inspect native evidence after asynchronous rendering
+- **WHEN** automated verification targets a synthetic opaque block
+- **THEN** capture waits for visible render and scroll geometry to settle, records actual viewport dimensions and render failures, and does not treat requested window size or startup-only screenshots as completed layout acceptance

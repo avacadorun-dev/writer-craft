@@ -23,6 +23,7 @@ pub(super) struct RichState {
     last_diagnostic: Option<String>,
     dialog: Option<authoring::BlockDialog>,
     find_requested: bool,
+    capture_scroll_offset: f32,
     statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
 
@@ -66,10 +67,45 @@ impl RichState {
             last_diagnostic: None,
             dialog: None,
             find_requested: false,
+            capture_scroll_offset: 0.0,
             statistics: std::cell::Cell::new(None),
         }))
     }
 
+    /// Engineering capture navigation uses the same guarded semantic selection as native UI.
+    pub(super) fn select_capture_target(&mut self, id: &str) -> AppResult<()> {
+        let path = find_path(self.session.document().root(), id, NodePath::root())
+            .ok_or("capture_target_not_found")?;
+        let node = self.session.document().node(&path)?;
+        if matches!(
+            node.node_type.as_str(),
+            "paragraph" | "heading" | "codeBlock"
+        ) {
+            let point = DocPoint {
+                block_id: id.into(),
+                offset: ScalarOffset(0),
+            };
+            self.session.set_selection(Selection {
+                anchor: point.clone(),
+                head: point,
+            })?;
+        } else {
+            let reference = self.session.document().node_ref(&path)?;
+            self.session.select_node(reference)?;
+        }
+        self.session.request_scroll_to_caret();
+        Ok(())
+    }
+    pub(super) fn capture_readiness(
+        &self,
+        id: Option<&str>,
+    ) -> super::native_capture::CaptureReadiness {
+        let path =
+            id.and_then(|id| find_path(self.session.document().root(), id, NodePath::root()));
+        let mut state = self.media.capture_readiness(path.as_ref());
+        state.scroll_offset_bits = self.capture_scroll_offset.to_bits();
+        state
+    }
     /// Count the live native tree rather than a lossy autosave/reader projection.
     /// Metadata, selection and repaint changes do not rewalk the manuscript.
     pub(super) fn statistics(&self) -> studio_core::DocumentStatistics {
@@ -113,6 +149,7 @@ impl RichState {
             last_diagnostic: None,
             dialog: None,
             find_requested: false,
+            capture_scroll_offset: 0.0,
             statistics: std::cell::Cell::new(None),
         })
     }
@@ -425,7 +462,7 @@ impl StudioApp {
                     if !media_ready {
                         ui.ctx().request_repaint_after(Duration::from_millis(50));
                     }
-                    egui::ScrollArea::vertical()
+                    let scroll = egui::ScrollArea::vertical()
                         .id_salt(("rich-scroll", rich.session.options.id))
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
@@ -533,6 +570,7 @@ impl StudioApp {
                                 });
                             });
                         });
+                    rich.capture_scroll_offset = scroll.state.offset.y;
                 });
         });
         if let Some(project) = &self.project {
