@@ -688,10 +688,11 @@ fn attachment_states(notes: &[PassageAnnotation]) -> HashMap<String, AttachmentS
 
 fn normalize_note(note: &str) -> Result<String> {
     let note = note.trim();
-    if note.is_empty() || note.chars().count() > 10_000 {
-        return Err(StudioError::Validation(
-            "Annotation note must contain 1–10000 characters".into(),
-        ));
+    if note.is_empty() || note.chars().count() > crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS {
+        return Err(StudioError::Validation(format!(
+            "Annotation note must contain 1–{} characters",
+            crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
+        )));
     }
     Ok(note.into())
 }

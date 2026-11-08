@@ -415,17 +415,19 @@ fn visible_menu_anchor(visible: egui::Rect, caret: Option<egui::Rect>) -> egui::
     ))
 }
 fn valid_note_body(body: &str) -> bool {
-    !body.trim().is_empty() && body.chars().count() <= 10_000
+    !body.trim().is_empty()
+        && body.trim().chars().count() <= studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
 }
 fn note_length(ui: &mut egui::Ui, body: &str, l: Language, t: Tokens) {
-    let count = body.chars().count();
+    let count = body.trim().chars().count();
+    let limit = studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS;
     ui.label(
         RichText::new(l.format(
-            "{count} / 10000 characters",
-            &[("count", count.to_string())],
+            "{count} / {limit} characters",
+            &[("count", count.to_string()), ("limit", limit.to_string())],
         ))
         .size(12.0)
-        .color(if count > 10_000 { t.warning } else { t.muted }),
+        .color(if count > limit { t.warning } else { t.muted }),
     );
 }
 fn displayed_quote(anchor: &AnnotationAnchor, tree: Option<&RichTree>, l: Language) -> String {
@@ -1760,7 +1762,7 @@ mod tests {
         let id = egui::Id::new(("author-note-body", "large"));
         let mut body = String::new();
         field_frame(&ctx, &mut body, id, vec![], 0.0);
-        let original = "Я😀中".repeat(3_334);
+        let original = "Я😀中".repeat(studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS / 3 + 1);
         field_frame(
             &ctx,
             &mut body,
@@ -1770,6 +1772,16 @@ mod tests {
         );
         assert_eq!(body, original);
         assert!(!valid_note_body(&body));
+    }
+    #[test]
+    fn note_editor_accepts_the_full_source_capacity_using_unicode_scalars() {
+        let limit = studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS;
+        let body = "Я😀中".repeat(limit / 3);
+        assert_eq!(body.chars().count(), limit);
+        assert!(valid_note_body(&body));
+        assert!(valid_note_body(&format!("  {body}\n")));
+        assert!(!valid_note_body(&format!("{body}😀")));
+        assert!(!valid_note_body(" \n\t"));
     }
     #[test]
     fn note_input_undo_history_cannot_restore_another_notes_body() {

@@ -79,3 +79,18 @@ WriterCraft SHALL preserve annotation consistency through text saves, reviewed c
 
 - **WHEN** the author exports the ordinary manuscript for reading
 - **THEN** note text and editor-only decorations are excluded from the reader content
+
+
+### Requirement: PA-07 Source-compatible note capacity
+
+Native annotation creation, editing and restoration SHALL accept the same source-backed maximum of 24000 Unicode scalar characters in a normalized nonempty note. The editor SHALL expose this limit consistently without truncating drafts or imported note text. Oversized or stale saves SHALL preserve the current note, history and manuscript.
+
+#### Scenario: Edit a maximum-size imported note
+
+- **WHEN** an imported note contains 24000 Unicode scalars including Cyrillic, CJK and emoji
+- **THEN** it remains readable and editable at that capacity after save and reopen without flattening its attachment or manuscript
+
+#### Scenario: A paste exceeds source capacity
+
+- **WHEN** the author pastes text above the supported note limit
+- **THEN** the full local draft remains available, saving explains the limit and no saved note or history changes
