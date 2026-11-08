@@ -518,6 +518,10 @@ impl StudioApp {
     }
 
     fn save_explicit(&mut self) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        if let Some(canvas) = &mut self.canvas {
+            return canvas.save_now(&self.database);
+        }
         self.commit_title_edit()?;
         self.save()
     }

@@ -102,6 +102,9 @@ impl ProjectOutline {
         let mut visited = vec![false; outline.nodes.len()];
         // Process real roots first, then any damaged cyclic component exactly once.
         for root in roots.into_iter().chain(sorted) {
+            if visited[root] {
+                continue;
+            }
             let mut pending = vec![(root, 0_usize)];
             while let Some((index, depth)) = pending.pop() {
                 if std::mem::replace(&mut visited[index], true) {
@@ -223,6 +226,8 @@ impl ProjectOutline {
         if count == 0 && !self.query.is_empty() {
             ui.label(RichText::new(language.text("No matching documents")).color(t.muted));
         }
+        let row_spacing = ui.spacing().item_spacing.y;
+        ui.spacing_mut().item_spacing.y = 0.0;
         egui::ScrollArea::vertical()
             .id_salt(("project-hierarchy", &self.project_id))
             .auto_shrink([false, false])
@@ -322,6 +327,7 @@ impl ProjectOutline {
                     });
                 }
             });
+        ui.spacing_mut().item_spacing.y = row_spacing;
         if let Some(index) = toggle {
             if !self.collapsed.remove(&index) {
                 self.collapsed.insert(index);
