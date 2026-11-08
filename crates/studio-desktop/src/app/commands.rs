@@ -81,8 +81,39 @@ impl StudioApp {
                                 self.choose_archive();
                                 ui.close();
                             }
-                            if ui.button(l.text("Export text…")).clicked() {
+                            if ui
+                                .add_enabled(
+                                    !self.library && self.document.is_some(),
+                                    egui::Button::new(l.text("Export text…")),
+                                )
+                                .clicked()
+                            {
                                 self.export_text();
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui
+                                .add_enabled(
+                                    self.project.is_some(),
+                                    egui::Button::new(l.text("Export project…")),
+                                )
+                                .clicked()
+                            {
+                                self.open_project_export();
+                                ui.close();
+                            }
+                            if ui.button(l.text("Restore project…")).clicked() {
+                                self.open_project_restore();
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.project_transfer.has_state(),
+                                    egui::Button::new(l.text("Project transfer…")),
+                                )
+                                .clicked()
+                            {
+                                self.show_project_transfer();
                                 ui.close();
                             }
                         });

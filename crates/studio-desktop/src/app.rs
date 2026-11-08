@@ -18,6 +18,7 @@ mod native_capture;
 mod native_media;
 #[cfg(feature = "editor-preview")]
 mod native_services;
+mod navigation_return;
 mod navigator;
 #[cfg(feature = "editor-preview")]
 mod notes;
@@ -25,6 +26,7 @@ mod notes;
 mod project_clipboard;
 mod project_import;
 mod project_navigation;
+mod project_transfer;
 #[cfg(feature = "editor-preview")]
 mod proofing;
 #[cfg(feature = "editor-preview")]
@@ -137,6 +139,7 @@ pub struct StudioApp {
     reason: String,
     proposals: Vec<Proposal>,
     project_import: project_import::ProjectImportState,
+    project_transfer: project_transfer::ProjectTransferState,
     capture: Option<PathBuf>,
     capture_probe: native_capture::CaptureProbe,
     frames: u32,
@@ -281,6 +284,7 @@ impl StudioApp {
             reason: String::new(),
             proposals: vec![],
             project_import: project_import::ProjectImportState::default(),
+            project_transfer: project_transfer::ProjectTransferState::default(),
             capture,
             capture_probe: native_capture::CaptureProbe::default(),
             frames: 0,
@@ -723,6 +727,7 @@ impl StudioApp {
             || self.project_dialog
             || self.document_dialog
             || self.project_import.modal_open()
+            || self.project_transfer.modal_open()
             || self.error.is_some()
             || self.full_review.is_some()
             || self.rich_modal_open()
@@ -747,6 +752,7 @@ impl eframe::App for StudioApp {
         self.poll_storage(&ctx);
         #[cfg(feature = "editor-preview")]
         self.poll_canvas(&ctx);
+        self.poll_project_transfer(&ctx);
         self.poll_project_import(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
@@ -759,7 +765,10 @@ impl eframe::App for StudioApp {
             let result = self.save();
             self.record_error(result);
         }
-        if (self.dirty.is_some() && !self.autosave_paused) || self.project_import.busy() {
+        if (self.dirty.is_some() && !self.autosave_paused)
+            || self.project_import.busy()
+            || self.project_transfer.busy()
+        {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         #[cfg(feature = "editor-preview")]
@@ -770,7 +779,10 @@ impl eframe::App for StudioApp {
         #[cfg(not(feature = "editor-preview"))]
         let canvas_close_blocked = false;
         if ctx.input(|i| i.viewport().close_requested())
-            && (self.storage.modal_open() || self.project_import.busy() || canvas_close_blocked)
+            && (self.storage.modal_open()
+                || self.project_import.busy()
+                || self.project_transfer.busy()
+                || canvas_close_blocked)
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             #[cfg(feature = "editor-preview")]
@@ -830,6 +842,7 @@ impl eframe::App for StudioApp {
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
         self.storage_dialog(&ctx, t);
+        self.project_transfer_dialog(&ctx, t);
         #[cfg(feature = "editor-preview")]
         if let Some(canvas) = &mut self.canvas {
             canvas.dialogs(&ctx, &self.database, self.language, t);

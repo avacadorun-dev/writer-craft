@@ -151,6 +151,30 @@ impl CanvasState {
             media_viewer: None,
         })
     }
+    /// Bounded camera/selection bookmark, without retaining decoded media or draft buffers.
+    pub(super) fn navigation_view(
+        &self,
+    ) -> AppResult<(craft_canvas_model::Camera, craft_canvas_model::Selection)> {
+        if self.blocks_navigation() {
+            return Err(PendingCanvas.into());
+        }
+        Ok((self.view.camera(), self.view.selection().clone()))
+    }
+    /// Restore view-only state after the host has verified the exact project/board revision.
+    pub(super) fn restore_navigation_view(
+        &mut self,
+        camera: craft_canvas_model::Camera,
+        mut selection: craft_canvas_model::Selection,
+    ) -> AppResult<()> {
+        if self.blocks_navigation() {
+            return Err(PendingCanvas.into());
+        }
+        selection.retain_existing(self.session.document());
+        self.view.set_camera(camera);
+        self.view.set_selection(selection);
+        self.fit_on_open = false;
+        Ok(())
+    }
     /// Set presentation only for an explicitly armed hosted synthetic capture.
     pub(super) fn set_capture_camera(
         &mut self,

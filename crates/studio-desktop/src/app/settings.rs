@@ -366,7 +366,10 @@ impl StudioApp {
                 }
             }
             Section::Editor => self.editor_settings(ui, t),
-            Section::Files => self.storage_settings(ui, t),
+            Section::Files => {
+                self.storage_settings(ui, t);
+                self.project_transfer_settings(ui, t);
+            }
             Section::Keyboard => {
                 ui.label(RichText::new(l.text("⌘S — save     ⌘N — new project     ⌘O — open archive\n⌘⇧A — review panel     ⌘⇧F — focus mode     ⌘, — settings")).size(14.0).color(t.text));
             }

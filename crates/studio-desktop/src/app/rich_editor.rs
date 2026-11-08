@@ -24,6 +24,8 @@ pub(super) struct RichState {
     dialog: Option<authoring::BlockDialog>,
     find_requested: bool,
     capture_scroll_offset: f32,
+    measured_scroll_offset: Option<f32>,
+    navigation_scroll_offset: Option<f32>,
     capture_text_visible: bool,
     statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
@@ -70,6 +72,8 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            measured_scroll_offset: None,
+            navigation_scroll_offset: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         }))
@@ -97,6 +101,25 @@ impl RichState {
             self.session.select_node(reference)?;
         }
         self.session.request_scroll_to_caret();
+        Ok(())
+    }
+    fn manuscript_scroll_area(&mut self) -> egui::ScrollArea {
+        let area = egui::ScrollArea::vertical().id_salt(("rich-scroll", self.session.options.id));
+        match self.navigation_scroll_offset.take() {
+            Some(offset) => area.vertical_scroll_offset(offset),
+            None => area,
+        }
+    }
+    /// Last measured native manuscript scroll offset, never an invented initial bookmark.
+    pub(super) fn navigation_scroll_offset(&self) -> Option<f32> {
+        self.measured_scroll_offset
+    }
+    /// Queue presentation restoration after a guarded same-document return.
+    pub(super) fn restore_navigation_scroll(&mut self, offset: f32) -> AppResult<()> {
+        if !offset.is_finite() || offset < 0.0 {
+            return Err("invalid_navigation_scroll_offset".into());
+        }
+        self.navigation_scroll_offset = Some(offset);
         Ok(())
     }
     pub(super) fn capture_readiness(
@@ -165,6 +188,8 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            measured_scroll_offset: None,
+            navigation_scroll_offset: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         })
@@ -541,8 +566,8 @@ impl StudioApp {
                     if !media_ready {
                         ui.ctx().request_repaint_after(Duration::from_millis(50));
                     }
-                    let scroll = egui::ScrollArea::vertical()
-                        .id_salt(("rich-scroll", rich.session.options.id))
+                    let scroll = rich
+                        .manuscript_scroll_area()
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             let available = ui.available_width();
@@ -670,6 +695,7 @@ impl StudioApp {
                             });
                         });
                     rich.capture_scroll_offset = scroll.state.offset.y;
+                    rich.measured_scroll_offset = Some(scroll.state.offset.y);
                 });
         });
         if let Some(project) = &self.project {
