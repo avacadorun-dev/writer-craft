@@ -73,7 +73,7 @@ Record the audit outcome in the task/release verification or handoff: issues clo
 ## Initial tracked findings
 
 - [Issue #1: macOS application/Dock icon behavior](https://github.com/avacadorun-dev/writer-craft/issues/1) — owner-authored account `avacadorun-dev`, labeled `bug`. Link actual fix and packaged-app retest evidence before considering it resolved.
-- [Persistent selected-passage marks and attached notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) was created through authenticated GitHub CLI as `avacadorun-dev`. It remains unscheduled future parity work.
+- [Persistent selected-passage marks and attached notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2) was created through authenticated GitHub CLI as `avacadorun-dev`. It is included in the owner-approved alpha.2 editor scope; core work is partly qualified and native marks/notes acceptance remains pending.
 
 Tracking: [persistent text marks and author notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2).
 
@@ -82,3 +82,7 @@ On 2026-11-08, official GitHub CLI 2.103.3 was installed for the development env
 ## Administrative edits
 
 Routine changes to the project license, repository About/topics, release housekeeping or contributor tools are direct repository work. Do not create an issue for them unless the owner explicitly asks. The owner specifically requested changing the project to MIT without opening a license issue. This exception does not remove issue history for reported product bugs or enhancements.
+
+## Approved alpha.2 work breakdown
+
+The owner reaffirmed issue-driven execution and the full readiness criterion on 2026-11-08. The authoritative epic is #4. Use #7 for complete block authoring/commands, #8 for syntax highlighting, #9 for input/modal component corrections, #6 for adaptive editor layout, and #2 for persistent notes. #10 is the mandatory eventual full-project migration reference; its immediate editor checks support #4 without advancing deferred product scope. #1 remains pending its direct application/Dock check and #3 remains deferred installation work. Link implementation commits and exact hosted/native evidence to the matching issue; do not close a broad issue because one subtask passes.

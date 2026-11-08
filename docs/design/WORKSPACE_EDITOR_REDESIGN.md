@@ -122,3 +122,5 @@ Test just below/at/above the chosen threshold, common/minimum/wide viewports, in
 ![Shared field and modal geometry concept](assets/modal-field-geometry.svg)
 
 This illustration is not a native screenshot. The implementation owner must obtain compiled search/form/source-modal evidence, keyboard success/cancellation/failure behavior, all required locale/theme checks and independent retest before issue closure. Source fixes may be compiled alongside authoring work without touching the owner's open preview.
+
+Owner decision, 2026-11-08: the owner explicitly approved the adaptive wide/focus/docked concept images. Implement the proposed distinct document surface when the available center is at least 984 logical points (920-point outer surface, 760-point prose maximum) and the joined pane otherwise. Preserve selection and editor-local scroll across transitions. Approval covers design direction; exact compiled/native acceptance for #6 remains pending.
