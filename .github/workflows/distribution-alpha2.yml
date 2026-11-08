@@ -173,6 +173,7 @@ jobs:
             installer-debian12-amd64-rust-1.97.0-
       - name: Build from exact source and exercise Debian install, remove and purge
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
           env GITHUB_SHA="$SOURCE_COMMIT" python3 scripts/package-installers.py build --platform linux-amd64 --output artifacts/installers
           python3 scripts/package-installers.py verify-linux --output artifacts/installers

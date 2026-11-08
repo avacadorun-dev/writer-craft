@@ -429,6 +429,16 @@ mod tests {
     use craft_editor_egui::{DocPoint, Selection};
     use craft_editor_model::{Document as RichDocument, ScalarOffset};
 
+    fn run_test_frame(
+        context: &egui::Context,
+        input: egui::RawInput,
+        draw: impl FnMut(&mut egui::Ui),
+    ) {
+        let mut output = context.run_ui(input, draw);
+        // The test has no GPU; acknowledge the generated texture updates explicitly.
+        output.textures_delta.clear();
+    }
+
     fn fixture() -> AppResult<(tempfile::TempDir, StudioApp)> {
         let directory = tempfile::tempdir()?;
         let context = egui::Context::default();
@@ -657,7 +667,7 @@ mod tests {
         let context = egui::Context::default();
         let tokens = theme::resolve(&app.settings, false);
         app.open_document_find();
-        let _ = context.run_ui(egui::RawInput::default(), |ctx| {
+        let _ = run_test_frame(&context, egui::RawInput::default(), |ctx| {
             app.daily_control_dialogs(ctx.ctx(), tokens)
         });
         let mut input = egui::RawInput::default();
@@ -668,7 +678,9 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         });
-        let _ = context.run_ui(input, |ctx| app.daily_control_dialogs(ctx.ctx(), tokens));
+        let _ = run_test_frame(&context, input, |ctx| {
+            app.daily_control_dialogs(ctx.ctx(), tokens)
+        });
         assert!(!app.daily_controls.modal_open());
         let rich = app.rich.as_ref().ok_or("missing session")?;
         assert_eq!(rich.session.document().to_json()?, before);
@@ -690,7 +702,7 @@ mod tests {
             )),
             ..Default::default()
         };
-        let _ = context.run_ui(input.clone(), |ctx| {
+        let _ = run_test_frame(&context, input.clone(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
@@ -703,7 +715,7 @@ mod tests {
             .ok_or("missing title field")?;
         let mut typed = input.clone();
         typed.events.push(egui::Event::Text("Changed title".into()));
-        let _ = context.run_ui(typed, |ctx| {
+        let _ = run_test_frame(&context, typed, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
@@ -721,7 +733,7 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         });
-        let _ = context.run_ui(escape, |ctx| {
+        let _ = run_test_frame(&context, escape, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 app.document_title(ui, &document, tokens);
             });
