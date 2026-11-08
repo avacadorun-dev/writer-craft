@@ -682,7 +682,7 @@ pub(super) fn rewrite_canvas_resources(
                 if !matches!(kind, "text" | "link" | "group")
                     || (kind == "link"
                         && !node["url"].as_str().is_some_and(|url| {
-                            url.starts_with("https://") || url.starts_with("http://")
+                            url.trim().starts_with("https://") || url.trim().starts_with("http://")
                         }))
                 {
                     reading_placeholder(
