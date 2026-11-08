@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture two synthetic native startup states; never certify editor/interaction acceptance."""
+"""Capture synthetic native review states; never certify editor/interaction acceptance."""
 from __future__ import annotations
 
 import argparse
@@ -128,11 +128,19 @@ def main(bundle: Path) -> int:
         probe = subprocess.run(["pgrep", "-x", "WindowServer"], capture_output=True, timeout=5)
         evidence["window_server_observed"] = probe.returncode == 0
         save()
-        for name, language, flags in (
-            ("compact-dark-en-manuscript", "en", []),
-            ("compact-light-de-settings", "de", ["--light", "--settings"]),
+        for name, language, section, compact, flags in (
+            ("compact-dark-en-manuscript", "en", None, True, []),
+            ("compact-light-de-settings", "de", None, True, ["--light", "--settings"]),
+            ("compact-light-fr-editor", "fr", "editor", True, ["--light", "--settings"]),
+            ("compact-dark-ru-files", "ru", "files", True, ["--settings"]),
+            ("compact-dark-ja-editor", "ja", "editor", True, ["--settings"]),
+            ("compact-light-zh-max-text", "zh", None, True, ["--light", "--capture-max-text"]),
+            ("wide-dark-es-focus", "es", None, False, ["--capture-focus"]),
+            ("wide-light-pt-manuscript", "pt", None, False, ["--light"]),
+            ("compact-dark-de-notes", "de", None, True, ["--capture-notes"]),
+            ("wide-dark-en-editor", "en", "editor", False, ["--settings"]),
         ):
-            case = {"name": name, "language": language, "requested_inner_size_points": [1000, 680], "flags": flags, "status": "starting"}
+            case = {"name": name, "language": language, "requested_inner_size_points": [1000, 680] if compact else [1440, 940], "flags": flags, "section": section, "status": "starting"}
             evidence["cases"].append(case)
             save()
             try:
@@ -141,8 +149,8 @@ def main(bundle: Path) -> int:
                     capture = output / (name + ".png")
                     capture.unlink(missing_ok=True)
                     env = os.environ.copy()
-                    env.update(WRITERCRAFT_EDITOR_PREVIEW="1", WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language)
-                    command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", "--editor-preview", "--compact", "--capture", str(capture), *flags]
+                    env.update(WRITERCRAFT_EDITOR_PREVIEW="1", WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance")
+                    command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", "--editor-preview", *(["--compact"] if compact else []), "--capture", str(capture), *flags]
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
                         raise ValueError("Native startup timed out" if case["timed_out"] else "Native startup exited unsuccessfully")

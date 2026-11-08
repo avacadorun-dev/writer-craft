@@ -273,6 +273,7 @@ impl StudioApp {
             app.settings_section = match std::env::var("WRITERCRAFT_CAPTURE_SECTION").as_deref() {
                 Ok("general") => settings::Section::General,
                 Ok("editor") => settings::Section::Editor,
+                Ok("files") => settings::Section::Files,
                 Ok("mcp") => settings::Section::Mcp,
                 _ => app.settings_section,
             };
@@ -300,6 +301,22 @@ impl StudioApp {
                 if let Some(showcase) = showcase {
                     app.open_document(showcase)?;
                 }
+            }
+        }
+        // These read-only presentation overrides belong only to explicitly requested captures.
+        if app.capture.is_some() && crate::editor_preview_requested() {
+            if std::env::args().any(|argument| argument == "--capture-focus") {
+                app.focus_mode = true;
+            }
+            if std::env::args().any(|argument| argument == "--capture-max-text") {
+                app.font_size = 28.0;
+                app.editor_preferences.values.font_size = 28.0;
+            }
+            #[cfg(feature = "editor-preview")]
+            if std::env::args().any(|argument| argument == "--capture-notes") {
+                app.inspector = Inspector::Notes;
+                app.inspector_visible = true;
+                app.prefer_inspector = true;
             }
         }
         if app.capture.is_some() && std::env::args().any(|argument| argument == "--capture-review")

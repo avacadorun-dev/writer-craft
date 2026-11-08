@@ -59,7 +59,8 @@ jobs:
           rustc -vV > artifacts/qualification/compiler.txt
           ready=true
           if ! cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-metadata.json" 2> artifacts/qualification/lock-check.log; then
-            cargo generate-lockfile > artifacts/qualification/lock-resolution.log 2>&1
+            # Preserve compatible acknowledged pins while resolving only newly required edges.
+            cargo metadata --all-features --format-version 1 > "$RUNNER_TEMP/editor-preview-resolved-metadata.json" 2> artifacts/qualification/lock-resolution.log
             ready=false
           fi
           cp Cargo.lock artifacts/qualification/Cargo.lock
@@ -184,7 +185,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-      - name: Capture two synthetic native startup states (informational)
+      - name: Capture synthetic native review states (informational)
         id: startup-smoke
         continue-on-error: true
         run: python3 scripts/native-startup-smoke.py --bundle 'artifacts/WriterCraft Editor Preview.app'

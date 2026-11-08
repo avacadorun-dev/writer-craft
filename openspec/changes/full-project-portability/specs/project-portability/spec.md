@@ -72,6 +72,16 @@ The application SHALL show the actual selected workspace data location and provi
 - WHEN the author requests a consistent backup
 - THEN the backup uses an acknowledged SQLite snapshot or an orderly checkpoint/close procedure and does not advertise copying only a live database file as sufficient.
 
+#### Scenario: Export targets active or future workspace files
+
+- WHEN a user-selected export or backup path names a custom database, an existing alias, a future WAL/SHM/rollback journal or a sibling preference file
+- THEN the operation refuses before creating or replacing output, including through a selected database symlink or Windows-equivalent filename, and all active data remains intact.
+
+#### Scenario: Database path uses a settings filename
+
+- WHEN the selected workspace filename or an existing alias collides with a reserved preference file
+- THEN the workspace is rejected before creation or mutation with an actionable filename error, and settings cannot replace that database.
+
 ### Requirement: Complete migration acceptance
 
 The application MUST qualify synthetic complete-domain fixtures on hosted CI and privately exercise the supplied reference project through native open/edit/media/restart/recovery/round trip before closing migration issues.
