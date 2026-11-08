@@ -227,6 +227,10 @@ impl StudioApp {
             .cloned()
             .ok_or("missing_recovery_project")?;
         let documents = self.workspace.list_documents(&project.id)?;
+        let outline = super::project_navigation::ProjectOutline::prepare(
+            &project.id,
+            &self.workspace.project_tree(&project.id)?,
+        )?;
         let proposals = self.workspace.proposals(&document.id)?;
         let mut rich = RichState::open_saved_read_only(&document)?;
         rich.session.set_clipboard_provider(self.clipboard.clone());
@@ -242,6 +246,7 @@ impl StudioApp {
         self.projects = projects;
         self.project = Some(project);
         self.documents = documents;
+        self.project_outline = outline;
         self.proposals = proposals;
         self.dirty = None;
         self.autosave_paused = false;
