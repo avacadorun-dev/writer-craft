@@ -604,7 +604,7 @@ fn native_stream_folder_should_render_all_source_blocks_and_restore_saved_histor
     use studio_transfer::{CanonicalProjectFolder, export_canonical_project_folder};
     let directory = tempfile::tempdir().unwrap();
     let database = directory.path().join("source.sqlite");
-    let (worker, project) = imported(&database);
+    let (_worker, project) = imported(&database);
     let mut exporter = ProjectPortableExportWorker::open(&database).unwrap();
     let captured = exporter
         .prepare(&project, &ProjectTransferCancellation::default())
