@@ -37,6 +37,33 @@ pub fn document_statistics(text: &str) -> DocumentStatistics {
     }
 }
 
+/// Count a rich manuscript using the original Tiptap editor.getText projection.
+/// Each nonzero-position block contributes two newlines, including containers;
+/// hard breaks contribute one newline. Formula/image/diagram attributes and private
+/// notes contribute no reader text. This query never replaces canonical JSON.
+pub fn rich_document_statistics(document: &RichDocument) -> DocumentStatistics {
+    fn append(node: &Node, first_top_level: bool, output: &mut String) {
+        let inline = matches!(node.node_type.as_str(), "text" | "hardBreak" | "inlineMath");
+        if !inline && !first_top_level {
+            output.push_str("\n\n");
+        }
+        match node.node_type.as_str() {
+            "text" => output.push_str(node.text.as_deref().unwrap_or_default()),
+            "hardBreak" => output.push('\n'),
+            _ => {
+                for child in node.children() {
+                    append(child, false, output);
+                }
+            }
+        }
+    }
+    let mut text = String::new();
+    for (index, node) in document.blocks().iter().enumerate() {
+        append(node, index == 0, &mut text);
+    }
+    document_statistics(&text)
+}
+
 /// Exact semantic endpoints of the first case-insensitive document match.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindMatch {

@@ -281,3 +281,26 @@ fn find_matches_contextual_greek_lowercase_without_losing_source_boundaries() {
 fn statistics_use_original_javascript_whitespace_rules() {
     assert_eq!(document_statistics("one\u{feff}two\u{0085}three").words, 2);
 }
+
+#[test]
+fn rich_statistics_match_original_registered_tiptap_all_node_probe() {
+    let fixtures: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/legacy_editor_statistics.json")).unwrap();
+    for fixture in fixtures.as_array().unwrap() {
+        let document = RichDocument::from_json(fixture["input"].clone()).unwrap();
+        let original = document.to_json().unwrap();
+        let expected = document_statistics(fixture["text"].as_str().unwrap());
+        let actual = studio_core::rich_document_statistics(&document);
+        assert_eq!(actual, expected, "{}", fixture["name"]);
+        assert_eq!(actual.words, fixture["words"].as_u64().unwrap() as usize);
+        assert_eq!(
+            actual.characters,
+            fixture["characters"].as_u64().unwrap() as usize
+        );
+        assert_eq!(
+            actual.reading_minutes,
+            fixture["readingMinutes"].as_u64().unwrap() as usize
+        );
+        assert_eq!(document.to_json().unwrap(), original);
+    }
+}
