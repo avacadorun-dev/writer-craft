@@ -260,7 +260,8 @@ fn capsule_transfers(
             bytes,
         });
     }
-    studio_core::validate_image_transfers(&images, max_bytes)?;
+    studio_core::validate_image_transfers(&images, max_bytes)
+        .map_err(|_| ProjectClipboardError::InvalidCapsule)?;
     Ok(Some(images))
 }
 fn references(slice: &RichSlice) -> Result<References> {
@@ -618,7 +619,10 @@ mod recovery_tests {
         let mut value: serde_json::Value = serde_json::from_slice(data)?;
         value["images"][0]["width"] = serde_json::json!(1000);
         *data = serde_json::to_vec(&value)?;
-        assert!(scope.prepare_copy(&invalid).is_err());
+        assert!(matches!(
+            scope.prepare_copy(&invalid),
+            Err(ProjectClipboardError::InvalidCapsule)
+        ));
         Ok(())
     }
 }
