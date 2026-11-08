@@ -51,6 +51,16 @@ impl StudioApp {
 
     pub(super) fn review(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
+        if self
+            .document
+            .as_ref()
+            .is_some_and(|document| document.rich_json.is_some())
+        {
+            ui.label(RichText::new(l.text("Review")).size(17.0).strong());
+            ui.add_space(10.0);
+            ui.label(RichText::new(l.text("Rich-text proposals are not available in this preview. Your document remains unchanged.")).color(t.muted));
+            return;
+        }
         ui.horizontal(|ui| {
             icons::icon(ui, Icon::Assistant, 22.0, t.accent);
             ui.label(

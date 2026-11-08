@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Rich-text proposals are not available in this preview. Your document remains unchanged.",
+        [
+            "Работа с предложениями правок ещё не подключена к новому редактору в этой тестовой сборке. Документ остаётся без изменений.",
+            "Rich-text proposals are not available in this preview. Your document remains unchanged.",
+            "Änderungsvorschläge für formatierten Text sind in dieser Vorschau noch nicht verfügbar. Ihr Dokument bleibt unverändert.",
+            "Les propositions de modification du texte enrichi ne sont pas disponibles dans cet aperçu. Votre document reste inchangé.",
+            "Las propuestas para texto enriquecido aún no están disponibles en esta vista previa. Su documento no cambia.",
+            "As propostas para texto formatado ainda não estão disponíveis nesta prévia. Seu documento permanece inalterado.",
+            "此预览版尚未接入富文本修改建议。文档保持不变。",
+            "このプレビューではリッチテキストの変更提案をまだ利用できません。文書は変更されません。",
+        ],
+    ),
+    (
         "Mixed formatting",
         [
             "Смешанное форматирование",

@@ -1,11 +1,11 @@
 //! Isolated engineering preview: canonical rich session, durable drafts and native canvas.
 //! This integration does not assert completion of the full-editor-parity release gate.
 use super::*;
-use craft_editor_egui::{EditorSession, MarkState, canvas::CanvasStyle};
+use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::CanvasStyle};
 use craft_editor_model as tables;
 use craft_editor_model::{
     CellRect, CellSelection, Command, Document as RichDocument, Mark, Node, NodePath, NodeRef,
-    Revision, TableGrid,
+    Revision, ScalarOffset, TableGrid,
 };
 use serde_json::{Map, json};
 
@@ -375,28 +375,58 @@ fn find_path(node: &Node, id: &str, path: NodePath) -> Option<NodePath> {
 }
 
 fn set_block_kind(session: &mut EditorSession, level: u8) -> AppResult<()> {
-    let selection = session.selection().ok_or("No selection")?;
-    let path = find_path(
-        session.document().root(),
-        &selection.head.block_id,
-        NodePath::root(),
-    )
-    .ok_or("Missing text block")?;
-    let target = session.document().node_ref(&path)?;
-    let mut replacement = target.expected.as_ref().clone();
-    replacement.node_type = if level == 0 { "paragraph" } else { "heading" }.into();
-    if level == 0 {
-        if let Some(attrs) = &mut replacement.attrs {
-            attrs.remove("level");
+    fn text_blocks(node: &Node, ids: &mut Vec<String>) {
+        if matches!(
+            node.node_type.as_str(),
+            "paragraph" | "heading" | "codeBlock"
+        ) {
+            if let Some(id) = node.block_id() {
+                ids.push(id.to_owned());
+            }
+        } else {
+            for child in node.children() {
+                text_blocks(child, ids);
+            }
         }
-    } else {
-        replacement
-            .attrs
-            .get_or_insert_default()
-            .insert("level".into(), json!(level));
     }
-    let command = session.document().replace_node(&target, replacement)?;
-    session.apply_commands(vec![command])?;
+    let selection = session.selection().ok_or("No selection")?;
+    let mut ids = vec![];
+    text_blocks(session.document().root(), &mut ids);
+    let a = ids
+        .iter()
+        .position(|id| id == &selection.anchor.block_id)
+        .ok_or("Missing anchor")?;
+    let b = ids
+        .iter()
+        .position(|id| id == &selection.head.block_id)
+        .ok_or("Missing caret")?;
+    let mut staged =
+        craft_editor_model::Editor::new(session.document().clone(), session.revision());
+    let mut commands = vec![];
+    for id in &ids[a.min(b)..=a.max(b)] {
+        let path = find_path(staged.document().root(), id, NodePath::root())
+            .ok_or("Missing text block")?;
+        let target = staged.document().node_ref(&path)?;
+        let mut replacement = target.expected.as_ref().clone();
+        replacement.node_type = if level == 0 { "paragraph" } else { "heading" }.into();
+        if level == 0 {
+            if let Some(attrs) = &mut replacement.attrs {
+                attrs.remove("level");
+            }
+        } else {
+            replacement
+                .attrs
+                .get_or_insert_default()
+                .insert("level".into(), json!(level));
+        }
+        let command = staged.document().replace_node(&target, replacement)?;
+        staged.apply(craft_editor_model::Transaction {
+            base_revision: staged.revision(),
+            commands: vec![command.clone()],
+        })?;
+        commands.push(command);
+    }
+    session.apply_commands(commands)?;
     Ok(())
 }
 
@@ -435,12 +465,26 @@ fn insert_table(session: &mut EditorSession) -> AppResult<()> {
         Map::from_iter([("blockId".into(), json!(uuid::Uuid::new_v4().to_string()))]),
         rows,
     );
+    let id = first_text_identity(&table)
+        .ok_or("Missing new cell identity")?
+        .to_owned();
+    let point = DocPoint {
+        block_id: id,
+        offset: ScalarOffset(0),
+    };
     let parent = session.document().node_ref(&NodePath::root())?;
-    session.apply_commands(vec![Command::InsertChildren {
-        parent,
-        index,
-        children: vec![table],
-    }])?;
+    session.apply_commands_with_selection(
+        vec![Command::InsertChildren {
+            parent,
+            index,
+            children: vec![table],
+        }],
+        Selection {
+            anchor: point.clone(),
+            head: point,
+        },
+    )?;
+    session.request_scroll_to_caret();
     Ok(())
 }
 
@@ -577,16 +621,66 @@ impl TableContext {
                 )?
             }
         };
-        session.apply_commands(vec![command])?;
+        if matches!(action, TableAction::DeleteRow | TableAction::DeleteColumn) {
+            let mut candidate =
+                craft_editor_model::Editor::new(session.document().clone(), session.revision());
+            candidate.apply(craft_editor_model::Transaction {
+                base_revision: candidate.revision(),
+                commands: vec![command.clone()],
+            })?;
+            let previous = session.selection().map(|selection| &selection.head);
+            let point = if let Some(point) =
+                previous.filter(|point| candidate.document().block(&point.block_id).is_ok())
+            {
+                point.clone()
+            } else {
+                let table = candidate.document().node(&self.target.path)?;
+                let grid = TableGrid::new(table)?;
+                let row = self.cell.row.min(grid.rows.saturating_sub(1));
+                let column = self.cell.column.min(grid.columns.saturating_sub(1));
+                let cell = grid.cell_at(row, column).ok_or("Missing adjacent cell")?;
+                let node = table
+                    .children()
+                    .get(cell.row)
+                    .and_then(|row| row.children().get(cell.cell_index))
+                    .ok_or("Missing adjacent cell content")?;
+                DocPoint {
+                    block_id: first_text_identity(node)
+                        .ok_or("Missing adjacent text identity")?
+                        .to_owned(),
+                    offset: ScalarOffset(0),
+                }
+            };
+            session.apply_commands_with_selection(
+                vec![command],
+                Selection {
+                    anchor: point.clone(),
+                    head: point,
+                },
+            )?;
+            session.request_scroll_to_caret();
+        } else {
+            session.apply_commands(vec![command])?;
+        }
         Ok(())
+    }
+}
+
+fn first_text_identity(node: &Node) -> Option<&str> {
+    if matches!(
+        node.node_type.as_str(),
+        "paragraph" | "heading" | "codeBlock"
+    ) {
+        node.block_id()
+    } else {
+        node.children().iter().find_map(first_text_identity)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_editor_egui::{DocPoint, Selection};
-    use craft_editor_model::{MarkMode, ScalarOffset};
+    use craft_editor_model::MarkMode;
 
     fn fixture() -> AppResult<(tempfile::TempDir, StudioApp)> {
         let directory = tempfile::tempdir()?;
@@ -702,6 +796,88 @@ mod tests {
         );
         rich.session.undo()?;
         assert_eq!(rich.session.document().to_json()?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn heading_selection_across_cells_is_one_undoable_edit() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let session = &mut app.rich.as_mut().ok_or("Missing session")?.session;
+        session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "right".into(),
+                offset: ScalarOffset(1),
+            },
+            head: DocPoint {
+                block_id: "bottom".into(),
+                offset: ScalarOffset(8),
+            },
+        })?;
+        let before = session.document().to_json()?;
+        set_block_kind(session, 2)?;
+        for id in ["right", "bottom"] {
+            let block = session.document().block(id)?;
+            assert_eq!(block.node_type, "heading");
+            assert_eq!(
+                block.attrs.as_ref().and_then(|attrs| attrs.get("level")),
+                Some(&json!(2))
+            );
+        }
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn inserted_table_receives_typing_target_and_redo_restores_it() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let session = &mut app.rich.as_mut().ok_or("Missing session")?.session;
+        let point = DocPoint {
+            block_id: "intro".into(),
+            offset: ScalarOffset(3),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        let before = session.document().to_json()?;
+        insert_table(session)?;
+        let target = session.selection().ok_or("Missing inserted caret")?.clone();
+        assert_ne!(target.head.block_id, "intro");
+        assert!(TableContext::current(session).is_some());
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        session.redo()?;
+        assert_eq!(session.selection(), Some(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn deleting_active_row_keeps_next_typing_in_surviving_table_cell() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let session = &mut app.rich.as_mut().ok_or("Missing session")?.session;
+        let point = DocPoint {
+            block_id: "corner".into(),
+            offset: ScalarOffset(4),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        let before = session.selection().cloned();
+        let context = TableContext::current(session).ok_or("Missing table")?;
+        context.apply(session, TableAction::DeleteRow)?;
+        let after = session.selection().cloned();
+        assert_eq!(
+            after
+                .as_ref()
+                .map(|selection| selection.head.block_id.as_str()),
+            Some("bottom")
+        );
+        session.undo()?;
+        assert_eq!(session.selection(), before.as_ref());
+        session.redo()?;
+        assert_eq!(session.selection(), after.as_ref());
         Ok(())
     }
 

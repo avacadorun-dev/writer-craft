@@ -31,7 +31,10 @@ impl StudioApp {
                                     .strong()
                                     .color(t.muted),
                             );
-                            if document.read_only {
+                            if document.read_only
+                                || (document.rich_json.is_some()
+                                    && !cfg!(feature = "editor-preview"))
+                            {
                                 ui.label(
                                     RichText::new(l.text("Original format · read only"))
                                         .size(11.0)
@@ -107,7 +110,9 @@ impl StudioApp {
                                     .margin(0)
                                     .desired_width(width)
                                     .desired_rows(24)
-                                    .interactive(!document.read_only)
+                                    .interactive(
+                                        !document.read_only && document.rich_json.is_none(),
+                                    )
                                     .hint_text(l.text("Start writing…"))
                                     .show(ui);
                                 if self.focus_manuscript {

@@ -271,6 +271,9 @@ impl StudioApp {
                 self.dirty = Some(Instant::now());
                 self.status = "Unsaved text recovered".into();
             }
+            if let Some(state) = &rich {
+                self.body = state.session.document().plain_text();
+            }
             self.rich = rich;
         }
         self.proposals = self.workspace.proposals(&document.id)?;

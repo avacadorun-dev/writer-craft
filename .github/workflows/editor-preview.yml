@@ -54,6 +54,8 @@ jobs:
           key: editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             editor-preview-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
+            ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.compiler }}-
       - name: Resolve the preview lockfile on the hosted runner
         run: |
           mkdir -p artifacts/qualification
