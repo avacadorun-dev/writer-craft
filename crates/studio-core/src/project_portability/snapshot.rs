@@ -193,6 +193,78 @@ impl ProjectExportSnapshot {
 }
 
 impl Workspace {
+    /// Capture only one same-project media resource, without reading manuscripts or other assets.
+    ///
+    /// Source logical aliases and native-created media handles are scoped to this project. The
+    /// returned descriptor is the exact identity accepted by the one-object byte capability.
+    /// Open a separate media-worker Workspace before calling this method: subsequent copy/load
+    /// operations intentionally hold that worker's own connection while verifying immutable bytes.
+    /// Non-image originals retain their existing MIME-specific bounds, never the image 12 MiB cap.
+    pub fn project_media_source(
+        &self,
+        project: &str,
+        logical_id: &str,
+    ) -> Result<(ProjectAttachment, ProjectAssetSource)> {
+        let connection = self.connection()?;
+        require_project(&connection, project)?;
+        let mut statement = connection.prepare("SELECT a.rowid,a.id,a.sha256,a.byte_size,a.media_type,a.original_name,a.width,a.height,m.logical_id,m.archive_path FROM project_assets a LEFT JOIN project_asset_metadata m ON m.project_id=a.project_id AND m.native_asset_id=a.id WHERE a.project_id=?1 AND (m.resource_kind IS NULL OR m.resource_kind='media') AND (m.logical_id=?2 OR a.id=?2) LIMIT 2")?;
+        let rows = statement
+            .query_map(params![project, logical_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    read_unsigned(row, 3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<u32>>(6)?,
+                    row.get::<_, Option<u32>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if rows.len() > 1 {
+            return invalid(
+                "Media identity is ambiguous inside this project; select its explicit logical reference",
+            );
+        }
+        let (rowid, native, sha, size, mime, name, width, height, logical, path) = rows
+            .into_iter()
+            .next()
+            .ok_or_else(|| StudioError::NotFound {
+                kind: "project media",
+                id: logical_id.to_owned(),
+            })?;
+        if size > super::MAX_PROJECT_TRANSFER_BYTES {
+            return invalid("Media original exceeds the explicit 512 MiB resource bound");
+        }
+        let logical = logical.unwrap_or(native);
+        let path = path.unwrap_or_else(|| format!("media/native-{}{}", logical, extension(&mime)));
+        let descriptor = ProjectAttachment {
+            resource_kind: "media".into(),
+            logical_id: logical,
+            path: path.clone(),
+            sha256: sha,
+            byte_size: size,
+            media_type: mime,
+            original_name: name,
+            width,
+            height,
+        };
+        let assets = ProjectAssetSource {
+            connection: Arc::clone(&self.connection),
+            project_id: project.to_owned(),
+            assets: HashMap::from([(
+                path,
+                CapturedAsset {
+                    rowid,
+                    descriptor: descriptor.clone(),
+                },
+            )]),
+        };
+        Ok((descriptor, assets))
+    }
     /// Capture canonical records, metadata, histories and recovery in one read transaction.
     /// Run sizeable captures and subsequent asset copies on a separately opened worker Workspace.
     pub fn project_export_snapshot(&self, project: &str) -> Result<ProjectExportSnapshot> {
@@ -385,7 +457,7 @@ impl Workspace {
         })
     }
 }
-fn native_manifest(project: &str, title: &str) -> Value {
+pub(super) fn native_manifest(project: &str, title: &str) -> Value {
     json!({"format":"writers-studio-project","formatVersion":8,"exportedAt":"0001-01-01T00:00:00Z","project":{"id":project,"title":title,"kind":"free","language":"ru","synopsis":"","structureRevision":1,"structure":{"schemaVersion":1,"template":"free","rootLabel":"Manuscript","nodeTypes":[{"key":"document","label":"Document","pluralLabel":"Documents","icon":"file-text","contentBearing":true,"allowedChildren":["document"],"canBeRoot":true}]},"createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"},"nodes":[],"documentRevisions":[],"namedVersions":[],"dictionaryTerms":[],"documentAnnotations":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[]})
 }
 fn capture_assets(
