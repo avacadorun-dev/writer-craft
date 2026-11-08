@@ -181,6 +181,97 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Discard draft and reload",
+        [
+            "Удалить черновик и загрузить заметку",
+            "Discard draft and reload",
+            "Entwurf verwerfen und neu laden",
+            "Abandonner le brouillon et recharger",
+            "Descartar borrador y recargar",
+            "Descartar rascunho e recarregar",
+            "放弃草稿并重新加载",
+            "下書きを破棄して再読み込み",
+        ],
+    ),
+    (
+        "Save note drafts before closing?",
+        [
+            "Сохранить черновики заметок перед выходом?",
+            "Save note drafts before closing?",
+            "Notizentwürfe vor dem Schließen speichern?",
+            "Enregistrer les brouillons de notes avant de fermer ?",
+            "¿Guardar los borradores de notas antes de cerrar?",
+            "Salvar rascunhos de notas antes de fechar?",
+            "关闭前保存笔记草稿？",
+            "終了前に注釈の下書きを保存しますか？",
+        ],
+    ),
+    (
+        "Choose whether to save your note drafts before closing WriterCraft.",
+        [
+            "Выберите, сохранять ли черновики заметок перед выходом из WriterCraft.",
+            "Choose whether to save your note drafts before closing WriterCraft.",
+            "Wählen Sie, ob Ihre Notizentwürfe vor dem Schließen von WriterCraft gespeichert werden sollen.",
+            "Choisissez d’enregistrer ou non vos brouillons de notes avant de fermer WriterCraft.",
+            "Elija si desea guardar los borradores de notas antes de cerrar WriterCraft.",
+            "Escolha se deseja salvar os rascunhos de notas antes de fechar o WriterCraft.",
+            "请选择是否在关闭 WriterCraft 前保存笔记草稿。",
+            "WriterCraft を終了する前に注釈の下書きを保存するか選択してください。",
+        ],
+    ),
+    (
+        "Save drafts",
+        [
+            "Сохранить черновики",
+            "Save drafts",
+            "Entwürfe speichern",
+            "Enregistrer les brouillons",
+            "Guardar borradores",
+            "Salvar rascunhos",
+            "保存草稿",
+            "下書きを保存",
+        ],
+    ),
+    (
+        "Discard drafts",
+        [
+            "Удалить черновики",
+            "Discard drafts",
+            "Entwürfe verwerfen",
+            "Abandonner les brouillons",
+            "Descartar borradores",
+            "Descartar rascunhos",
+            "放弃草稿",
+            "下書きを破棄",
+        ],
+    ),
+    (
+        "Copy code",
+        [
+            "Копировать код",
+            "Copy code",
+            "Code kopieren",
+            "Copier le code",
+            "Copiar código",
+            "Copiar código",
+            "复制代码",
+            "コードをコピー",
+        ],
+    ),
+    (
+        "{count} / 10000 characters",
+        [
+            "{count} / 10000 символов",
+            "{count} / 10000 characters",
+            "{count} / 10000 Zeichen",
+            "{count} / 10000 caractères",
+            "{count} / 10000 caracteres",
+            "{count} / 10000 caracteres",
+            "{count} / 10000 个字符",
+            "{count} / 10000 文字",
+        ],
+    ),
+    (
         "[Embedded content]",
         [
             "[Встроенное содержимое]",

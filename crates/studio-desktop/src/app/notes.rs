@@ -20,6 +20,7 @@ struct NoteDraft {
     body: String,
 }
 struct NoteComposer {
+    id: String,
     document_id: String,
     base_revision: i64,
     anchor: AnnotationAnchor,
@@ -37,18 +38,52 @@ pub(super) struct NotesState {
     selected: Option<String>,
     drafts: HashMap<String, NoteDraft>,
     composer: Option<NoteComposer>,
+    paused_composers: HashMap<String, NoteComposer>,
+    failed_context: Option<(String, i64)>,
+    close_confirmation: bool,
     delete_confirmation: Option<PassageAnnotation>,
     reveal_row: bool,
     last_error: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 impl NotesState {
     pub(super) fn clear(&mut self) {
-        *self = Self::default();
+        let mut paused_composers = std::mem::take(&mut self.paused_composers);
+        if let Some(composer) = self.composer.take() {
+            paused_composers.insert(composer.document_id.clone(), composer);
+        }
+        let mut drafts = std::mem::take(&mut self.drafts);
+        drafts.retain(|_, draft| draft.body.trim() != draft.original.note.trim());
+        *self = Self {
+            drafts,
+            paused_composers,
+            ..Self::default()
+        };
     }
     pub(super) fn modal_open(&self) -> bool {
-        self.composer.is_some() || self.delete_confirmation.is_some()
+        self.composer.is_some() || self.delete_confirmation.is_some() || self.close_confirmation
+    }
+    pub(super) fn has_unsaved_drafts(&self) -> bool {
+        self.drafts
+            .values()
+            .any(|draft| draft.body.trim() != draft.original.note.trim())
+            || self
+                .composer
+                .as_ref()
+                .is_some_and(|composer| !composer.body.trim().is_empty())
+            || self
+                .paused_composers
+                .values()
+                .any(|composer| !composer.body.trim().is_empty())
+    }
+    pub(super) fn request_close_confirmation(&mut self) {
+        self.close_confirmation = true;
+    }
+    pub(super) fn close_confirmation_open(&self) -> bool {
+        self.close_confirmation
     }
     pub(super) fn invalidate(&mut self) {
+        self.invalid = true;
+        self.failed_context = None;
         self.snapshot = None;
         self.preview_key = None;
     }
@@ -64,6 +99,13 @@ impl NotesState {
         }) {
             return Ok(());
         }
+        if self
+            .failed_context
+            .as_ref()
+            .is_some_and(|(id, revision)| id == &document.id && *revision == document.revision)
+        {
+            return Ok(());
+        }
         let prior_revision = self
             .snapshot
             .as_ref()
@@ -72,12 +114,26 @@ impl NotesState {
             .snapshot
             .as_ref()
             .map(|snapshot| snapshot.document_id().to_owned());
-        let snapshot = workspace.annotation_preview_snapshot(&document.id, document.revision)?;
+        let snapshot = match workspace.annotation_preview_snapshot(&document.id, document.revision)
+        {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.invalid = true;
+                self.snapshot = None;
+                self.failed_context = Some((document.id.clone(), document.revision));
+                return Err(error.into());
+            }
+        };
         if prior_id.as_deref().is_some_and(|id| id != document.id) {
             self.selected = None;
-            self.drafts.clear();
-            self.composer = None;
+            if let Some(composer) = self.composer.take() {
+                self.paused_composers
+                    .insert(composer.document_id.clone(), composer);
+            }
             self.delete_confirmation = None;
+        }
+        if self.composer.is_none() {
+            self.composer = self.paused_composers.remove(&document.id);
         }
         // A guarded local canonical save advances every note once. Rebase the
         // editor's metadata guard only when authored fields stayed identical.
@@ -101,6 +157,7 @@ impl NotesState {
             .ok_or("note_preview_epoch_overflow")?;
         self.preview_key = None;
         self.invalid = false;
+        self.failed_context = None;
         Ok(())
     }
     pub(super) fn frame<'a>(
@@ -210,6 +267,98 @@ fn selection_for(note: &PassageAnnotation, tree: &RichTree) -> AppResult<Selecti
         },
     })
 }
+fn note_input(
+    ui: &mut egui::Ui,
+    body: &mut String,
+    id: egui::Id,
+    l: Language,
+    t: Tokens,
+) -> egui::Response {
+    let response = ui.add(
+        egui::TextEdit::multiline(body)
+            .id(id)
+            .desired_width(f32::INFINITY)
+            .desired_rows(6)
+            .margin(12),
+    );
+    note_length(ui, body, l, t);
+    response
+}
+fn note_row(
+    ui: &mut egui::Ui,
+    note: &PassageAnnotation,
+    quote: &str,
+    selected: bool,
+    l: Language,
+    t: Tokens,
+) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 44.0), egui::Sense::click());
+    if selected || response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 5.0, if selected { t.accent_soft } else { t.surface });
+    }
+    let attention = note.anchor_status == AnchorStatus::Detached
+        || note.status == AnnotationStatus::NeedsAttention;
+    let icon = if attention {
+        Icon::Warning
+    } else if note.status == AnnotationStatus::Resolved {
+        Icon::Check
+    } else {
+        Icon::Assistant
+    };
+    let color = if attention {
+        t.warning
+    } else if selected {
+        t.accent
+    } else {
+        t.muted
+    };
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(egui::vec2(8.0, 3.0)))
+            .layout(Layout::left_to_right(Align::Center)),
+        |ui| {
+            icons::icon(ui, icon, 18.0, color);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                ui.add(
+                    egui::Label::new(RichText::new(excerpt(quote, 80)).size(13.0).color(t.text))
+                        .truncate(),
+                );
+                let body = if note.status == AnnotationStatus::Resolved {
+                    format!("{} · {}", l.text("Resolved"), excerpt(&note.note, 80))
+                } else {
+                    excerpt(&note.note, 80)
+                };
+                ui.add(egui::Label::new(RichText::new(body).size(12.0).color(t.muted)).truncate());
+            });
+        },
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            format!("{}: {}", quote, note.note),
+        )
+    });
+    response.on_hover_text(format!("{}\n{}", quote, note.note))
+}
+fn valid_note_body(body: &str) -> bool {
+    !body.trim().is_empty() && body.chars().count() <= 10_000
+}
+fn note_length(ui: &mut egui::Ui, body: &str, l: Language, t: Tokens) {
+    let count = body.chars().count();
+    ui.label(
+        RichText::new(l.format(
+            "{count} / 10000 characters",
+            &[("count", count.to_string())],
+        ))
+        .size(12.0)
+        .color(if count > 10_000 { t.warning } else { t.muted }),
+    );
+}
 fn displayed_quote(anchor: &AnnotationAnchor, tree: Option<&RichTree>, l: Language) -> String {
     let displayed = tree.and_then(|tree| {
         let (a, b) = anchor.selection(tree).ok()?;
@@ -271,6 +420,9 @@ fn captured_selection(
 
 impl StudioApp {
     pub(super) fn begin_note(&mut self) -> AppResult<()> {
+        if self.notes.invalid {
+            return Err("annotation_preview_unverified".into());
+        }
         self.save()?;
         let document = self.document.as_ref().ok_or("missing_note_document")?;
         let session = &self.rich.as_ref().ok_or("missing_note_editor")?.session;
@@ -284,6 +436,7 @@ impl StudioApp {
             &quote,
         )?;
         self.notes.composer = Some(NoteComposer {
+            id: uuid::Uuid::new_v4().to_string(),
             document_id: document.id.clone(),
             base_revision: document.revision,
             anchor,
@@ -292,12 +445,35 @@ impl StudioApp {
         });
         Ok(())
     }
+    pub(super) fn open_mark_note(&mut self, id: &str) -> AppResult<()> {
+        if self.notes.selected.as_deref() == Some(id) {
+            self.inspector = Inspector::Notes;
+            self.inspector_visible = true;
+            self.prefer_inspector = true;
+            self.focus_mode = false;
+            return Ok(());
+        }
+        self.activate_note(id)
+    }
+    pub(super) fn save_focused_note(&mut self, ctx: &egui::Context) -> Option<AppResult<()>> {
+        let focused = ctx.memory(|memory| memory.focused());
+        let id = self
+            .notes
+            .drafts
+            .keys()
+            .find(|id| focused == Some(egui::Id::new(("author-note-body", *id))))?
+            .clone();
+        Some(self.save_note_draft(&id))
+    }
     pub(super) fn activate_note(&mut self, id: &str) -> AppResult<()> {
         self.notes.activate(id);
         self.inspector = Inspector::Notes;
         self.inspector_visible = true;
         self.prefer_inspector = true;
         self.focus_mode = false;
+        if self.notes.invalid {
+            return Ok(());
+        }
         if let Some(note) = self
             .notes
             .preview
@@ -312,7 +488,128 @@ impl StudioApp {
         }
         Ok(())
     }
+    /// Explicit Save only; partial conflicts keep all still-unsaved bodies reachable.
+    pub(super) fn save_note_drafts(&mut self) -> AppResult<()> {
+        self.save()?;
+        let drafts: Vec<_> = self
+            .notes
+            .drafts
+            .iter()
+            .filter(|(_, draft)| draft.body.trim() != draft.original.note.trim())
+            .map(|(id, draft)| (id.clone(), draft.clone()))
+            .collect();
+        self.notes.invalidate();
+        for (id, draft) in drafts {
+            let document = self.workspace.document(&draft.original.document_id)?;
+            self.workspace.update_annotation(
+                &id,
+                document.revision,
+                draft.original.revision,
+                AnnotationPatch {
+                    note: Some(draft.body),
+                    status: None,
+                },
+            )?;
+            self.notes.drafts.remove(&id);
+        }
+        let active = self
+            .notes
+            .composer
+            .as_ref()
+            .filter(|composer| !composer.body.trim().is_empty())
+            .map(|composer| {
+                (
+                    composer.document_id.clone(),
+                    composer.base_revision,
+                    composer.anchor.clone(),
+                    composer.body.clone(),
+                )
+            });
+        if let Some((id, revision, anchor, body)) = active {
+            self.workspace
+                .create_annotation(&id, revision, anchor, &body)?;
+            self.notes.composer = None;
+        }
+        let paused: Vec<_> = self
+            .notes
+            .paused_composers
+            .iter()
+            .filter(|(_, composer)| !composer.body.trim().is_empty())
+            .map(|(key, composer)| {
+                (
+                    key.clone(),
+                    composer.document_id.clone(),
+                    composer.base_revision,
+                    composer.anchor.clone(),
+                    composer.body.clone(),
+                )
+            })
+            .collect();
+        for (key, id, revision, anchor, body) in paused {
+            self.workspace
+                .create_annotation(&id, revision, anchor, &body)?;
+            self.notes.paused_composers.remove(&key);
+        }
+        if self
+            .document
+            .as_ref()
+            .is_some_and(|document| document.rich_json.is_some())
+        {
+            self.refresh_notes()?;
+        }
+        Ok(())
+    }
+    /// Called only after explicit Discard in the close confirmation.
+    pub(super) fn discard_note_drafts(&mut self) {
+        self.notes.drafts.clear();
+        self.notes.composer = None;
+        self.notes.paused_composers.clear();
+    }
+    fn confirm_notes_close(&mut self, ctx: &egui::Context, t: Tokens) {
+        let l = self.language;
+        let mut save = false;
+        let mut discard = false;
+        let mut cancel = false;
+        let response = components::modal(
+            ctx,
+            l,
+            "unsaved-note-close",
+            l.text("Save note drafts before closing?"),
+            540.0,
+            |ui| {
+                ui.label(
+                    l.text("Choose whether to save your note drafts before closing WriterCraft."),
+                );
+                components::footer(ui, |ui| {
+                    save = components::action(ui, l.text("Save drafts"), true, Some(t)).clicked();
+                    discard =
+                        components::action(ui, l.text("Discard drafts"), true, None).clicked();
+                    cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
+                });
+            },
+        );
+        if save {
+            let result = self.save_note_drafts();
+            if result.is_ok() {
+                self.notes.close_confirmation = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            self.record_error(result);
+        } else if discard {
+            self.discard_note_drafts();
+            self.notes.close_confirmation = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if cancel || response.should_close() {
+            self.notes.close_confirmation = false;
+            if let Some(composer) = &mut self.notes.composer {
+                composer.focus = true;
+            }
+        }
+    }
     fn note_guard_after_flush(&mut self, before: &PassageAnnotation) -> AppResult<(i64, i64)> {
+        if self.notes.invalid {
+            return Err("annotation_preview_unverified".into());
+        }
         let prior = self.document.as_ref().ok_or("missing_note_document")?;
         if prior.id != before.document_id || prior.revision != before.base_revision {
             return Err("annotation_document_context_changed".into());
@@ -397,10 +694,11 @@ impl StudioApp {
     }
     pub(super) fn rich_note_selection_menu(&mut self, response: &egui::Response) {
         let l = self.language;
-        let allowed = self
-            .rich
-            .as_ref()
-            .is_some_and(|rich| captured_selection(&rich.session).is_ok());
+        let allowed = !self.notes.invalid
+            && self
+                .rich
+                .as_ref()
+                .is_some_and(|rich| captured_selection(&rich.session).is_ok());
         let keyboard = response.has_focus()
             && response
                 .ctx
@@ -443,10 +741,6 @@ impl StudioApp {
             ui.label(l.text("Select a passage to add a note."));
             return;
         }
-        if let Some(document) = &self.document {
-            let result = self.notes.prepare(&self.workspace, document);
-            self.record_error(result);
-        }
         if self.notes.invalid {
             ui.colored_label(
                 t.warning,
@@ -454,10 +748,11 @@ impl StudioApp {
             );
         }
         ui.horizontal(|ui| {
-            let allowed = self
-                .rich
-                .as_ref()
-                .is_some_and(|rich| captured_selection(&rich.session).is_ok());
+            let allowed = !self.notes.invalid
+                && self
+                    .rich
+                    .as_ref()
+                    .is_some_and(|rich| captured_selection(&rich.session).is_ok());
             if components::action(ui, l.text("Add note"), allowed, Some(t)).clicked() {
                 let result = self.begin_note();
                 self.record_error(result);
@@ -492,7 +787,9 @@ impl StudioApp {
                 .position(|note| Some(&note.id) == self.notes.selected.as_ref())
             {
                 list = list.vertical_scroll_offset(
-                    (index as f32 * 44.0 - list_height * 0.5 + 22.0).max(0.0),
+                    (index as f32 * (44.0 + ui.spacing().item_spacing.y) - list_height * 0.5
+                        + 22.0)
+                        .max(0.0),
                 );
             }
             self.notes.reveal_row = false;
@@ -500,11 +797,17 @@ impl StudioApp {
         list.show_rows(ui, 44.0, rows.len(), |ui, range| {
             for note in &rows[range] {
                 let selected = self.notes.selected.as_ref() == Some(&note.id);
-                let mut label = excerpt(&note.note, 72);
-                if note.status == AnnotationStatus::Resolved {
-                    label = format!("{} · {}", l.text("Resolved"), label);
-                }
-                if nav_row(ui, Icon::Assistant, &label, selected, t).clicked() {
+                let tree = if self.notes.invalid {
+                    None
+                } else {
+                    self.rich.as_ref().map(|rich| rich.session.document())
+                };
+                let quote = displayed_quote(&note.anchor, tree, l);
+                if ui
+                    .push_id(&note.id, |ui| note_row(ui, note, &quote, selected, l, t))
+                    .inner
+                    .clicked()
+                {
                     activate = Some(note.id.clone());
                 }
             }
@@ -550,7 +853,7 @@ impl StudioApp {
             l,
         );
         egui::ScrollArea::vertical()
-            .id_salt("document-note-details")
+            .id_salt(("document-note-details", &note.id))
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 egui::Frame::new()
@@ -564,7 +867,7 @@ impl StudioApp {
                 ui.add_space(12.0);
                 if note.anchor_status == AnchorStatus::Detached || note.status == AnnotationStatus::NeedsAttention {
                     ui.colored_label(t.warning, l.text("The passage changed. The note is preserved; select text to attach it again."));
-                    let allowed = self.rich.as_ref().is_some_and(|rich| captured_selection(&rich.session).is_ok());
+                    let allowed = !self.notes.invalid && self.rich.as_ref().is_some_and(|rich| captured_selection(&rich.session).is_ok());
                     reattach = components::action(ui, l.text("Attach to selection"), allowed, None).clicked();
                     ui.add_space(12.0);
                 }
@@ -579,23 +882,24 @@ impl StudioApp {
                         if components::action(ui, l.text("Copy draft"), true, None).clicked() {
                             ui.ctx().copy_text(draft.body.clone());
                         }
-                        reload_draft = components::action(ui, l.text("Reload current note"), true, None).clicked();
+                        reload_draft = components::action(ui, l.text("Discard draft and reload"), true, None).clicked();
                     });
                     ui.add_space(12.0);
                 }
-                ui.add(egui::TextEdit::multiline(&mut draft.body)
-                    .desired_width(f32::INFINITY).desired_rows(6).margin(12).char_limit(10_000));
+                note_input(ui, &mut draft.body, egui::Id::new(("author-note-body", &note.id)), l, t);
                 ui.add_space(12.0);
                 ui.horizontal_wrapped(|ui| {
                     if draft.body.trim() != note.note.trim() {
-                        save = components::action(ui, l.text("Save note"), !draft.body.trim().is_empty() && !conflicted, Some(t)).clicked();
+                        save = components::action(ui, l.text("Save note"), valid_note_body(&draft.body) && !conflicted && !self.notes.invalid, Some(t)).clicked();
                     }
-                    toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), true, None).clicked();
-                    reveal = components::action(ui, l.text("Show passage"), note.anchor_status == AnchorStatus::Attached, None).clicked();
-                    remove = components::action(ui, l.text("Delete note"), true, None).clicked();
+                    toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), !self.notes.invalid, None).clicked();
+                    reveal = components::action(ui, l.text("Show passage"), note.anchor_status == AnchorStatus::Attached && !self.notes.invalid, None).clicked();
+                    remove = components::action(ui, l.text("Delete note"), !self.notes.invalid, None).clicked();
                 });
             });
         if reload_draft {
+            let id = egui::Id::new(("author-note-body", &note.id));
+            egui::text_edit::TextEditState::default().store(ui.ctx(), id);
             self.notes.drafts.insert(
                 note.id.clone(),
                 NoteDraft {
@@ -634,6 +938,10 @@ impl StudioApp {
 
     pub(super) fn notes_dialogs(&mut self, ctx: &egui::Context, t: Tokens) {
         let l = self.language;
+        if self.notes.close_confirmation {
+            self.confirm_notes_close(ctx, t);
+            return;
+        }
         if let Some(mut composer) = self.notes.composer.take() {
             let mut save = false;
             let mut cancel = false;
@@ -644,33 +952,39 @@ impl StudioApp {
                 l.text("Add note"),
                 540.0,
                 |ui| {
-                    ui.label(RichText::new(l.text("Selected passage")).strong());
-                    ui.label(excerpt(
-                        &displayed_quote(
-                            &composer.anchor,
-                            self.rich.as_ref().map(|rich| rich.session.document()),
-                            l,
-                        ),
-                        480,
-                    ));
-                    ui.add_space(16.0);
-                    ui.label(l.text("Author note"));
-                    let field = ui.add(
-                        egui::TextEdit::multiline(&mut composer.body)
-                            .desired_rows(6)
-                            .desired_width(f32::INFINITY)
-                            .margin(12)
-                            .char_limit(10_000),
-                    );
-                    if composer.focus {
-                        field.request_focus();
-                        composer.focus = false;
-                    }
+                    egui::ScrollArea::vertical()
+                        .id_salt(("new-note-body-scroll", &composer.id))
+                        .max_height((ctx.content_rect().height() - 300.0).clamp(0.0, 440.0))
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(l.text("Selected passage")).strong());
+                            ui.label(excerpt(
+                                &displayed_quote(
+                                    &composer.anchor,
+                                    self.rich.as_ref().map(|rich| rich.session.document()),
+                                    l,
+                                ),
+                                480,
+                            ));
+                            ui.add_space(16.0);
+                            ui.label(l.text("Author note"));
+                            let field = note_input(
+                                ui,
+                                &mut composer.body,
+                                egui::Id::new(("note-composer-body", &composer.id)),
+                                l,
+                                t,
+                            );
+                            if composer.focus {
+                                field.request_focus();
+                                composer.focus = false;
+                            }
+                        });
                     components::footer(ui, |ui| {
                         save = components::action(
                             ui,
                             l.text("Add note"),
-                            !composer.body.trim().is_empty(),
+                            valid_note_body(&composer.body) && !self.notes.invalid,
                             Some(t),
                         )
                         .clicked();
@@ -678,6 +992,12 @@ impl StudioApp {
                     });
                 },
             );
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
+                && valid_note_body(&composer.body)
+                && !self.notes.invalid
+            {
+                save = true;
+            }
             if save {
                 let result = self
                     .workspace
@@ -716,10 +1036,28 @@ impl StudioApp {
                 l.text("Delete note?"),
                 440.0,
                 |ui| {
+                    ui.label(
+                        RichText::new(excerpt(
+                            &displayed_quote(
+                                &note.anchor,
+                                self.rich.as_ref().map(|rich| rich.session.document()),
+                                l,
+                            ),
+                            180,
+                        ))
+                        .strong(),
+                    );
+                    ui.label(excerpt(&note.note, 180));
+                    ui.add_space(12.0);
                     ui.label(l.text("The manuscript text will stay unchanged."));
                     components::footer(ui, |ui| {
-                        confirm =
-                            components::action(ui, l.text("Delete note"), true, Some(t)).clicked();
+                        confirm = components::action(
+                            ui,
+                            l.text("Delete note"),
+                            !self.notes.invalid,
+                            Some(t),
+                        )
+                        .clicked();
                         cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
                     });
                 },
@@ -839,7 +1177,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn changed_document_clears_previous_note_selection_and_drafts() -> TestResult {
+    fn changed_document_clears_selection_but_preserves_authored_drafts_for_return() -> TestResult {
         let (workspace, document, note, _) = fixture()?;
         let mut state = NotesState::default();
         state.prepare(&workspace, &document)?;
@@ -858,8 +1196,19 @@ mod tests {
         )?;
         state.prepare(&workspace, &other)?;
         assert!(state.selected.is_none());
-        assert!(state.drafts.is_empty());
+        assert_eq!(state.drafts.len(), 1);
+        assert!(state.has_unsaved_drafts());
         assert!(state.preview.is_empty());
+        state.prepare(&workspace, &document)?;
+        assert_eq!(
+            state
+                .drafts
+                .values()
+                .next()
+                .ok_or("missing preserved draft")?
+                .body,
+            "Private draft"
+        );
         Ok(())
     }
     #[test]
@@ -888,5 +1237,80 @@ mod tests {
             assert!(!displayed_quote(&anchor, None, language).contains('\u{fffc}'));
         }
         Ok(())
+    }
+    fn field_frame(
+        ctx: &egui::Context,
+        body: &mut String,
+        id: egui::Id,
+        events: Vec<egui::Event>,
+        time: f64,
+    ) {
+        ctx.memory_mut(|memory| memory.request_focus(id));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(640.0, 480.0),
+                )),
+                time: Some(time),
+                focused: true,
+                events,
+                ..Default::default()
+            },
+            |root| {
+                egui::CentralPanel::default().show(root, |ui| {
+                    note_input(ui, body, id, Language::English, theme::tokens(ctx));
+                });
+            },
+        );
+        output.textures_delta.clear();
+    }
+    #[test]
+    fn full_unicode_paste_is_preserved_above_validation_limit() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new(("author-note-body", "large"));
+        let mut body = String::new();
+        field_frame(&ctx, &mut body, id, vec![], 0.0);
+        let original = "Я😀中".repeat(3_334);
+        field_frame(
+            &ctx,
+            &mut body,
+            id,
+            vec![egui::Event::Paste(original.clone())],
+            1.0,
+        );
+        assert_eq!(body, original);
+        assert!(!valid_note_body(&body));
+    }
+    #[test]
+    fn note_input_undo_history_cannot_restore_another_notes_body() {
+        let ctx = egui::Context::default();
+        let a = egui::Id::new(("author-note-body", "a"));
+        let b = egui::Id::new(("author-note-body", "b"));
+        let mut first = String::from("Alpha");
+        field_frame(&ctx, &mut first, a, vec![], 0.0);
+        field_frame(
+            &ctx,
+            &mut first,
+            a,
+            vec![egui::Event::Text("X".into())],
+            1.0,
+        );
+        let mut second = String::from("Beta");
+        field_frame(
+            &ctx,
+            &mut second,
+            b,
+            vec![egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+            2.0,
+        );
+        assert_eq!(second, "Beta");
+        assert!(first.contains('X'));
     }
 }
