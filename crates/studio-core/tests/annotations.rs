@@ -574,8 +574,11 @@ fn read_only_document_refuses_every_annotation_metadata_mutation() {
     let external = rusqlite::Connection::open(&path).unwrap();
     external
         .execute(
-            "UPDATE documents SET read_only=1 WHERE id=?1",
-            [&document.id],
+            "UPDATE documents SET read_only=1,source_json=?2 WHERE id=?1",
+            rusqlite::params![
+                document.id,
+                serde_json::to_string(document.rich_json.as_ref().unwrap()).unwrap()
+            ],
         )
         .unwrap();
     assert!(matches!(
