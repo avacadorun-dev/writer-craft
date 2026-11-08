@@ -363,3 +363,37 @@ fn failed_native_commit_does_not_acknowledge_receipts_and_can_retry_the_same_pro
         ScalarOffset(8)
     );
 }
+
+#[test]
+fn native_undo_does_not_overwrite_a_later_explicit_reattachment() {
+    let (workspace, document, mut editor, id) = fixture();
+    let forward = insert(&mut editor, 0, "X");
+    let saved = save(&workspace, &document, &editor, &[forward]);
+    let current = workspace.annotation(&id).unwrap();
+    let first_quote = workspace
+        .capture_annotation_anchor(
+            &document.id,
+            2,
+            "p",
+            ScalarOffset(4),
+            ScalarOffset(8),
+            "echo",
+        )
+        .unwrap();
+    let reattached = workspace
+        .reattach_annotation(&id, 2, current.revision, first_quote)
+        .unwrap();
+    let undo = editor.undo(editor.revision()).unwrap().replay_proof();
+    assert!(
+        workspace
+            .save_rich_editor_changes(
+                &document.id,
+                2,
+                &[undo],
+                editor.document().to_json().unwrap()
+            )
+            .is_err()
+    );
+    assert_eq!(workspace.document(&document.id).unwrap(), saved);
+    assert_eq!(workspace.annotation(&id).unwrap(), reattached);
+}

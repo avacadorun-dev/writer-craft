@@ -100,7 +100,7 @@ pub struct AnnotationEvent {
     pub after: PassageAnnotation,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct AttachmentSnapshot {
     anchor: AnnotationAnchor,
     status: AnchorStatus,
@@ -156,6 +156,18 @@ impl Workspace {
                 .is_some_and(|entry| entry.acknowledged_revision != Some(expected_revision))
         {
             return Err(StudioError::Validation("Native history base changed outside this session; preserve the draft before reloading".into()));
+        }
+        if let Some(first) = proofs.first()
+            && first.action() != ReplayAction::Apply
+            && let Some(cached) = candidate_receipts.get(first.before())
+            && attachment_states(&notes).iter().any(|(id, snapshot)| {
+                cached
+                    .attachments
+                    .get(id)
+                    .is_some_and(|previous| previous != snapshot)
+            })
+        {
+            return Err(StudioError::Validation("Annotation attachments changed after this history checkpoint; preserve the current note before undoing".into()));
         }
         let mut prior_receipt = None;
         for proof in proofs {
