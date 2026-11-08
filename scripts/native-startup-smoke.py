@@ -302,7 +302,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
                     env.pop("WRITERCRAFT_EDITOR_PREVIEW", None)
                     if not normal_app:
                         env["WRITERCRAFT_EDITOR_PREVIEW"] = "1"
-                    env.update(WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "", WRITERCRAFT_CAPTURE_SCENARIO=scenario or "")
+                    env.update(WRITERCRAFT_DEMO="1", WRITERCRAFT_CAPTURE_LANGUAGE=language, WRITERCRAFT_CAPTURE_SECTION=section or "appearance", WRITERCRAFT_CAPTURE_BLOCK=target or "", WRITERCRAFT_CAPTURE_SCENARIO=scenario or "", WRITERCRAFT_CAPTURE_DOCUMENT="")
                     command = [str(executable), "--database", str(Path(scratch) / "workspace.sqlite"), "--demo", *([] if normal_app else ["--editor-preview"]), *(["--compact"] if compact else []), "--capture", str(capture), *flags]
                     case.update(run_child(command, env, output / (name + ".stdout.log"), output / (name + ".stderr.log")))
                     if case["timed_out"] or case["returncode"] != 0:
