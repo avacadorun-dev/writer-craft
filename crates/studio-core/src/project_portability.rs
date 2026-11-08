@@ -2,11 +2,16 @@
 //!
 //! Import workers own a separate database connection. External recovery metadata
 //! remains quarantined evidence and cannot populate trusted replay checkpoints.
+mod canvas_commands;
 mod canvas_validation;
 mod json;
 mod snapshot;
 mod validation;
 
+pub use canvas_commands::{
+    ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo,
+    ProjectCanvasSnapshot,
+};
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 
 use std::collections::{BTreeMap, HashMap};

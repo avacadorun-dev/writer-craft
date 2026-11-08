@@ -360,6 +360,7 @@ impl Workspace {
         drop(drafts);
         let rich=rich.into_iter().map(|(document,base,version,content,evidence)|->Result<Value>{Ok(json!({"documentId":document,"baseRevision":base,"version":version,"content":serde_json::from_str::<Value>(&content)?,"checkpointEvidence":evidence.map(|raw|serde_json::from_str::<Value>(&raw)).transpose()?}))}).collect::<Result<Vec<_>>>()?;
         let recovery = json!({"format":"writercraft-recovery-evidence","formatVersion":1,"authority":"untrusted-on-import","proseDrafts":&prose,"richDrafts":&rich,"unknownRevisionTimes":unknown_revision_times});
+        capture_saved_canvases(&transaction, project, &mut manifest)?;
         let (mut native_state, native_changed) = capture_native_state(&transaction, project)?;
         native_state["documentAliases"] = serde_json::to_value(&node_map)?;
         let requires_companion = native_changed || !prose.is_empty() || !rich.is_empty();
@@ -651,4 +652,32 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         json!({"authority":"untrusted-on-import","opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
         changed,
     ))
+}
+
+fn capture_saved_canvases(
+    connection: &Connection,
+    project: &str,
+    manifest: &mut Value,
+) -> Result<()> {
+    for (domain, query) in [
+        (
+            "canvases",
+            "SELECT raw_json FROM project_canvases WHERE project_id=?1 ORDER BY rowid",
+        ),
+        (
+            "canvasRevisions",
+            "SELECT raw_json FROM project_canvas_revisions WHERE project_id=?1 ORDER BY rowid",
+        ),
+    ] {
+        let mut statement = connection.prepare(query)?;
+        let rows = statement
+            .query_map([project], |row| row.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        manifest[domain] = Value::Array(
+            rows.into_iter()
+                .map(|raw| serde_json::from_str(&raw).map_err(StudioError::from))
+                .collect::<Result<Vec<_>>>()?,
+        );
+    }
+    Ok(())
 }

@@ -69,6 +69,17 @@ pub(super) fn validate_project(
     Ok(())
 }
 
+pub(super) fn validate_current_content(
+    content: &Value,
+    documents: &Resources<'_>,
+    media: &Resources<'_>,
+    canvases: &Resources<'_>,
+    schema: Option<&Value>,
+) -> Result<()> {
+    let fields = validate_schema_history(schema)?;
+    validate_content(content, documents, media, canvases, &fields)
+}
+
 pub(super) fn validate_content(
     content: &Value,
     documents: &Resources<'_>,
