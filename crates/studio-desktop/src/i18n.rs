@@ -181,6 +181,32 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Mixed formatting",
+        [
+            "Смешанное форматирование",
+            "Mixed formatting",
+            "Gemischte Formatierung",
+            "Mise en forme mixte",
+            "Formato mixto",
+            "Formatação mista",
+            "混合格式",
+            "書式が混在",
+        ],
+    ),
+    (
+        "More formatting",
+        [
+            "Другие параметры текста",
+            "More formatting",
+            "Weitere Formatierung",
+            "Autres options de texte",
+            "Más opciones de formato",
+            "Mais opções de formatação",
+            "更多格式",
+            "その他の書式",
+        ],
+    ),
+    (
         "Editor Preview",
         [
             "Предпросмотр редактора",

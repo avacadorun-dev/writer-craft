@@ -1,9 +1,9 @@
 //! Isolated engineering preview: canonical rich session, durable drafts and native canvas.
 //! This integration does not assert completion of the full-editor-parity release gate.
 use super::*;
-use craft_editor_egui::{EditorSession, canvas::CanvasStyle};
+use craft_editor_egui::{EditorSession, MarkState, canvas::CanvasStyle};
 use craft_editor_model::{
-    Command, Document as RichDocument, Mark, MarkMode, Node, NodePath, NodeRef, Revision,
+    Command, Document as RichDocument, Mark, Node, NodePath, NodeRef, Revision,
     tables::{self, CellRect, CellSelection, TableGrid},
 };
 use serde_json::{Map, json};
@@ -148,16 +148,14 @@ impl StudioApp {
                             }
                         });
                         ui.separator();
-                        let has_range = rich
-                            .session
-                            .selection()
-                            .is_some_and(|range| range.anchor != range.head);
+                        let can_format = rich.session.selection().is_some();
                         for (mark, glyph, msgid) in [
                             ("bold", "B", "Bold"),
                             ("italic", "I", "Italic"),
                             ("underline", "U", "Underline"),
                         ] {
-                            let active = selection_has_mark(&rich.session, mark);
+                            let state = rich.session.mark_state(mark).unwrap_or(MarkState::Off);
+                            let active = state == MarkState::On;
                             let mut text = RichText::new(glyph).size(16.0);
                             if mark == "bold" {
                                 text = text.strong();
@@ -170,22 +168,23 @@ impl StudioApp {
                             }
                             if ui
                                 .add_enabled(
-                                    has_range,
+                                    can_format,
                                     egui::Button::new(text)
                                         .selected(active)
+                                        .stroke(Stroke::new(
+                                            if state == MarkState::Mixed { 1.0 } else { 0.0 },
+                                            t.accent,
+                                        ))
                                         .min_size(egui::vec2(30.0, 30.0)),
                                 )
-                                .on_hover_text(l.text(msgid))
+                                .on_hover_text(if state == MarkState::Mixed {
+                                    format!("{} · {}", l.text(msgid), l.text("Mixed formatting"))
+                                } else {
+                                    l.text(msgid).into()
+                                })
                                 .clicked()
                             {
-                                if let Err(error) = rich.session.format_selection(
-                                    Mark::new(mark),
-                                    if active {
-                                        MarkMode::Remove
-                                    } else {
-                                        MarkMode::Add
-                                    },
-                                ) {
+                                if let Err(error) = rich.session.toggle_mark(Mark::new(mark)) {
                                     operation_error = Some(error.into());
                                 }
                                 rich.session.request_canvas_focus(ui.ctx());
@@ -254,23 +253,16 @@ impl StudioApp {
                             }
                             rich.session.request_canvas_focus(ui.ctx());
                         }
-                        ui.menu_button("⋯", |ui| {
+                        let more = icons::icon_button(ui, Icon::More, l.text("More formatting"));
+                        egui::Popup::menu(&more).show(|ui| {
                             for (mark, msgid) in
                                 [("strike", "Strikethrough"), ("code", "Inline code")]
                             {
                                 if ui
-                                    .add_enabled(has_range, egui::Button::new(l.text(msgid)))
+                                    .add_enabled(can_format, egui::Button::new(l.text(msgid)))
                                     .clicked()
                                 {
-                                    let active = selection_has_mark(&rich.session, mark);
-                                    if let Err(error) = rich.session.format_selection(
-                                        Mark::new(mark),
-                                        if active {
-                                            MarkMode::Remove
-                                        } else {
-                                            MarkMode::Add
-                                        },
-                                    ) {
+                                    if let Err(error) = rich.session.toggle_mark(Mark::new(mark)) {
                                         operation_error = Some(error.into());
                                     }
                                     rich.session.request_canvas_focus(ui.ctx());
@@ -397,66 +389,6 @@ fn set_block_kind(session: &mut EditorSession, level: u8) -> AppResult<()> {
     let command = session.document().replace_node(&target, replacement)?;
     session.apply_commands(vec![command])?;
     Ok(())
-}
-
-// This checkpoint renders a selected state only when every selected scalar carries the mark.
-// Stored typing marks and mixed-state presentation are supplied by the next engine checkpoint.
-fn selection_has_mark(session: &EditorSession, mark: &str) -> bool {
-    fn runs<'a>(node: &'a Node, output: &mut Vec<&'a Node>) {
-        if matches!(
-            node.node_type.as_str(),
-            "paragraph" | "heading" | "codeBlock"
-        ) {
-            output.push(node);
-        } else {
-            for child in node.children() {
-                runs(child, output);
-            }
-        }
-    }
-    let Some(selection) = session.selection() else {
-        return false;
-    };
-    let mut blocks = vec![];
-    runs(session.document().root(), &mut blocks);
-    let Some(a) = blocks
-        .iter()
-        .position(|node| node.block_id() == Some(&selection.anchor.block_id))
-    else {
-        return false;
-    };
-    let Some(b) = blocks
-        .iter()
-        .position(|node| node.block_id() == Some(&selection.head.block_id))
-    else {
-        return false;
-    };
-    let (a, b, start, end) = if (a, selection.anchor.offset.0) <= (b, selection.head.offset.0) {
-        (a, b, selection.anchor.offset.0, selection.head.offset.0)
-    } else {
-        (b, a, selection.head.offset.0, selection.anchor.offset.0)
-    };
-    let mut seen = false;
-    for (index, block) in blocks.iter().enumerate().take(b + 1).skip(a) {
-        let mut cursor = 0;
-        for node in block.children() {
-            let length = node.inline_text().chars().count();
-            let left = if index == a { start } else { 0 };
-            let right = if index == b { end } else { usize::MAX };
-            if cursor < right && cursor + length > left {
-                seen = true;
-                if !node
-                    .marks
-                    .as_ref()
-                    .is_some_and(|marks| marks.iter().any(|value| value.mark_type == mark))
-                {
-                    return false;
-                }
-            }
-            cursor += length;
-        }
-    }
-    seen
 }
 
 fn wider_than_native_limit(node: &Node) -> bool {
@@ -645,7 +577,7 @@ impl TableContext {
 mod tests {
     use super::*;
     use craft_editor_egui::{DocPoint, Selection};
-    use craft_editor_model::ScalarOffset;
+    use craft_editor_model::{MarkMode, ScalarOffset};
 
     fn fixture() -> AppResult<(tempfile::TempDir, StudioApp)> {
         let directory = tempfile::tempdir()?;
