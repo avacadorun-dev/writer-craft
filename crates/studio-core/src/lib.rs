@@ -246,6 +246,7 @@ pub struct Proposal {
 /// when accessing large projects.
 pub struct Workspace {
     connection: Mutex<Connection>,
+    replay_receipts: Mutex<annotations::ReplayCache>,
 }
 
 impl Workspace {
@@ -316,6 +317,7 @@ impl Workspace {
         )?;
         Ok(Self {
             connection: Mutex::new(connection),
+            replay_receipts: Mutex::new(annotations::ReplayCache::default()),
         })
     }
 

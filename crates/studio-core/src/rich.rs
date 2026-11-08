@@ -294,7 +294,7 @@ fn require_structured_source(document: &Document) -> Result<()> {
     Ok(())
 }
 
-fn validate_tree(content: Value) -> Result<(Value, String, String)> {
+pub(super) fn validate_tree(content: Value) -> Result<(Value, String, String)> {
     let encoded_size = serde_json::to_vec(&content)?.len();
     if encoded_size > super::MAX_BODY_BYTES {
         return Err(StudioError::Validation(
@@ -309,7 +309,7 @@ fn validate_tree(content: Value) -> Result<(Value, String, String)> {
     Ok((content, body, encoded))
 }
 
-fn write_rich_snapshot(
+pub(super) fn write_rich_snapshot(
     connection: &rusqlite::Connection,
     id: &str,
     revision: i64,

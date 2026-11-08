@@ -24,4 +24,4 @@ Status: selected within the owner-approved full-editor `0.1.0-alpha.2` scope. Sh
 - [ ] 3.4 Verify focus changes and application restarts retain visible marks and note text; reader exports preserve manuscript semantics.
 - [ ] 3.5 Verify compatible legacy transfer, conflict copies and undo; obtain independent review of the actual selected scope.
 
-The shared core now has fourteen focused annotation fixtures awaiting hosted qualification. No local Cargo tests were run; native decorations, autosave/Undo journal integration and independent UX acceptance remain pending.
+The shared core now has fourteen passage-note fixtures and nine replay/autosave fixtures awaiting hosted qualification. No local Cargo tests were run; native decorations, UI journal integration and independent UX acceptance remain pending.
