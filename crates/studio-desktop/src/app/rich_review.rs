@@ -83,6 +83,7 @@ impl RichPreview {
                             caret: tokens.accent,
                             table_border: tokens.border,
                             table_header: tokens.panel,
+                            table_scroll_label: language.text("Scroll table horizontally").into(),
                             font_size,
                             read_only: true,
                             ..CanvasStyle::default()

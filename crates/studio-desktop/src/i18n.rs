@@ -3601,6 +3601,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Scroll table horizontally",
+        [
+            "Прокрутить таблицу по горизонтали",
+            "Scroll table horizontally",
+            "Tabelle horizontal scrollen",
+            "Faire défiler le tableau horizontalement",
+            "Desplazar la tabla horizontalmente",
+            "Rolar a tabela horizontalmente",
+            "水平滚动表格",
+            "表を横にスクロール",
+        ],
+    ),
+    (
         "Delete table",
         [
             "Удалить таблицу",

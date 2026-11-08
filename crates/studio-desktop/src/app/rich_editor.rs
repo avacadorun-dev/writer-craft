@@ -509,6 +509,9 @@ impl StudioApp {
                                         caret: t.accent,
                                         table_border: t.border,
                                         table_header: t.panel,
+                                        table_scroll_label: l
+                                            .text("Scroll table horizontally")
+                                            .into(),
                                         font_size: self.font_size,
                                         font_family: Some(preferences.font_family.family().into()),
                                         line_height: preferences.line_height,
