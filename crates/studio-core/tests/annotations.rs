@@ -126,7 +126,7 @@ fn known_edits_before_and_after_shift_only_the_selected_unicode_occurrence() {
 }
 
 #[test]
-fn exact_whole_replacement_updates_quote_but_partial_overlap_detaches_without_search() {
+fn proven_whole_and_partial_replacement_regenerate_only_the_exact_mapped_passage() {
     let (workspace, document) = fixture("echo echo");
     let annotation = note(&workspace, &document, 5, 9, "echo");
     let replaced = edit(&workspace, &document, 5, 9, "echo", "новое😀");
@@ -135,11 +135,13 @@ fn exact_whole_replacement_updates_quote_but_partial_overlap_detaches_without_se
     assert_eq!(mapped.anchor.end, ScalarOffset(11));
     assert_eq!(mapped.anchor_status, AnchorStatus::Attached);
     edit(&workspace, &replaced, 6, 7, "о", "X");
-    let detached = workspace.annotation(&annotation.id).unwrap();
-    assert_eq!(detached.anchor_status, AnchorStatus::Detached);
-    assert_eq!(detached.anchor, mapped.anchor);
-    assert_eq!(detached.note, annotation.note);
-    assert_eq!(detached.status, AnnotationStatus::Open);
+    let partial = workspace.annotation(&annotation.id).unwrap();
+    assert_eq!(partial.anchor_status, AnchorStatus::Attached);
+    assert_eq!(partial.anchor.exact_text, "нXвое😀");
+    assert_eq!(partial.anchor.start, mapped.anchor.start);
+    assert_eq!(partial.anchor.end, mapped.anchor.end);
+    assert_eq!(partial.note, annotation.note);
+    assert_eq!(partial.status, AnnotationStatus::Open);
 }
 
 #[test]

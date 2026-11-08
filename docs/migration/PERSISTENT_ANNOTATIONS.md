@@ -1,6 +1,6 @@
 # Persistent text marks and attached notes
 
-Status: selected within the owner-approved full-editor scope for `0.1.0-alpha.2`, not implemented or accepted. Updated 2026-11-08. Explicitly outside the published `0.1.0-alpha.1`. Read `openspec/changes/full-editor-parity/` and the full source/UX matrices; a model-only or visual-highlight subset is insufficient.
+Status: selected within the owner-approved full-editor scope for `0.1.0-alpha.2`, implementation in progress, not accepted. Updated 2026-11-08. Explicitly outside the published `0.1.0-alpha.1`. Read `openspec/changes/full-editor-parity/` and the full source/UX matrices; a model-only or visual-highlight subset is insufficient.
 
 ## Author workflow
 
@@ -18,8 +18,8 @@ The native migration must preserve those established guarantees rather than trea
 
 - Identify the document, relevant stable text/block identity, source revision and half-open Unicode-scalar range. Retain exact quote and bounded surrounding context. Never mix UTF-8 byte, UTF-16 or grapheme positions.
 - Verify the exact selected text at the stated revision before creating or reattaching a note. Repeated quotes are distinguished by their actual identity/range, not a first matching substring.
-- Known edits before an attached range shift its anchor; edits after it preserve that range. A deterministic whole-range replacement can update the exact quote and anchor while retaining the same note identity.
-- Deletion, uncertain mapping or partial overlap preserves the note, original quote/context and lifecycle, marks the anchor unresolved/detached and keeps the note reachable. Do not move it to another occurrence merely because the words match.
+- Known edits before an attached range shift its anchor; edits after it preserve that range. Exact proven native edits inside the passage, including whole-range replacement, regenerate its current quote while retaining note identity and start-right/end-left boundary affinity.
+- Whole-passage deletion, deletion strictly across an endpoint or uncertain mapping preserves the note, original quote/context and lifecycle, marks the anchor unresolved/detached and keeps the note reachable. An interior edit with exact sealed mapping remains attached. Do not move it to another occurrence merely because the words match.
 - A manual reattachment is an explicit author selection checked against a current revision. A stale document or note revision cannot silently overwrite a newer anchor or note.
 - Save text, mapped annotation state and related history atomically. Undo/redo and reviewed assistant changes preserve the corresponding anchor state and compensating history.
 - Note text edits, resolve/reopen and explicit note deletion operate on annotation metadata. Resolved status and anchor validity are independent. Duplicating a document or preserving a conflict copy must not silently discard its notes.
@@ -32,7 +32,8 @@ The native migration must preserve those established guarantees rather than trea
 | Move focus, select another passage, switch panes | Existing mark stays visible without retaining an active selection. |
 | Save, close and reopen | Note text, mark, lifecycle and anchor restore. |
 | Insert/remove text before the passage | Anchor follows the deterministic edit mapping. |
-| Delete or partially overwrite the passage | Note survives as unresolved; original quote/context remain readable. |
+| Edit the passage interior through exact native commands | Mark follows the proven endpoints and exact current quote. |
+| Delete the passage or delete across its boundary | Note survives as unresolved; original quote/context remain readable. |
 | An identical quote remains elsewhere | No automatic first-match retargeting. |
 | Explicitly reattach to a current selected passage | New exact anchor is verified and history retained. |
 | Save/apply from a stale revision | No partial text/note mutation; conflict is actionable. |
@@ -44,3 +45,5 @@ The native migration must preserve those established guarantees rather than trea
 The current native core stores plain prose and read-only imported rich JSON. The owner selected the complete native editor as the next milestone. Technical choices still need validation against the full original editor; no capability may be dropped to fit a smaller implementation. Stable block identity, native decoration/caret mapping, exact schema migration and the first supported selection granularity need review in that scope. No table, editor dependency, API or release version is committed here. Read the [proposed change](../../openspec/changes/persistent-text-annotations/design.md) before eventual implementation.
 
 Tracking: [persistent text marks and author notes — issue #2](https://github.com/avacadorun-dev/writer-craft/issues/2).
+
+The executed original-plugin probe, corrected partial-edit expectations and explicit parent/leaf projection contract are recorded in [Native annotation mapping](NATIVE_ANNOTATION_MAPPING.md). Original locator/projection bugs are documented there and must not be reproduced.

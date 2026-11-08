@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 
 use craft_editor_model::{
-    Document as RichTree, HistoryReceipt, Node, PositionMap, ReplayAction, ReplayProof,
-    ScalarOffset, scalar_to_byte,
+    BlockTextProjection, Document as RichTree, HistoryReceipt, Node, PositionMap, ReplayAction,
+    ReplayProof, ScalarOffset, TextPoint, scalar_to_byte,
 };
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,68 @@ pub struct AnnotationAnchor {
     pub prefix: String,
     /// Up to 32 following scalars, retained even after detachment.
     pub suffix: String,
+}
+
+impl AnnotationAnchor {
+    /// Capture an exact native selection without converting parent offsets into leaf carets.
+    /// A quoted passage may span paragraphs within one identified blockquote. Other
+    /// selections stay within their identified text leaf, including table/list prose.
+    /// This constructs metadata only; creation still checks the current durable revision.
+    pub fn from_selection(tree: &RichTree, first: &TextPoint, last: &TextPoint) -> Result<Self> {
+        fn quote_for<'a>(
+            tree: &'a RichTree,
+            node: &'a Node,
+            a: &TextPoint,
+            b: &TextPoint,
+        ) -> Option<&'a str> {
+            if node.node_type == "blockquote" {
+                let id = node.block_id()?;
+                let projection = BlockTextProjection::new(tree, id).ok()?;
+                if projection.contains_leaf(&a.block_id) && projection.contains_leaf(&b.block_id) {
+                    return Some(id);
+                }
+            }
+            node.children()
+                .iter()
+                .find_map(|child| quote_for(tree, child, a, b))
+        }
+        let id = if let Some(id) = quote_for(tree, tree.root(), first, last) {
+            id
+        } else if first.block_id == last.block_id {
+            first.block_id.as_str()
+        } else {
+            return Err(StudioError::Validation(
+                "Select a passage within one text block or blockquote".into(),
+            ));
+        };
+        let projection = BlockTextProjection::new(tree, id).map_err(|error| {
+            StudioError::Validation(format!("Invalid annotation selection: {error}"))
+        })?;
+        let a = projection
+            .offset(first)
+            .map_err(|_| StudioError::ExpectedTextMismatch)?;
+        let b = projection
+            .offset(last)
+            .map_err(|_| StudioError::ExpectedTextMismatch)?;
+        anchor_at(tree, id, a.min(b), a.max(b))
+    }
+
+    /// Resolve this exact attached range into native leaf carets, never parent IDs.
+    /// The full quote must match before a mark may be painted or activated.
+    pub fn selection(&self, tree: &RichTree) -> Result<(TextPoint, TextPoint)> {
+        verified_anchor(tree, self)?;
+        let projection = BlockTextProjection::new(tree, &self.block_id).map_err(|error| {
+            StudioError::Validation(format!("Invalid annotation projection: {error}"))
+        })?;
+        Ok((
+            projection
+                .point(self.start, true)
+                .map_err(|_| StudioError::ExpectedTextMismatch)?,
+            projection
+                .point(self.end, false)
+                .map_err(|_| StudioError::ExpectedTextMismatch)?,
+        ))
+    }
 }
 
 /// Note lifecycle, independent of whether its anchor remains valid.
@@ -647,8 +709,8 @@ fn anchor_at(
     let block = tree
         .block(block_id)
         .map_err(|_| StudioError::Validation("Annotation block was not found".into()))?;
-    // The native projection uses one scalar for each inline atom; this is shared
-    // with CraftEditor positions instead of mixing the legacy math spellings.
+    // Native parent anchors use explicit paragraph separators and leaf coordinates.
+    // Legacy export projections are converted by an explicit compatibility adapter.
     if !matches!(
         block.node_type.as_str(),
         "paragraph" | "heading" | "codeBlock" | "blockquote"
@@ -657,7 +719,10 @@ fn anchor_at(
             "Select text within one supported text block".into(),
         ));
     }
-    let text = block.inline_text();
+    let projection = BlockTextProjection::new(tree, block_id).map_err(|error| {
+        StudioError::Validation(format!("Invalid annotation projection: {error}"))
+    })?;
+    let text = projection.text();
     let length = text.chars().count();
     if start >= end || end.0 > length {
         return Err(StudioError::InvalidTextRange {
@@ -830,61 +895,76 @@ fn map_anchor(
     after: &RichTree,
 ) -> bool {
     let Some(mappings) = mappings else {
-        return before.block(&anchor.block_id).ok().map(Node::inline_text)
-            == after.block(&anchor.block_id).ok().map(Node::inline_text)
+        // Snapshot recovery has no proven edit history: unchanged projection only.
+        return BlockTextProjection::new(before, &anchor.block_id)
+            .ok()
+            .map(|p| p.text().to_owned())
+            == BlockTextProjection::new(after, &anchor.block_id)
+                .ok()
+                .map(|p| p.text().to_owned())
             && verified_anchor(after, anchor).is_ok();
     };
-    let mut replacement = false;
+    let Ok((mut first, mut last)) = anchor.selection(before) else {
+        return false;
+    };
+    let parent_quote = before
+        .block(&anchor.block_id)
+        .is_ok_and(|node| node.node_type == "blockquote");
     for mapping in mappings {
+        // Match native ProseMirror endpoint deletion semantics. Exact boundary
+        // deletion and interior edits remain deterministically attached; deletion
+        // strictly across either endpoint does not acquire a different passage.
         if let PositionMap::Text {
             block_id,
             start,
             old_len,
-            new_len,
+            ..
         } = mapping
-            && block_id == &anchor.block_id
         {
             let Some(end) = start.checked_add(*old_len) else {
                 return false;
             };
-            if end <= anchor.start.0 || *start >= anchor.end.0 {
-                // Boundary insertion belongs outside the marked passage.
-            } else if *start == anchor.start.0 && end == anchor.end.0 && *new_len > 0 {
-                replacement = true;
-            } else {
+            if [&first, &last].iter().any(|point| {
+                &point.block_id == block_id && *start < point.offset.0 && point.offset.0 < end
+            }) {
                 return false;
             }
         }
-        if let PositionMap::Split { block_id, at, .. } = mapping
-            && block_id == &anchor.block_id
-            && anchor.start.0 < *at
-            && *at < anchor.end.0
-        {
-            return false;
-        }
-        let Some((start_block, start)) =
-            mapping.map_existing_caret(&anchor.block_id, anchor.start, true)
+        let Some((id, offset)) = mapping.map_existing_caret(&first.block_id, first.offset, true)
         else {
             return false;
         };
-        let Some((end_block, end)) =
-            mapping.map_existing_caret(&anchor.block_id, anchor.end, false)
+        first = TextPoint {
+            block_id: id,
+            offset,
+        };
+        let Some((id, offset)) = mapping.map_existing_caret(&last.block_id, last.offset, false)
         else {
             return false;
         };
-        if start_block != end_block || start >= end {
-            return false;
-        }
-        anchor.block_id = start_block;
-        anchor.start = start;
-        anchor.end = end;
+        last = TextPoint {
+            block_id: id,
+            offset,
+        };
     }
-    let Ok(current) = anchor_at(after, &anchor.block_id, anchor.start, anchor.end) else {
+    let id = if parent_quote {
+        anchor.block_id.as_str()
+    } else if first.block_id == last.block_id {
+        first.block_id.as_str()
+    } else {
         return false;
     };
-    if !replacement && current.exact_text != anchor.exact_text {
+    let Ok(projection) = BlockTextProjection::new(after, id) else {
         return false;
-    }
+    };
+    let (Ok(start), Ok(end)) = (projection.offset(&first), projection.offset(&last)) else {
+        return false;
+    };
+    let Ok(current) = anchor_at(after, id, start, end) else {
+        return false;
+    };
+    // Regeneration is justified only by these sealed/replayed exact maps, never
+    // by a repeated-quote search or a caller-authored snapshot position map.
     *anchor = current;
     true
 }
