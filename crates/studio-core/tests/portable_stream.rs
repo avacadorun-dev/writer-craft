@@ -113,7 +113,7 @@ fn prepared_native_project_should_deduplicate_payloads_and_keep_one_consistent_r
         descriptors
             .iter()
             .map(PortableObjectReference::byte_size)
-            .sum()
+            .sum::<u64>()
     );
     let forged =
         PortableObjectReference::new(descriptors[0].sha256(), descriptors[0].byte_size() + 1)
