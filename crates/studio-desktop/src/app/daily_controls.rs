@@ -12,7 +12,6 @@ impl DailyControls {
         self.find.is_some()
     }
 
-    #[cfg(test)]
     pub(super) fn editing_title(&self) -> bool {
         self.title.is_some()
     }
