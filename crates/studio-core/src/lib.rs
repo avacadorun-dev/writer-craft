@@ -25,11 +25,14 @@ pub use daily_controls::{
     find_first_text_match, rich_document_statistics,
 };
 pub use project_portability::{
-    ImportAssetSource, ImportedProject, ImportedProjectAnnotation, MAX_PROJECT_MANIFEST_BYTES,
-    MAX_PROJECT_TRANSFER_BYTES, ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft,
-    ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
-    ProjectExportSnapshot, ProjectImportWorker, ProjectTransferCancellation, ProjectTreeNode,
-    ValidatedProjectImport,
+    EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary, ImportAssetSource,
+    ImportedProject, ImportedProjectAnnotation, MAX_EVIDENCE_METADATA_BYTES,
+    MAX_EVIDENCE_OBJECT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
+    ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo,
+    ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
+    ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
+    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
+    ValidatedEvidenceReference, ValidatedProjectImport,
 };
 pub use rich::{RichDraft, RichRevision};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
