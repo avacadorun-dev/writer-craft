@@ -2,7 +2,7 @@
 //!
 //! Catalog lookup never translates manuscript text, project titles or imported data.
 
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -139,33 +139,21 @@ impl InterfacePreferences {
     /// # Errors
     /// Returns an I/O error for unreadable or invalid JSON preferences, preserving that file.
     pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-        let bytes = match std::fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
-            Err(error) => return Err(error),
-        };
-        let preferences: Self = serde_json::from_slice(&bytes)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        Ok(preferences.sanitized())
+        Ok(
+            crate::preference_file::FlatPreferenceStore::<Self>::load(path.as_ref().to_owned())?
+                .values,
+        )
     }
 
-    /// Atomically persist language and font size without touching appearance/palette settings.
+    /// Persist known fields while preserving valid unknown data and refusing invalid input files.
     ///
     /// # Errors
-    /// Returns an I/O error if staging, flushing or replacing the preferences file fails.
+    /// Returns an I/O error on invalid/unsupported input, an observed external change or publication failure.
     pub fn save(self, path: impl AsRef<Path>) -> io::Result<()> {
-        let path = path.as_ref();
-        let parent = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let bytes = serde_json::to_vec_pretty(&self.sanitized()).map_err(io::Error::other)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        file.write_all(&bytes)?;
-        file.as_file().sync_all()?;
-        file.persist(path).map_err(|error| error.error)?;
-        Ok(())
+        let mut store =
+            crate::preference_file::FlatPreferenceStore::<Self>::load(path.as_ref().to_owned())?;
+        store.values = self.sanitized();
+        store.save()
     }
 
     fn sanitized(mut self) -> Self {
@@ -178,8 +166,171 @@ impl InterfacePreferences {
     }
 }
 
+impl crate::preference_file::FlatPreferences for InterfacePreferences {
+    fn normalize(&mut self) -> io::Result<()> {
+        *self = self.sanitized();
+        Ok(())
+    }
+}
+
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
+    (
+        "Interface",
+        [
+            "Интерфейс",
+            "Interface",
+            "Oberfläche",
+            "Interface",
+            "Interfaz",
+            "Interface",
+            "界面",
+            "インターフェース",
+        ],
+    ),
+    (
+        "Settings need attention: {groups}",
+        [
+            "Настройки требуют внимания: {groups}",
+            "Settings need attention: {groups}",
+            "Einstellungen benötigen Aufmerksamkeit: {groups}",
+            "Paramètres à vérifier : {groups}",
+            "Revisa estos ajustes: {groups}",
+            "Definições a rever: {groups}",
+            "需要检查的设置：{groups}",
+            "確認が必要な設定：{groups}",
+        ],
+    ),
+    (
+        "Some saved settings could not be loaded. Their files were preserved.",
+        [
+            "Не удалось загрузить часть настроек. Их файлы сохранены без изменений.",
+            "Some saved settings could not be loaded. Their files were preserved.",
+            "Einige gespeicherte Einstellungen konnten nicht geladen werden. Ihre Dateien bleiben unverändert.",
+            "Certains paramètres enregistrés n’ont pas pu être chargés. Leurs fichiers sont conservés.",
+            "No se pudieron cargar algunos ajustes guardados. Sus archivos se han conservado.",
+            "Não foi possível carregar algumas definições guardadas. Os ficheiros foram preservados.",
+            "部分已保存的设置无法加载，其文件已保留。",
+            "保存済みの設定の一部を読み込めませんでした。ファイルは保持されています。",
+        ],
+    ),
+    (
+        "These settings are not saved. Your choices still apply to this session.",
+        [
+            "Эти настройки не сохранены. Выбранные значения действуют в текущем сеансе.",
+            "These settings are not saved. Your choices still apply to this session.",
+            "Diese Einstellungen sind nicht gespeichert. Ihre Auswahl gilt weiterhin für diese Sitzung.",
+            "Ces paramètres ne sont pas enregistrés. Vos choix restent actifs pour cette session.",
+            "Estos ajustes no se han guardado. Tus opciones siguen activas durante esta sesión.",
+            "Estas definições não estão guardadas. As escolhas mantêm-se nesta sessão.",
+            "这些设置尚未保存，当前选择仍适用于本次会话。",
+            "この設定は保存されていません。選択内容はこのセッションで引き続き適用されます。",
+        ],
+    ),
+    (
+        "The settings file was preserved. Repair it or reload valid saved settings before saving.",
+        [
+            "Файл настроек сохранён без изменений. Исправьте его или загрузите корректные сохранённые настройки перед записью.",
+            "The settings file was preserved. Repair it or reload valid saved settings before saving.",
+            "Die Einstellungsdatei bleibt unverändert. Reparieren Sie sie oder laden Sie gültige gespeicherte Einstellungen, bevor Sie speichern.",
+            "Le fichier des paramètres est conservé. Réparez-le ou rechargez des paramètres enregistrés valides avant de sauvegarder.",
+            "El archivo de ajustes se ha conservado. Repáralo o vuelve a cargar ajustes guardados válidos antes de guardar.",
+            "O ficheiro de definições foi preservado. Corrija-o ou volte a carregar definições guardadas válidas antes de guardar.",
+            "设置文件已保留。保存前请修复该文件，或重新加载有效的已保存设置。",
+            "設定ファイルは保持されています。保存する前にファイルを修復するか、有効な保存済み設定を再読み込みしてください。",
+        ],
+    ),
+    (
+        "Reload saved settings",
+        [
+            "Загрузить сохранённые настройки",
+            "Reload saved settings",
+            "Gespeicherte Einstellungen neu laden",
+            "Recharger les paramètres enregistrés",
+            "Volver a cargar ajustes guardados",
+            "Recarregar definições guardadas",
+            "重新加载已保存的设置",
+            "保存済み設定を再読み込み",
+        ],
+    ),
+    (
+        "Reload saved settings for {group}",
+        [
+            "Загрузить сохранённые настройки: {group}",
+            "Reload saved settings for {group}",
+            "Gespeicherte Einstellungen neu laden: {group}",
+            "Recharger les paramètres enregistrés : {group}",
+            "Volver a cargar ajustes guardados: {group}",
+            "Recarregar definições guardadas: {group}",
+            "重新加载“{group}”的已保存设置",
+            "「{group}」の保存済み設定を再読み込み",
+        ],
+    ),
+    (
+        "Reloading replaces only this group's session choices. Other settings and your document stay unchanged.",
+        [
+            "Загрузка заменит только выбранные в этом сеансе значения этой группы. Другие настройки и документ не изменятся.",
+            "Reloading replaces only this group's session choices. Other settings and your document stay unchanged.",
+            "Das Neuladen ersetzt nur die Sitzungsauswahl dieser Gruppe. Andere Einstellungen und Ihr Dokument bleiben unverändert.",
+            "Le rechargement remplace uniquement les choix de cette session pour ce groupe. Les autres paramètres et votre document restent inchangés.",
+            "La recarga sustituye solo las opciones de esta sesión para este grupo. Los demás ajustes y el documento no cambian.",
+            "O recarregamento substitui apenas as escolhas desta sessão para este grupo. As outras definições e o documento não mudam.",
+            "重新加载只会替换此组在本次会话中的选择，其他设置和文档保持不变。",
+            "再読み込みでは、このグループのセッション中の選択のみが置き換わります。他の設定と文書は変更されません。",
+        ],
+    ),
+    (
+        "Settings could not be saved. Your choices still apply to this session.",
+        [
+            "Не удалось сохранить настройки. Выбранные значения действуют в текущем сеансе.",
+            "Settings could not be saved. Your choices still apply to this session.",
+            "Die Einstellungen konnten nicht gespeichert werden. Ihre Auswahl gilt weiterhin für diese Sitzung.",
+            "Les paramètres n’ont pas pu être enregistrés. Vos choix restent actifs pour cette session.",
+            "No se pudieron guardar los ajustes. Tus opciones siguen activas durante esta sesión.",
+            "Não foi possível guardar as definições. As escolhas mantêm-se nesta sessão.",
+            "无法保存设置，当前选择仍适用于本次会话。",
+            "設定を保存できませんでした。選択内容はこのセッションで引き続き適用されます。",
+        ],
+    ),
+    (
+        "Saved settings could not be reloaded. Your session choices and the file are unchanged.",
+        [
+            "Не удалось загрузить сохранённые настройки. Текущие значения и файл не изменены.",
+            "Saved settings could not be reloaded. Your session choices and the file are unchanged.",
+            "Die gespeicherten Einstellungen konnten nicht neu geladen werden. Ihre Sitzungsauswahl und die Datei bleiben unverändert.",
+            "Les paramètres enregistrés n’ont pas pu être rechargés. Vos choix de session et le fichier restent inchangés.",
+            "No se pudieron volver a cargar los ajustes guardados. Las opciones de la sesión y el archivo no cambian.",
+            "Não foi possível recarregar as definições guardadas. As escolhas da sessão e o ficheiro não mudam.",
+            "无法重新加载已保存的设置，会话选择和文件均保持不变。",
+            "保存済み設定を再読み込みできませんでした。セッション中の選択とファイルは変更されていません。",
+        ],
+    ),
+    (
+        "Manuscript saved · session-only settings",
+        [
+            "Рукопись сохранена · настройки только для сеанса",
+            "Manuscript saved · session-only settings",
+            "Manuskript gespeichert · Einstellungen nur für diese Sitzung",
+            "Manuscrit enregistré · paramètres limités à la session",
+            "Manuscrito guardado · ajustes solo para esta sesión",
+            "Manuscrito guardado · definições apenas nesta sessão",
+            "文稿已保存 · 设置仅适用于本次会话",
+            "原稿を保存済み · 設定はこのセッションのみ",
+        ],
+    ),
+    (
+        "Manuscript saved · unsaved notes and session-only settings",
+        [
+            "Рукопись сохранена · заметки не сохранены, настройки только для сеанса",
+            "Manuscript saved · unsaved notes and session-only settings",
+            "Manuskript gespeichert · ungespeicherte Notizen und Sitzungseinstellungen",
+            "Manuscrit enregistré · notes non enregistrées et paramètres de session",
+            "Manuscrito guardado · notas sin guardar y ajustes de sesión",
+            "Manuscrito guardado · notas por guardar e definições da sessão",
+            "文稿已保存 · 笔记未保存，设置仅适用于本次会话",
+            "原稿を保存済み · ノートは未保存、設定はこのセッションのみ",
+        ],
+    ),
     (
         "Continue for this session",
         [

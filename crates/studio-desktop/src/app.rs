@@ -104,6 +104,8 @@ pub struct StudioApp {
     error: Option<UiError>,
     language: Language,
     settings: ThemeSettings,
+    appearance_preferences: crate::preference_file::FlatPreferenceStore<ThemeSettings>,
+    interface_preferences: crate::preference_file::FlatPreferenceStore<InterfacePreferences>,
     settings_open: bool,
     settings_section: settings::Section,
     focus_manuscript: bool,
@@ -135,44 +137,53 @@ impl StudioApp {
         demo: bool,
         capture: Option<PathBuf>,
     ) -> AppResult<Self> {
-        let (preferences, preferences_error) =
-            match InterfacePreferences::load(database.with_file_name("interface.json")) {
-                Ok(preferences) => (preferences, None),
-                Err(error) => (
-                    InterfacePreferences::default(),
-                    Some(UiError {
-                        msgid: "The saved data could not be decoded.",
-                        details: error.to_string(),
-                    }),
-                ),
-            };
-        let editor_path = database.with_file_name("editor.json");
-        let legacy_size = (database.with_file_name("interface.json").is_file()
-            && preferences_error.is_none())
-        .then_some(preferences.font_size);
-        let (editor_preferences, editor_error) =
-            match crate::editor_preferences::EditorPreferenceStore::load(
-                editor_path.clone(),
-                legacy_size,
-            ) {
-                Ok(store) => (store, None),
-                Err(error) => (
-                    crate::editor_preferences::EditorPreferenceStore::blocked(
-                        editor_path,
-                        legacy_size,
-                    ),
-                    Some(UiError {
-                        msgid: "The saved data could not be decoded.",
-                        details: error.to_string(),
-                    }),
-                ),
-            };
-        let preferences_error = preferences_error.or(editor_error);
         let workspace = Workspace::open(&database)?;
-        let settings = std::fs::read(database.with_file_name("appearance.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
+        let mut preference_errors = Vec::new();
+        let interface_path = database.with_file_name("interface.json");
+        let interface_preferences = match crate::preference_file::FlatPreferenceStore::<
+            InterfacePreferences,
+        >::load(interface_path.clone())
+        {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("interface.json: {error}"));
+                crate::preference_file::FlatPreferenceStore::blocked(interface_path)
+            }
+        };
+        let preferences = interface_preferences.values;
+        let legacy_size = interface_preferences
+            .loaded_from_file()
+            .then_some(preferences.font_size);
+        let editor_path = database.with_file_name("editor.json");
+        let editor_preferences = match crate::editor_preferences::EditorPreferenceStore::load(
+            editor_path.clone(),
+            legacy_size,
+        ) {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("editor.json: {error}"));
+                crate::editor_preferences::EditorPreferenceStore::blocked(editor_path, legacy_size)
+            }
+        };
+        let appearance_path = database.with_file_name("appearance.json");
+        let appearance_preferences = match crate::preference_file::FlatPreferenceStore::<
+            ThemeSettings,
+        >::load(appearance_path.clone())
+        {
+            Ok(store) => store,
+            Err(error) => {
+                preference_errors.push(format!("appearance.json: {error}"));
+                crate::preference_file::FlatPreferenceStore::blocked(appearance_path)
+            }
+        };
+        let settings = appearance_preferences.values;
+        let preference_files_need_attention = interface_preferences.needs_attention()
+            || editor_preferences.needs_attention()
+            || appearance_preferences.needs_attention();
+        let preferences_error = (!preference_errors.is_empty()).then(|| UiError {
+            msgid: "Some saved settings could not be loaded. Their files were preserved.",
+            details: preference_errors.join("\n"),
+        });
         #[cfg(feature = "editor-preview")]
         native_services::manuscript_fonts()?;
         #[cfg(all(feature = "editor-preview", not(test)))]
@@ -226,7 +237,7 @@ impl StudioApp {
             inspector_visible: false,
             inspector: Inspector::Review,
             search: String::new(),
-            status: if preferences_error.is_some() {
+            status: if preferences_error.is_some() && !preference_files_need_attention {
                 "Attention needed"
             } else {
                 "All changes saved"
@@ -235,6 +246,8 @@ impl StudioApp {
             error: preferences_error,
             language: preferences.language,
             settings,
+            appearance_preferences,
+            interface_preferences,
             settings_open: false,
             settings_section: settings::Section::Appearance,
             focus_manuscript: false,

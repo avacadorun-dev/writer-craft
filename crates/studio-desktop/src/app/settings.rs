@@ -58,9 +58,210 @@ impl Section {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PreferenceGroup {
+    Appearance,
+    Interface,
+    Editor,
+}
+impl PreferenceGroup {
+    const ALL: [Self; 3] = [Self::Appearance, Self::Interface, Self::Editor];
+    fn label(self) -> &'static str {
+        match self {
+            Self::Appearance => "Appearance",
+            Self::Interface => "Interface",
+            Self::Editor => "Editor",
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PreferenceSaveOutcome {
+    Acknowledged,
+    SessionOnly,
+}
+#[derive(Default)]
+struct PreferenceActions {
+    retry: bool,
+    reload: Option<PreferenceGroup>,
+}
 impl StudioApp {
-    fn settings_content(&mut self, ui: &mut egui::Ui, t: Tokens) {
+    pub(super) fn preferences_need_attention(&self) -> bool {
+        PreferenceGroup::ALL
+            .into_iter()
+            .any(|group| self.preference_needs_attention(group))
+    }
+    fn preference_needs_attention(&self, group: PreferenceGroup) -> bool {
+        match group {
+            PreferenceGroup::Appearance => self.appearance_preferences.needs_attention(),
+            PreferenceGroup::Interface => self.interface_preferences.needs_attention(),
+            PreferenceGroup::Editor => self.editor_preferences.needs_attention(),
+        }
+    }
+    fn preference_pending(&self, group: PreferenceGroup) -> bool {
+        match group {
+            PreferenceGroup::Appearance => self.appearance_preferences.has_pending_write(),
+            PreferenceGroup::Interface => self.interface_preferences.has_pending_write(),
+            PreferenceGroup::Editor => self.editor_preferences.has_pending_write(),
+        }
+    }
+    fn preference_retryable(&self, group: PreferenceGroup) -> bool {
+        match group {
+            PreferenceGroup::Appearance => self.appearance_preferences.retryable(),
+            PreferenceGroup::Interface => self.interface_preferences.retryable(),
+            PreferenceGroup::Editor => self.editor_preferences.retryable(),
+        }
+    }
+    fn preference_source_preserved(&self, group: PreferenceGroup) -> bool {
+        match group {
+            PreferenceGroup::Appearance => self.appearance_preferences.source_preserved(),
+            PreferenceGroup::Interface => self.interface_preferences.source_preserved(),
+            PreferenceGroup::Editor => self.editor_preferences.source_preserved(),
+        }
+    }
+    fn preference_attention_summary(&self) -> String {
+        let groups = PreferenceGroup::ALL
+            .into_iter()
+            .filter(|group| self.preference_needs_attention(*group))
+            .map(|group| self.language.text(group.label()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.language
+            .format("Settings need attention: {groups}", &[("groups", groups)])
+    }
+    fn request_preference_save(
+        &mut self,
+        group: PreferenceGroup,
+    ) -> std::io::Result<PreferenceSaveOutcome> {
+        match group {
+            PreferenceGroup::Appearance => {
+                self.appearance_preferences.values = self.settings;
+                self.appearance_preferences.queue()?;
+                if self.appearance_preferences.writable() {
+                    self.appearance_preferences.save()?;
+                }
+            }
+            PreferenceGroup::Interface => {
+                // This size is retained only for the old interface-to-editor migration.
+                self.interface_preferences.values.language = self.language;
+                self.interface_preferences.queue()?;
+                if self.interface_preferences.writable() {
+                    self.interface_preferences.save()?;
+                }
+            }
+            PreferenceGroup::Editor => {
+                self.editor_preferences.queue()?;
+                if self.editor_preferences.writable() {
+                    self.editor_preferences.save()?;
+                }
+            }
+        }
+        Ok(if self.preference_pending(group) {
+            PreferenceSaveOutcome::SessionOnly
+        } else {
+            PreferenceSaveOutcome::Acknowledged
+        })
+    }
+    fn retry_preference_save(&mut self, group: PreferenceGroup) -> std::io::Result<()> {
+        match group {
+            PreferenceGroup::Appearance => self.appearance_preferences.save(),
+            PreferenceGroup::Interface => self.interface_preferences.save(),
+            PreferenceGroup::Editor => self.editor_preferences.save(),
+        }
+    }
+    fn reload_preference_group(&mut self, group: PreferenceGroup) -> std::io::Result<()> {
+        match group {
+            PreferenceGroup::Appearance => {
+                self.appearance_preferences.reload()?;
+                self.settings = self.appearance_preferences.values;
+            }
+            PreferenceGroup::Interface => {
+                self.interface_preferences.reload()?;
+                self.language = self.interface_preferences.values.language;
+            }
+            PreferenceGroup::Editor => {
+                self.editor_preferences.reload()?;
+                self.font_size = self.editor_preferences.values.font_size;
+            }
+        }
+        Ok(())
+    }
+    fn report_preference_errors(
+        &mut self,
+        msgid: &'static str,
+        failures: Vec<(PreferenceGroup, std::io::Error)>,
+    ) {
+        if !failures.is_empty() {
+            self.error = Some(UiError {
+                msgid,
+                details: failures
+                    .into_iter()
+                    .map(|(group, error)| format!("{}: {error}", self.language.text(group.label())))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            });
+            self.settings_open = true;
+        }
+    }
+    fn preference_recovery(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: Tokens,
+        group: PreferenceGroup,
+        actions: &mut PreferenceActions,
+    ) {
+        if !self.preference_needs_attention(group) {
+            return;
+        }
         let l = self.language;
+        let message = if self.preference_source_preserved(group) {
+            "The settings file was preserved. Repair it or reload valid saved settings before saving."
+        } else {
+            "These settings are not saved. Your choices still apply to this session."
+        };
+        ui.label(RichText::new(l.text(message)).size(13.0).color(t.warning));
+        ui.label(RichText::new(l.text("Reloading replaces only this group's session choices. Other settings and your document stay unchanged.")).size(13.0).color(t.muted));
+        let response = components::action(ui, l.text("Reload saved settings"), true, None);
+        let accessible = l.format(
+            "Reload saved settings for {group}",
+            &[("group", l.text(group.label()).into())],
+        );
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &accessible)
+        });
+        if response.on_hover_text(accessible).clicked() {
+            actions.reload = Some(group);
+        }
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(8.0);
+    }
+    pub(super) fn save_status_msgid(&self, unsaved_notes: bool) -> &str {
+        if self.status == "All changes saved" && self.preferences_need_attention() {
+            if unsaved_notes {
+                "Manuscript saved · unsaved notes and session-only settings"
+            } else {
+                "Manuscript saved · session-only settings"
+            }
+        } else if self.status == "All changes saved" && unsaved_notes {
+            "Manuscript saved · unsaved note edits"
+        } else {
+            &self.status
+        }
+    }
+}
+
+impl StudioApp {
+    fn settings_content(&mut self, ui: &mut egui::Ui, t: Tokens, actions: &mut PreferenceActions) {
+        let l = self.language;
+        let group = match self.settings_section {
+            Section::General => Some(PreferenceGroup::Interface),
+            Section::Appearance => Some(PreferenceGroup::Appearance),
+            Section::Editor => Some(PreferenceGroup::Editor),
+            _ => None,
+        };
+        if let Some(group) = group {
+            self.preference_recovery(ui, t, group, actions);
+        }
         match self.settings_section {
             Section::General => {
                 ui.label(RichText::new(l.text("Interface language")).strong());
@@ -179,18 +380,12 @@ impl StudioApp {
 
     fn editor_settings(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
-        if !self.editor_preferences.writable() {
-            ui.label(RichText::new(l.text(
-                "The saved editor settings are preserved. Repair the file and reopen the application before saving changes.",
-            )).color(t.warning));
-            ui.add_space(16.0);
-        }
         #[cfg(feature = "editor-preview")]
         let spelling_unavailable = !cfg!(target_os = "macos")
             || self.rich.as_ref().is_some_and(|rich| {
                 rich.proofing.availability() == proofing::Availability::Unavailable
             });
-        ui.add_enabled_ui(self.editor_preferences.writable(), |ui| {
+        ui.scope(|ui| {
             ui.spacing_mut().interact_size.y = 40.0;
             ui.spacing_mut().item_spacing.y = 16.0;
             let preferences = &mut self.editor_preferences.values;
@@ -313,10 +508,10 @@ impl StudioApp {
         let l = self.language;
         let previous = self.settings;
         let previous_editor = self.editor_preferences.values.clone();
-        let previous_interface = InterfacePreferences {
-            language: self.language,
-            font_size: self.font_size,
-        };
+        let previous_language = self.language;
+        let mut actions = PreferenceActions::default();
+        let notice = self.preferences_need_attention();
+        let footer_height = if notice { 112.0 } else { 56.0 };
         let response = modal(
             ctx,
             l,
@@ -324,7 +519,8 @@ impl StudioApp {
             l.text("Settings · WriterCraft"),
             840.0,
             |ui| {
-                let height = (ctx.content_rect().height() - 220.0).clamp(300.0, 410.0);
+                let height = (ctx.content_rect().height() - 220.0).clamp(300.0, 410.0)
+                    - (footer_height - 56.0);
                 let rect = ui
                     .allocate_exact_size(
                         Vec2::new(ui.available_width(), height),
@@ -345,86 +541,92 @@ impl StudioApp {
                     |ui| {
                         ui.set_clip_rect(sidebar);
                         ui.spacing_mut().item_spacing.y = 4.0;
-                        for section in Section::ALL {
-                            let group = match section {
-                                Section::General => Some("Workspace"),
-                                Section::Assistant => Some("Connections"),
-                                Section::Files => Some("Application"),
-                                _ => None,
-                            };
-                            if let Some(group) = group {
-                                if section != Section::General {
-                                    ui.add_space(8.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt("settings-navigation")
+                            .max_height(sidebar.height() - 24.0)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for section in Section::ALL {
+                                    let group = match section {
+                                        Section::General => Some("Workspace"),
+                                        Section::Assistant => Some("Connections"),
+                                        Section::Files => Some("Application"),
+                                        _ => None,
+                                    };
+                                    if let Some(group) = group {
+                                        if section != Section::General {
+                                            ui.add_space(8.0);
+                                        }
+                                        let (heading, heading_response) = ui.allocate_exact_size(
+                                            Vec2::new(ui.available_width(), 18.0),
+                                            egui::Sense::hover(),
+                                        );
+                                        heading_response.widget_info(|| {
+                                            egui::WidgetInfo::labeled(
+                                                egui::WidgetType::Label,
+                                                ui.is_enabled(),
+                                                l.text(group),
+                                            )
+                                        });
+                                        ui.painter().text(
+                                            egui::pos2(heading.left() + 12.0, heading.center().y),
+                                            egui::Align2::LEFT_CENTER,
+                                            l.text(group).to_uppercase(),
+                                            FontId::proportional(10.0),
+                                            t.muted,
+                                        );
+                                    }
+                                    let selected = self.settings_section == section;
+                                    let response = ui.add_sized(
+                                        [ui.available_width(), 34.0],
+                                        egui::Button::new("").frame(false),
+                                    );
+                                    response.widget_info(|| {
+                                        egui::WidgetInfo::labeled(
+                                            egui::WidgetType::SelectableLabel,
+                                            ui.is_enabled(),
+                                            l.text(section.label()),
+                                        )
+                                    });
+                                    let row = response.rect;
+                                    let foreground = if selected { t.accent } else { t.text };
+                                    if selected {
+                                        ui.painter().rect_filled(row, 6, t.accent_soft);
+                                    }
+                                    icons::paint(
+                                        ui.painter(),
+                                        egui::Rect::from_center_size(
+                                            egui::pos2(row.left() + 18.0, row.center().y),
+                                            Vec2::splat(18.0),
+                                        ),
+                                        section.icon(),
+                                        foreground,
+                                    );
+                                    let text_rect = egui::Rect::from_min_max(
+                                        row.min + egui::vec2(36.0, 0.0),
+                                        row.max - egui::vec2(8.0, 0.0),
+                                    );
+                                    let mut job = egui::text::LayoutJob::simple(
+                                        l.text(section.label()).to_owned(),
+                                        FontId::proportional(14.0),
+                                        foreground,
+                                        text_rect.width(),
+                                    );
+                                    job.wrap.max_rows = 1;
+                                    let galley = ui.painter().layout_job(job);
+                                    ui.painter().with_clip_rect(text_rect).galley(
+                                        egui::pos2(
+                                            text_rect.left(),
+                                            text_rect.center().y - galley.size().y / 2.0,
+                                        ),
+                                        galley,
+                                        foreground,
+                                    );
+                                    if response.on_hover_text(l.text(section.label())).clicked() {
+                                        self.settings_section = section;
+                                    }
                                 }
-                                let (heading, heading_response) = ui.allocate_exact_size(
-                                    Vec2::new(ui.available_width(), 18.0),
-                                    egui::Sense::hover(),
-                                );
-                                heading_response.widget_info(|| {
-                                    egui::WidgetInfo::labeled(
-                                        egui::WidgetType::Label,
-                                        ui.is_enabled(),
-                                        l.text(group),
-                                    )
-                                });
-                                ui.painter().text(
-                                    egui::pos2(heading.left() + 12.0, heading.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    l.text(group).to_uppercase(),
-                                    FontId::proportional(10.0),
-                                    t.muted,
-                                );
-                            }
-                            let selected = self.settings_section == section;
-                            let response = ui.add_sized(
-                                [ui.available_width(), 34.0],
-                                egui::Button::new("").frame(false),
-                            );
-                            response.widget_info(|| {
-                                egui::WidgetInfo::labeled(
-                                    egui::WidgetType::SelectableLabel,
-                                    ui.is_enabled(),
-                                    l.text(section.label()),
-                                )
                             });
-                            let row = response.rect;
-                            let foreground = if selected { t.accent } else { t.text };
-                            if selected {
-                                ui.painter().rect_filled(row, 6, t.accent_soft);
-                            }
-                            icons::paint(
-                                ui.painter(),
-                                egui::Rect::from_center_size(
-                                    egui::pos2(row.left() + 18.0, row.center().y),
-                                    Vec2::splat(18.0),
-                                ),
-                                section.icon(),
-                                foreground,
-                            );
-                            let text_rect = egui::Rect::from_min_max(
-                                row.min + egui::vec2(36.0, 0.0),
-                                row.max - egui::vec2(8.0, 0.0),
-                            );
-                            let mut job = egui::text::LayoutJob::simple(
-                                l.text(section.label()).to_owned(),
-                                FontId::proportional(14.0),
-                                foreground,
-                                text_rect.width(),
-                            );
-                            job.wrap.max_rows = 1;
-                            let galley = ui.painter().layout_job(job);
-                            ui.painter().with_clip_rect(text_rect).galley(
-                                egui::pos2(
-                                    text_rect.left(),
-                                    text_rect.center().y - galley.size().y / 2.0,
-                                ),
-                                galley,
-                                foreground,
-                            );
-                            if response.on_hover_text(l.text(section.label())).clicked() {
-                                self.settings_section = section;
-                            }
-                        }
                     },
                 );
                 ui.scope_builder(
@@ -444,83 +646,103 @@ impl StudioApp {
                             .id_salt(("settings-content", self.settings_section as u8))
                             .max_height(height - 100.0)
                             .auto_shrink([false, false])
-                            .show(ui, |ui| self.settings_content(ui, t));
+                            .show(ui, |ui| self.settings_content(ui, t, &mut actions));
                     },
                 );
                 ui.add_space(12.0);
                 ui.separator();
                 let footer = ui
                     .allocate_exact_size(
-                        Vec2::new(ui.available_width(), 56.0),
+                        Vec2::new(ui.available_width(), footer_height),
                         egui::Sense::hover(),
                     )
                     .0;
-                let pending = self.editor_preferences.has_pending_write();
+                let pending = self.preferences_need_attention();
+                let retryable = PreferenceGroup::ALL.into_iter().any(|group| {
+                    self.preference_pending(group) && self.preference_retryable(group)
+                });
                 ui.scope_builder(
                     egui::UiBuilder::new()
                         .max_rect(footer.shrink2(egui::vec2(24.0, 8.0)))
-                        .layout(Layout::right_to_left(Align::Center)),
+                        .layout(Layout::top_down(Align::Min)),
                     |ui| {
-                        let label = if pending {
-                            "Continue for this session"
-                        } else {
-                            "Done"
-                        };
-                        if components::action(ui, l.text(label), true, Some(t)).clicked() {
-                            self.settings_open = false;
-                        }
                         if pending {
-                            if components::action(
-                                ui,
-                                l.text("Retry save"),
-                                self.editor_preferences.writable(),
-                                None,
-                            )
-                            .clicked()
-                            {
-                                let result = self.editor_preferences.save().map_err(Into::into);
-                                self.record_error(result);
-                            }
-                            ui.add(
+                            let summary = self.preference_attention_summary();
+                            ui.add_sized(
+                                [ui.available_width(), 40.0],
                                 egui::Label::new(
-                                    RichText::new(l.text("Editor settings are not saved."))
-                                        .color(t.warning),
+                                    RichText::new(summary).size(13.0).color(t.warning),
                                 )
-                                .wrap(),
+                                .wrap()
+                                .halign(Align::Min),
                             );
+                            ui.add_space(8.0);
                         }
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            let label = if pending {
+                                "Continue for this session"
+                            } else {
+                                "Done"
+                            };
+                            if components::action(ui, l.text(label), true, Some(t)).clicked() {
+                                self.settings_open = false;
+                            }
+                            if pending
+                                && components::action(ui, l.text("Retry save"), retryable, None)
+                                    .clicked()
+                            {
+                                actions.retry = true;
+                            }
+                        });
                     },
                 );
             },
         );
+        let mut reload_failure = Vec::new();
+        if let Some(group) = actions.reload
+            && let Err(error) = self.reload_preference_group(group)
+        {
+            reload_failure.push((group, error));
+        }
+        let mut save_failures = Vec::new();
+        let changes = [
+            (PreferenceGroup::Appearance, self.settings != previous),
+            (
+                PreferenceGroup::Interface,
+                self.language != previous_language,
+            ),
+            (
+                PreferenceGroup::Editor,
+                self.editor_preferences.values != previous_editor,
+            ),
+        ];
+        for (group, changed) in changes {
+            if changed
+                && actions.reload != Some(group)
+                && let Err(error) = self.request_preference_save(group)
+            {
+                save_failures.push((group, error));
+            }
+        }
+        if actions.retry {
+            for group in PreferenceGroup::ALL {
+                if self.preference_pending(group)
+                    && self.preference_retryable(group)
+                    && let Err(error) = self.retry_preference_save(group)
+                {
+                    save_failures.push((group, error));
+                }
+            }
+        }
         if self.settings != previous {
             theme::apply(ctx, &self.settings);
-            let result = serde_json::to_vec_pretty(&self.settings)
-                .map_err(Into::into)
-                .and_then(|bytes| {
-                    atomic_write(&self.database.with_file_name("appearance.json"), &bytes)
-                });
-            self.record_error(result);
         }
-        let preferences = InterfacePreferences {
-            language: self.language,
-            font_size: self.font_size,
-        };
-        if preferences != previous_interface
-            && let Err(error) = preferences.save(self.database.with_file_name("interface.json"))
-        {
-            self.error = Some(UiError {
-                msgid: "Interface settings could not be saved.",
-                details: error.to_string(),
-            });
-            self.status = "Attention needed".into();
-        }
-        if self.editor_preferences.values != previous_editor
-            && let Err(error) = self.editor_preferences.save()
-        {
-            self.settings_open = true;
-            self.record_error(Err(error.into()));
-        }
+        self.font_size = self.editor_preferences.values.font_size;
+        self.report_preference_errors(
+            "Settings could not be saved. Your choices still apply to this session.",
+            save_failures,
+        );
+        self.report_preference_errors("Saved settings could not be reloaded. Your session choices and the file are unchanged.", reload_failure);
         if response.should_close() {
             self.settings_open = false;
         }
@@ -794,5 +1016,315 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn fixture(directory: &std::path::Path) -> AppResult<(StudioApp, egui::Context)> {
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context.clone());
+        let app = StudioApp::new(&creation, directory.join("settings.sqlite"), false, None)?;
+        Ok((app, context))
+    }
+
+    #[test]
+    fn all_invalid_groups_stay_protected_while_session_choices_remain_usable() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let originals = [
+            ("appearance.json", r#"{"appearance":"future-mode"}"#),
+            ("interface.json", "{invalid"),
+            ("editor.json", r#"{"version":999,"preferences":{}}"#),
+        ];
+        for (name, original) in originals {
+            std::fs::write(directory.path().join(name), original)?;
+        }
+        let (mut app, _) = fixture(directory.path())?;
+        let details = &app
+            .error
+            .as_ref()
+            .ok_or("missing settings diagnostic")?
+            .details;
+        for (name, _) in originals {
+            assert!(details.contains(name));
+        }
+        app.settings.appearance = Appearance::Light;
+        app.language = Language::English;
+        app.editor_preferences.values.font_size = 21.0;
+        for group in PreferenceGroup::ALL {
+            assert_eq!(
+                app.request_preference_save(group)?,
+                PreferenceSaveOutcome::SessionOnly
+            );
+            assert!(app.preference_pending(group));
+            assert!(!app.preference_retryable(group));
+        }
+        app.settings_open = false;
+        app.error = None;
+        for (name, original) in originals {
+            assert_eq!(
+                std::fs::read_to_string(directory.path().join(name))?,
+                original
+            );
+        }
+        let summary = app.preference_attention_summary();
+        for group in PreferenceGroup::ALL {
+            assert!(summary.contains(group.label()));
+        }
+        assert_eq!(app.settings.appearance, Appearance::Light);
+        assert_eq!(app.editor_preferences.values.font_size, 21.0);
+        assert_eq!(
+            app.save_status_msgid(false),
+            "Manuscript saved · session-only settings"
+        );
+        assert_eq!(
+            app.save_status_msgid(true),
+            "Manuscript saved · unsaved notes and session-only settings"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn partial_preference_failure_remains_retriable_after_manuscript_save() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let (mut app, _) = fixture(directory.path())?;
+        let project = app.workspace.create_project("Synthetic settings project")?;
+        app.workspace
+            .create_document(&project.id, "Synthetic chapter", "Original")?;
+        app.open_project(project)?;
+        #[cfg(feature = "editor-preview")]
+        {
+            app.rich = None;
+        }
+        let appearance = directory.path().join("appearance.json");
+        let external = r#"{"appearance":"dark","external":true}"#;
+        std::fs::write(&appearance, external)?;
+        app.settings.appearance = Appearance::Light;
+        assert!(
+            app.request_preference_save(PreferenceGroup::Appearance)
+                .is_err()
+        );
+        app.language = Language::Japanese;
+        assert_eq!(
+            app.request_preference_save(PreferenceGroup::Interface)?,
+            PreferenceSaveOutcome::Acknowledged
+        );
+        app.editor_preferences.values.font_size = 21.0;
+        assert_eq!(
+            app.request_preference_save(PreferenceGroup::Editor)?,
+            PreferenceSaveOutcome::Acknowledged
+        );
+        assert!(app.preference_pending(PreferenceGroup::Appearance));
+        assert!(!app.preference_pending(PreferenceGroup::Interface));
+        assert!(!app.preference_pending(PreferenceGroup::Editor));
+        app.body = "The manuscript has its own save acknowledgement".into();
+        app.dirty = Some(Instant::now());
+        app.save()?;
+        assert!(app.dirty.is_none());
+        assert_eq!(
+            app.save_status_msgid(false),
+            "Manuscript saved · session-only settings"
+        );
+        assert!(
+            app.retry_preference_save(PreferenceGroup::Appearance)
+                .is_err()
+        );
+        assert_eq!(std::fs::read_to_string(&appearance)?, external);
+        // Repair the external conflict back to the originally acknowledged absence.
+        std::fs::remove_file(&appearance)?;
+        app.retry_preference_save(PreferenceGroup::Appearance)?;
+        assert!(!app.preferences_need_attention());
+        assert_eq!(app.save_status_msgid(false), "All changes saved");
+        assert_eq!(
+            app.save_status_msgid(true),
+            "Manuscript saved · unsaved note edits"
+        );
+        let (reopened, _) = fixture(directory.path())?;
+        assert_eq!(reopened.settings.appearance, Appearance::Light);
+        assert_eq!(reopened.language, Language::Japanese);
+        assert_eq!(reopened.editor_preferences.values.font_size, 21.0);
+        Ok(())
+    }
+
+    #[test]
+    fn reload_is_fresh_validated_and_scoped_to_its_named_group() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let appearance = directory.path().join("appearance.json");
+        let interface = directory.path().join("interface.json");
+        let editor = directory.path().join("editor.json");
+        std::fs::write(&appearance, r#"{"appearance":"future-mode"}"#)?;
+        std::fs::write(&interface, "{invalid")?;
+        let (mut app, _) = fixture(directory.path())?;
+        app.settings.appearance = Appearance::Light;
+        app.language = Language::French;
+        app.editor_preferences.values.font_size = 21.0;
+        app.request_preference_save(PreferenceGroup::Appearance)?;
+        app.request_preference_save(PreferenceGroup::Interface)?;
+        app.request_preference_save(PreferenceGroup::Editor)?;
+        let saved_editor = std::fs::read(&editor)?;
+        app.body = "Unsaved manuscript choices stay exact".into();
+        app.dirty = Some(Instant::now());
+        let dirty = app.dirty;
+        assert!(
+            app.reload_preference_group(PreferenceGroup::Appearance)
+                .is_err()
+        );
+        assert_eq!(app.settings.appearance, Appearance::Light);
+        assert!(app.preference_pending(PreferenceGroup::Appearance));
+        let repaired = r#"{"appearance":"dark","palette":"dusty-lavender","vendor":{"keep":true}}"#;
+        std::fs::write(&appearance, repaired)?;
+        app.reload_preference_group(PreferenceGroup::Appearance)?;
+        assert_eq!(app.settings.appearance, Appearance::Dark);
+        assert_eq!(app.settings.palette, Palette::DustyLavender);
+        assert!(!app.preference_needs_attention(PreferenceGroup::Appearance));
+        assert_eq!(app.language, Language::French);
+        assert!(app.preference_pending(PreferenceGroup::Interface));
+        assert_eq!(app.editor_preferences.values.font_size, 21.0);
+        assert_eq!(std::fs::read(&editor)?, saved_editor);
+        assert_eq!(std::fs::read_to_string(&interface)?, "{invalid");
+        assert_eq!(std::fs::read_to_string(&appearance)?, repaired);
+        assert_eq!(app.body, "Unsaved manuscript choices stay exact");
+        assert_eq!(app.dirty, dirty);
+        Ok(())
+    }
+
+    #[test]
+    fn reload_cannot_reset_pending_choices_when_the_saved_file_is_missing() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let (mut app, _) = fixture(directory.path())?;
+        app.settings.appearance = Appearance::Light;
+        app.language = Language::Japanese;
+        app.editor_preferences.values.font_size = 21.0;
+        // A directory blocks publication but is never a valid saved settings file.
+        for (group, name) in [
+            (PreferenceGroup::Appearance, "appearance.json"),
+            (PreferenceGroup::Interface, "interface.json"),
+            (PreferenceGroup::Editor, "editor.json"),
+        ] {
+            let path = directory.path().join(name);
+            std::fs::create_dir(&path)?;
+            assert!(app.request_preference_save(group).is_err());
+            std::fs::remove_dir(&path)?;
+            assert!(app.reload_preference_group(group).is_err());
+            assert!(app.preference_pending(group));
+            assert!(!path.exists());
+        }
+        assert_eq!(app.settings.appearance, Appearance::Light);
+        assert_eq!(app.language, Language::Japanese);
+        assert_eq!(app.editor_preferences.values.font_size, 21.0);
+        Ok(())
+    }
+
+    #[test]
+    fn editor_size_is_authoritative_and_language_save_preserves_legacy_migration_size()
+    -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let interface = directory.path().join("interface.json");
+        let legacy =
+            r#"{"language":"en","font_size":24,"vendor":{"exact":123456789012345678901234567890}}"#;
+        std::fs::write(&interface, legacy)?;
+        let (mut app, _) = fixture(directory.path())?;
+        assert_eq!(app.font_size, 24.0);
+        app.editor_preferences.values.font_size = 17.0;
+        app.request_preference_save(PreferenceGroup::Editor)?;
+        assert_eq!(std::fs::read_to_string(&interface)?, legacy);
+        app.language = Language::German;
+        app.request_preference_save(PreferenceGroup::Interface)?;
+        let actual = std::fs::read_to_string(&interface)?;
+        assert!(actual.contains("\"font_size\":24"));
+        assert!(actual.contains("123456789012345678901234567890"));
+        app.reload_preference_group(PreferenceGroup::Editor)?;
+        assert_eq!(app.font_size, 17.0);
+        assert_eq!(std::fs::read_to_string(&interface)?, actual);
+        let (reopened, _) = fixture(directory.path())?;
+        assert_eq!(reopened.font_size, 17.0);
+        assert_eq!(reopened.language, Language::German);
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_actions_have_bounded_40_point_geometry_in_every_catalog() -> AppResult<()> {
+        for language in Language::ALL {
+            for size in [Vec2::new(1000.0, 680.0), Vec2::new(1440.0, 940.0)] {
+                let directory = tempfile::tempdir()?;
+                for name in ["appearance.json", "interface.json", "editor.json"] {
+                    std::fs::write(directory.path().join(name), "{invalid")?;
+                }
+                let (mut app, context) = fixture(directory.path())?;
+                context.enable_accesskit();
+                app.language = language;
+                app.settings_open = true;
+                app.error = None;
+                app.settings_section = Section::Appearance;
+                app.settings.appearance = Appearance::Light;
+                app.request_preference_save(PreferenceGroup::Appearance)?;
+                let summary = app.preference_attention_summary();
+                let reload = language.format(
+                    "Reload saved settings for {group}",
+                    &[("group", language.text("Appearance").into())],
+                );
+                let labels = [
+                    language.text("Continue for this session"),
+                    language.text("Retry save"),
+                    reload.as_str(),
+                    summary.as_str(),
+                ];
+                let mut bounds = std::collections::BTreeMap::new();
+                for _ in 0..3 {
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                            ..Default::default()
+                        },
+                        |_| app.settings_dialog(&context, theme::tokens(&context)),
+                    );
+                    let update = output
+                        .platform_output
+                        .accesskit_update
+                        .take()
+                        .ok_or("missing accessibility update")?;
+                    for (_, node) in update.nodes {
+                        if let Some(label) = node.label()
+                            && labels.contains(&label)
+                            && let Some(rect) = node.bounds()
+                        {
+                            bounds.insert(label.to_owned(), rect);
+                        }
+                    }
+                    output.textures_delta.clear();
+                }
+                for label in labels {
+                    let rect = bounds
+                        .get(label)
+                        .ok_or_else(|| format!("{} {size:?}: missing {label}", language.code()))?;
+                    if label != labels[3] {
+                        assert!(
+                            rect.height() >= 39.5,
+                            "{} {label}: {rect:?}",
+                            language.code()
+                        );
+                    }
+                    assert!(
+                        rect.x0 >= 0.0
+                            && rect.y0 >= 0.0
+                            && rect.x1 <= f64::from(size.x)
+                            && rect.y1 <= f64::from(size.y),
+                        "{} {label}: {rect:?} outside {size:?}",
+                        language.code()
+                    );
+                }
+                let done = bounds.get(labels[0]).ok_or("missing continue bounds")?;
+                let retry = bounds.get(labels[1]).ok_or("missing retry bounds")?;
+                let summary = bounds.get(labels[3]).ok_or("missing summary bounds")?;
+                assert!(retry.x1 <= done.x0, "footer actions overlap");
+                assert!(summary.y1 <= done.y0, "summary overlaps footer actions");
+                assert!(app.settings_open);
+                assert!(app.preferences_need_attention());
+                for name in ["appearance.json", "interface.json", "editor.json"] {
+                    assert_eq!(
+                        std::fs::read_to_string(directory.path().join(name))?,
+                        "{invalid"
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 }

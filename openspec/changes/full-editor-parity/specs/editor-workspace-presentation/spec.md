@@ -63,3 +63,15 @@ Image, diagram, block-formula and inline-formula paint, captions and status plac
 #### Scenario: Inspect native evidence after asynchronous rendering
 - **WHEN** automated verification targets a synthetic opaque block
 - **THEN** capture waits for visible render and scroll geometry to settle, records actual viewport dimensions and render failures, and does not treat requested window size or startup-only screenshots as completed layout acceptance
+
+### Requirement: Acknowledged settings files and explicit recovery
+
+Appearance, interface and editor preferences SHALL share bounded acknowledgement/publication rules while retaining their existing formats and migration semantics. A failed save SHALL retain each group's desired runtime choices independently, expose session-only state and permit explicit retry without another value change. Unreadable, malformed, oversized, unsupported or externally changed files SHALL remain preserved. Known edits SHALL retain unknown valid fields. A group reload SHALL validate first and replace only that group's runtime choices without writing a file or changing manuscript content/history.
+
+#### Scenario: One settings group cannot be saved
+- **WHEN** an author changes multiple settings groups and one publication fails
+- **THEN** acknowledged groups remain saved, the failed group's exact choices remain session-only and visible after dismissal, Retry attempts those unchanged choices, and success in another group does not clear its pending state
+
+#### Scenario: A saved settings file is invalid or changed externally
+- **WHEN** a settings file cannot be validated or no longer matches its acknowledgement before publication
+- **THEN** the preserved file is not silently replaced, runtime session choices remain available, and an explicit group reload validates fresh saved data before replacing that group's runtime values while leaving other groups and writing untouched

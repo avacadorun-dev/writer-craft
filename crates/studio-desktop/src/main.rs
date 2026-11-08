@@ -4,6 +4,7 @@ mod brand;
 mod editor_preferences;
 pub mod i18n;
 pub mod icons;
+mod preference_file;
 pub mod theme;
 
 use std::path::PathBuf;

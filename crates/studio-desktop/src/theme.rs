@@ -83,6 +83,8 @@ pub struct ThemeSettings {
     pub palette: Palette,
 }
 
+impl crate::preference_file::FlatPreferences for ThemeSettings {}
+
 /// Resolved semantic colors. Use `on_accent` on a solid accent button.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Tokens {

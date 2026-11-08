@@ -1,15 +1,12 @@
 //! Versioned local reading preferences, independent of author content and appearance.
-use std::{
-    collections::BTreeMap,
-    io::{self, Read, Write},
-    path::{Path, PathBuf},
-};
+use std::{io, path::PathBuf};
 
+use crate::preference_file::PreferenceFile;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 const VERSION: u32 = 1;
-const MAX_FILE_BYTES: u64 = 64 * 1024;
+#[cfg(test)]
+const MAX_FILE_BYTES: u64 = crate::preference_file::MAX_PREFERENCE_BYTES;
 
 /// Source-backed native manuscript families. Names are stable font identities, not translations.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,8 +63,6 @@ pub(crate) struct EditorPreferences {
     pub(crate) spellcheck: bool,
     pub(crate) word_goal: u32,
     pub(crate) auto_play_source: bool,
-    #[serde(flatten)]
-    extensions: BTreeMap<String, Value>,
 }
 impl Default for EditorPreferences {
     fn default() -> Self {
@@ -82,7 +77,6 @@ impl Default for EditorPreferences {
             spellcheck: true,
             word_goal: 0,
             auto_play_source: false,
-            extensions: BTreeMap::new(),
         }
     }
 }
@@ -115,115 +109,77 @@ struct Envelope {
     version: u32,
     #[serde(default)]
     preferences: EditorPreferences,
-    #[serde(flatten)]
-    extensions: BTreeMap<String, Value>,
 }
 
-enum SavedFile {
-    Missing,
-    Exact(Vec<u8>),
-    /// Decode/version/I/O failures cannot grant permission to replace the preserved file.
-    Blocked,
-}
-
-/// A loaded preference file and its replacement guard. An invalid file stays on disk.
+/// Typed reading preferences backed by the shared acknowledged JSON-file publisher.
 pub(crate) struct EditorPreferenceStore {
     pub(crate) values: EditorPreferences,
-    path: PathBuf,
-    saved: SavedFile,
-    extensions: BTreeMap<String, Value>,
-    pending_write: bool,
+    file: PreferenceFile,
+    legacy_font_size: Option<f32>,
 }
 impl EditorPreferenceStore {
-    /// A missing editor file migrates an existing native font size only when the host
-    /// actually found the old interface file. First launch uses original-editor defaults.
+    /// A missing editor file migrates an acknowledged pre-existing interface size only.
     pub(crate) fn load(path: PathBuf, legacy_font_size: Option<f32>) -> io::Result<Self> {
-        let original = read_bounded(&path)?;
-        let Some(bytes) = original else {
-            return Ok(Self {
-                values: EditorPreferences::migrate_legacy_size(legacy_font_size),
-                path,
-                saved: SavedFile::Missing,
-                pending_write: false,
-                extensions: BTreeMap::new(),
-            });
+        let file = PreferenceFile::load(path)?;
+        let values = match file.decode::<Envelope>()? {
+            Some(envelope) => {
+                if envelope.version != VERSION {
+                    return Err(invalid("editor_preferences_version_unsupported"));
+                }
+                envelope.preferences.validate()?;
+                envelope.preferences
+            }
+            None => EditorPreferences::migrate_legacy_size(legacy_font_size),
         };
-        let envelope: Envelope = serde_json::from_slice(&bytes).map_err(invalid)?;
-        if envelope.version != VERSION {
-            return Err(invalid("editor_preferences_version_unsupported"));
-        }
-        envelope.preferences.validate()?;
         Ok(Self {
-            values: envelope.preferences,
-            path,
-            saved: SavedFile::Exact(bytes),
-            pending_write: false,
-            extensions: envelope.extensions,
+            values,
+            file,
+            legacy_font_size,
         })
     }
-
-    /// Use defaults for the current process after reporting a load failure. This store
-    /// deliberately refuses persistence until the original file is repaired/reloaded.
     pub(crate) fn blocked(path: PathBuf, legacy_font_size: Option<f32>) -> Self {
         Self {
             values: EditorPreferences::migrate_legacy_size(legacy_font_size),
-            path,
-            saved: SavedFile::Blocked,
-            pending_write: false,
-            extensions: BTreeMap::new(),
+            file: PreferenceFile::blocked(path),
+            legacy_font_size,
         }
     }
-
     pub(crate) fn writable(&self) -> bool {
-        !matches!(self.saved, SavedFile::Blocked)
+        self.file.writable()
     }
-
-    /// A failed explicit persistence attempt leaves the selected values pending until a retry succeeds.
+    pub(crate) fn retryable(&self) -> bool {
+        self.file.retryable()
+    }
+    pub(crate) fn needs_attention(&self) -> bool {
+        self.file.needs_attention()
+    }
+    pub(crate) fn source_preserved(&self) -> bool {
+        self.file.source_preserved()
+    }
     pub(crate) fn has_pending_write(&self) -> bool {
-        self.pending_write
+        self.file.has_pending_write()
     }
-
-    /// Replace only the same acknowledged valid file. Failed writes retain the exact
-    /// in-memory choices, allowing an explicit retry without changing a manuscript.
-    pub(crate) fn save(&mut self) -> io::Result<()> {
-        self.pending_write = true;
+    pub(crate) fn queue(&mut self) -> io::Result<()> {
+        self.file.mark_pending();
         self.values.validate()?;
-        if !self.writable() {
-            return Err(invalid(
-                "editor_preferences_preserved_file_requires_recovery",
-            ));
-        }
-        let current = read_bounded(&self.path)?;
-        let matches = match (&self.saved, current.as_deref()) {
-            (SavedFile::Missing, None) => true,
-            (SavedFile::Exact(expected), Some(actual)) => expected.as_slice() == actual,
-            _ => false,
-        };
-        if !matches {
-            self.saved = SavedFile::Blocked;
-            return Err(invalid("editor_preferences_changed_externally"));
-        }
-        let bytes = serde_json::to_vec_pretty(&Envelope {
+        self.file.queue(&Envelope {
             version: VERSION,
             preferences: self.values.clone(),
-            extensions: self.extensions.clone(),
         })
-        .map_err(invalid)?;
-        if bytes.len() as u64 > MAX_FILE_BYTES {
-            return Err(invalid("editor_preferences_file_too_large"));
+    }
+    pub(crate) fn save(&mut self) -> io::Result<()> {
+        self.queue()?;
+        self.file.publish_pending()
+    }
+    pub(crate) fn reload(&mut self) -> io::Result<()> {
+        let fresh = Self::load(self.file.path().to_owned(), self.legacy_font_size)?;
+        if !fresh.file.loaded_from_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "no_saved_preferences_to_reload",
+            ));
         }
-        let parent = self
-            .path
-            .parent()
-            .filter(|path| !path.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        file.write_all(&bytes)?;
-        file.as_file().sync_all()?;
-        file.persist(&self.path).map_err(|error| error.error)?;
-        self.saved = SavedFile::Exact(bytes);
-        self.pending_write = false;
+        *self = fresh;
         Ok(())
     }
 }
@@ -231,23 +187,10 @@ impl EditorPreferenceStore {
 fn invalid(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error)
 }
-fn read_bounded(path: &Path) -> io::Result<Option<Vec<u8>>> {
-    let file = match std::fs::File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
-    };
-    let mut bytes = Vec::new();
-    file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(invalid("editor_preferences_file_too_large"));
-    }
-    Ok(Some(bytes))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     #[test]

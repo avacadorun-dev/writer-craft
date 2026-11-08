@@ -185,13 +185,12 @@ impl StudioApp {
                     let unsaved_notes = self.notes.has_unsaved_drafts();
                     #[cfg(not(feature = "editor-preview"))]
                     let unsaved_notes = false;
-                    let status = if unsaved_notes && self.status == "All changes saved" {
-                        l.text("Manuscript saved · unsaved note edits")
-                    } else {
-                        l.text(&self.status)
-                    };
+                    let status = l.text(self.save_status_msgid(unsaved_notes));
                     ui.label(RichText::new(status).size(12.0).color(
-                        if self.error.is_some() || unsaved_notes {
+                        if self.error.is_some()
+                            || unsaved_notes
+                            || self.preferences_need_attention()
+                        {
                             t.warning
                         } else {
                             t.muted
