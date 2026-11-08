@@ -41,9 +41,11 @@ pub(super) struct CaptureProbe {
     last: Option<CaptureReadiness>,
     stable_frames: u8,
     requested: bool,
+    #[cfg(any(feature = "editor-preview", test))]
     navigated_generation: Option<u64>,
 }
 impl CaptureProbe {
+    #[cfg(any(feature = "editor-preview", test))]
     fn needs_navigation(&mut self, generation: u64) -> bool {
         if self.navigated_generation == Some(generation) {
             return false;
