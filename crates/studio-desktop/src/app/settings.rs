@@ -164,6 +164,7 @@ impl StudioApp {
                         .suffix(format!(" {}", l.text("px"))),
                 );
             }
+            Section::Files => self.storage_settings(ui, t),
             Section::Keyboard => {
                 ui.label(RichText::new(l.text("⌘S — save     ⌘N — new project     ⌘O — open archive\n⌘⇧A — review panel     ⌘⇧F — focus mode     ⌘, — settings")).size(14.0).color(t.text));
             }
