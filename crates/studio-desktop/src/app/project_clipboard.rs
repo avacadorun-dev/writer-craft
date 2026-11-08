@@ -110,10 +110,18 @@ impl ProjectClipboard {
     pub fn prepare_copy(&self, captured: &ClipboardBundle) -> Result<ClipboardBundle> {
         captured.check_budget(self.max_bytes)?;
         let Some(rich) = &captured.rich else {
+            if captured.formats.contains_key(IMAGE_CAPSULE_MIME) {
+                return Err(ProjectClipboardError::InvalidCapsule);
+            }
             return Ok(captured.clone());
         };
         let slice = RichSlice::decode(rich, self.max_bytes)?;
         let references = references(&slice)?;
+        if capsule_transfers(captured, &references, self.max_bytes)?.is_some() {
+            // Recovery re-publishes the already self-contained exact capture. Its origin/project
+            // hint authorizes no database read and no destination import is required.
+            return Ok(captured.clone());
+        }
         let ids = references.owned.into_iter().collect::<Vec<_>>();
         let images = self.images.export_images(&ids, self.max_bytes)?;
         let mut outbound = captured.clone();
@@ -158,57 +166,16 @@ impl ProjectClipboard {
             return Ok(captured.clone());
         };
         let references = references(&slice)?;
-        let transfers = if let Some(bytes) = captured.formats.get(IMAGE_CAPSULE_MIME) {
-            let rich = captured
-                .rich
-                .as_deref()
-                .ok_or(ProjectClipboardError::InvalidCapsule)?;
-            let capsule: Capsule =
-                serde_json::from_slice(bytes).map_err(|_| ProjectClipboardError::InvalidCapsule)?;
-            if capsule.version != 1
-                || capsule.rich_sha256 != digest(rich)
-                || capsule.origin_project_id.len() > 255
-                || capsule.images.len() != references.owned.len()
-            {
-                return Err(ProjectClipboardError::InvalidCapsule);
-            }
-            let mut seen = HashSet::new();
-            let mut total = 0usize;
-            let mut images = Vec::with_capacity(capsule.images.len());
-            for image in capsule.images {
-                if !references.owned.contains(&image.source_id)
-                    || !seen.insert(image.source_id.clone())
-                    || image.data_base64.len() > MAX_IMAGE_BYTES.div_ceil(3) * 4
-                    || image.original_name.len() > 4096
-                {
-                    return Err(ProjectClipboardError::InvalidCapsule);
-                }
-                let bytes = STANDARD
-                    .decode(&image.data_base64)
-                    .map_err(|_| ProjectClipboardError::InvalidCapsule)?;
-                total = total
-                    .checked_add(bytes.len())
-                    .filter(|total| *total <= self.max_bytes)
-                    .ok_or(ProjectClipboardError::InvalidCapsule)?;
-                images.push(ImageTransfer {
-                    source_id: image.source_id,
-                    original_name: image.original_name,
-                    media_type: image.media_type,
-                    sha256: image.sha256,
-                    byte_size: image.byte_size,
-                    width: image.width,
-                    height: image.height,
-                    bytes,
-                });
-            }
-            images
-        } else {
-            // No attachment: only an already-owned destination reference can be reused.
-            self.images.export_images(
-                &references.owned.iter().cloned().collect::<Vec<_>>(),
-                self.max_bytes,
-            )?
-        };
+        let transfers =
+            if let Some(images) = capsule_transfers(captured, &references, self.max_bytes)? {
+                images
+            } else {
+                // No attachment: only an already-owned destination reference can be reused.
+                self.images.export_images(
+                    &references.owned.iter().cloned().collect::<Vec<_>>(),
+                    self.max_bytes,
+                )?
+            };
         if !references.external.is_empty() {
             return Err(ProjectClipboardError::ExternalImagesRequired(
                 references.external,
@@ -242,6 +209,59 @@ impl ProjectClipboard {
 struct References {
     owned: HashSet<String>,
     external: Vec<ExternalImage>,
+}
+fn capsule_transfers(
+    captured: &ClipboardBundle,
+    references: &References,
+    max_bytes: usize,
+) -> Result<Option<Vec<ImageTransfer>>> {
+    let Some(bytes) = captured.formats.get(IMAGE_CAPSULE_MIME) else {
+        return Ok(None);
+    };
+    let rich = captured
+        .rich
+        .as_deref()
+        .ok_or(ProjectClipboardError::InvalidCapsule)?;
+    let capsule: Capsule =
+        serde_json::from_slice(bytes).map_err(|_| ProjectClipboardError::InvalidCapsule)?;
+    if capsule.version != 1
+        || capsule.rich_sha256 != digest(rich)
+        || capsule.origin_project_id.len() > 255
+        || capsule.images.len() != references.owned.len()
+    {
+        return Err(ProjectClipboardError::InvalidCapsule);
+    }
+    let mut seen = HashSet::new();
+    let mut total = 0usize;
+    let mut images = Vec::with_capacity(capsule.images.len());
+    for image in capsule.images {
+        if !references.owned.contains(&image.source_id)
+            || !seen.insert(image.source_id.clone())
+            || image.data_base64.len() > MAX_IMAGE_BYTES.div_ceil(3) * 4
+            || image.original_name.len() > 4096
+        {
+            return Err(ProjectClipboardError::InvalidCapsule);
+        }
+        let bytes = STANDARD
+            .decode(&image.data_base64)
+            .map_err(|_| ProjectClipboardError::InvalidCapsule)?;
+        total = total
+            .checked_add(bytes.len())
+            .filter(|total| *total <= max_bytes)
+            .ok_or(ProjectClipboardError::InvalidCapsule)?;
+        images.push(ImageTransfer {
+            source_id: image.source_id,
+            original_name: image.original_name,
+            media_type: image.media_type,
+            sha256: image.sha256,
+            byte_size: image.byte_size,
+            width: image.width,
+            height: image.height,
+            bytes,
+        });
+    }
+    studio_core::validate_image_transfers(&images, max_bytes)?;
+    Ok(Some(images))
 }
 fn references(slice: &RichSlice) -> Result<References> {
     let mut output = References::default();
@@ -550,5 +570,73 @@ mod tests {
             }]
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    use image::{DynamicImage, ImageFormat, RgbImage};
+    use std::io::Cursor;
+    use studio_core::Workspace;
+    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
+    #[test]
+    fn recovered_foreign_capsule_can_be_copied_exactly_without_destination_asset_lookup_or_import()
+    -> TestResult {
+        let source = Workspace::memory()?;
+        let project = source.create_project("Source")?;
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(RgbImage::new(2, 3)).write_to(&mut bytes, ImageFormat::Png)?;
+        let asset = source.import_image(
+            &project.id,
+            "original.png",
+            Some("image/png"),
+            &bytes.into_inner(),
+        )?;
+        let node = source.image_node(&project.id, &asset.id, "image", "Alt", "Caption")?;
+        let captured = ProjectClipboard::new(source.project_images(&project.id)?, 1_000_000)
+            .prepare_copy(
+                &RichSlice {
+                    content: vec![node],
+                    open_start: 0,
+                    open_end: 0,
+                }
+                .bundle()?,
+            )?;
+        let destination = Workspace::memory()?;
+        let foreign = destination.create_project("Foreign")?;
+        let scope = ProjectClipboard::new(destination.project_images(&foreign.id)?, 1_000_000);
+        // The separate destination has no source asset. An attempted lookup would fail.
+        assert!(destination.image_asset(&foreign.id, &asset.id).is_err());
+        assert_eq!(scope.prepare_copy(&captured)?, captured);
+        assert!(destination.image_asset(&foreign.id, &asset.id).is_err());
+        let mut invalid = captured.clone();
+        let data = invalid
+            .formats
+            .get_mut(IMAGE_CAPSULE_MIME)
+            .ok_or("missing capsule")?;
+        let mut value: serde_json::Value = serde_json::from_slice(data)?;
+        value["images"][0]["width"] = serde_json::json!(1000);
+        *data = serde_json::to_vec(&value)?;
+        assert!(scope.prepare_copy(&invalid).is_err());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod native_format_tests {
+    use super::*;
+    #[test]
+    fn project_capsule_has_explicit_portable_mime_and_valid_macos_type_mapping() {
+        let format = image_capsule_format();
+        assert_eq!(format.mime, IMAGE_CAPSULE_MIME);
+        assert_ne!(format.mime, format.macos_uti);
+        assert!(format.macos_uti.contains('.'));
+        assert!(format.macos_uti.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
+        }));
     }
 }

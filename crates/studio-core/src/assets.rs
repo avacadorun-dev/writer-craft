@@ -143,26 +143,7 @@ impl ProjectImages {
         images: &[ImageTransfer],
         max_bytes: usize,
     ) -> Result<Vec<ImportedImage>> {
-        let mut seen = HashSet::new();
-        let mut total = 0usize;
-        for image in images {
-            if uuid::Uuid::parse_str(&image.source_id).is_err() || !seen.insert(&image.source_id) {
-                return Err(transfer_invalid());
-            }
-            total = total
-                .checked_add(image.bytes.len())
-                .filter(|total| *total <= max_bytes)
-                .ok_or_else(transfer_invalid)?;
-            let inspection = inspect_image(&image.bytes)?;
-            if image.byte_size != image.bytes.len() as u64
-                || image.sha256 != checksum(&image.bytes)
-                || image.media_type != inspection.media_type
-                || image.width != inspection.width
-                || image.height != inspection.height
-            {
-                return Err(transfer_invalid());
-            }
-        }
+        validate_image_transfers(images, max_bytes)?;
         let mut connection = self
             .connection
             .lock()
@@ -201,6 +182,32 @@ impl ProjectImages {
         transaction.commit()?;
         Ok(output)
     }
+}
+/// Validate a complete portable image batch without database, filesystem or network access.
+/// Duplicate mapping keys, original header/metadata mismatches and total-byte overflow all fail
+/// before a caller may publish or import these bytes.
+pub fn validate_image_transfers(images: &[ImageTransfer], max_bytes: usize) -> Result<()> {
+    let mut seen = HashSet::new();
+    let mut total = 0usize;
+    for image in images {
+        if uuid::Uuid::parse_str(&image.source_id).is_err() || !seen.insert(&image.source_id) {
+            return Err(transfer_invalid());
+        }
+        total = total
+            .checked_add(image.bytes.len())
+            .filter(|total| *total <= max_bytes)
+            .ok_or_else(transfer_invalid)?;
+        let inspection = inspect_image(&image.bytes)?;
+        if image.byte_size != image.bytes.len() as u64
+            || image.sha256 != checksum(&image.bytes)
+            || image.media_type != inspection.media_type
+            || image.width != inspection.width
+            || image.height != inspection.height
+        {
+            return Err(transfer_invalid());
+        }
+    }
+    Ok(())
 }
 fn transfer_invalid() -> StudioError {
     StudioError::Validation(

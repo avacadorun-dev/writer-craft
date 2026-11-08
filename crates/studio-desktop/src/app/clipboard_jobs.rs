@@ -51,8 +51,30 @@ impl fmt::Display for JobError {
     }
 }
 impl std::error::Error for JobError {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ClipboardIntent {
+    Copy,
+    Cut,
+    Paste,
+}
+pub(super) fn request_intent(request: &ClipboardRequest) -> ClipboardIntent {
+    match request {
+        ClipboardRequest::Copy { .. } => ClipboardIntent::Copy,
+        ClipboardRequest::Cut { .. } => ClipboardIntent::Cut,
+        ClipboardRequest::Paste { .. } => ClipboardIntent::Paste,
+    }
+}
+pub(super) fn captured_bundle(request: &ClipboardRequest) -> Arc<ClipboardBundle> {
+    match request {
+        ClipboardRequest::Copy { bundle, .. }
+        | ClipboardRequest::Cut { bundle, .. }
+        | ClipboardRequest::Paste { bundle, .. } => bundle.clone(),
+    }
+}
 /// UI-owned result. Failed/cancelled jobs retain the exact original captured bytes for recovery.
 pub(super) struct CompletionResult {
+    pub intent: ClipboardIntent,
+    pub scope: ProjectClipboard,
     pub captured: Arc<ClipboardBundle>,
     pub outcome: ClipboardOutcome,
 }
@@ -64,6 +86,8 @@ pub(super) enum ClipboardOutcome {
     Failed(JobError),
 }
 pub(super) struct ClipboardCompletion {
+    intent: ClipboardIntent,
+    scope: ProjectClipboard,
     captured: Arc<ClipboardBundle>,
     cancel_epoch: u64,
     write_epoch: Option<u64>,
@@ -210,6 +234,8 @@ impl ClipboardJobs {
             }
         };
         CompletionResult {
+            intent: completion.intent,
+            scope: completion.scope,
             captured: completion.captured,
             outcome,
         }
@@ -217,7 +243,7 @@ impl ClipboardJobs {
 }
 fn advance(epoch: &AtomicU64) -> Option<u64> {
     epoch
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |value| {
             value.checked_add(1)
         })
         .ok()?
@@ -228,11 +254,9 @@ fn current(epochs: &Epochs, cancel: u64, write: Option<u64>) -> bool {
         && write.is_none_or(|write| epochs.writes.load(Ordering::Acquire) == write)
 }
 fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
-    let captured = match &job.request {
-        ClipboardRequest::Copy { bundle, .. }
-        | ClipboardRequest::Cut { bundle, .. }
-        | ClipboardRequest::Paste { bundle, .. } => bundle.clone(),
-    };
+    let captured = captured_bundle(&job.request);
+    let intent = request_intent(&job.request);
+    let scope = job.scope.clone();
     let prepared = if !current(epochs, job.cancel_epoch, job.write_epoch) {
         Prepared::Cancelled
     } else {
@@ -271,6 +295,8 @@ fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
         }
     };
     ClipboardCompletion {
+        intent,
+        scope,
         captured,
         cancel_epoch: job.cancel_epoch,
         write_epoch: job.write_epoch,
