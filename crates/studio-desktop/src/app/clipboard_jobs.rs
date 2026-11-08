@@ -501,6 +501,16 @@ mod tests {
     fn full_queue_returns_exact_request_for_recovery_instead_of_dropping_it() -> TestResult {
         let jobs = ClipboardJobs::new()?;
         let session = editor()?;
+        // These paste snapshots were legitimately captured before the later Copy intent.
+        // A new Paste while Copy is pending is separately refused by ClipboardIntentGate.
+        let mut earlier = Vec::new();
+        for text in ["queued", "queued", "retain me"] {
+            earlier.push(session.begin_paste(ClipboardBundle {
+                plain: text.into(),
+                ..Default::default()
+            })?);
+        }
+        let retained = earlier.pop().ok_or("missing retained paste")?;
         let (entered, waiting) = mpsc::sync_channel(1);
         let provider = Arc::new(BlockingProvider {
             inner: Provider::default(),
@@ -516,12 +526,9 @@ mod tests {
         )
         .map_err(|_| "submit failed")?;
         waiting.recv_timeout(Duration::from_secs(10))?;
-        for _ in 0..QUEUED_JOBS {
+        for request in earlier {
             jobs.submit(
-                session.begin_paste(ClipboardBundle {
-                    plain: "queued".into(),
-                    ..Default::default()
-                })?,
+                request,
                 scope()?,
                 provider.clone(),
                 &egui::Context::default(),
@@ -529,10 +536,7 @@ mod tests {
             .map_err(|_| "submit failed")?;
         }
         let result = jobs.submit(
-            session.begin_paste(ClipboardBundle {
-                plain: "retain me".into(),
-                ..Default::default()
-            })?,
+            retained,
             scope()?,
             provider.clone(),
             &egui::Context::default(),
