@@ -202,7 +202,7 @@ impl ProjectImportWorker {
             params![project_id, project.title],
         )?;
         transaction.execute("INSERT INTO project_portability(project_id,logical_project_id,format_version,raw_manifest,manifest_sha256) VALUES(?1,?2,?3,?4,?5)",
-            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.as_str(),format!("{:x}",Sha256::digest(project.raw_manifest.as_str().as_bytes()))])?;
+            params![project_id,project.logical_project_id,sqlite_integer(project.format_version)?,project.raw_manifest.as_str(),format!("{:x}",Sha256::digest(project.raw_manifest.as_bytes()))])?;
         insert_alias(
             &transaction,
             &project_id,
