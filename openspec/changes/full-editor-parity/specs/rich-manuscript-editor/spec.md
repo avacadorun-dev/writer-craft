@@ -103,7 +103,7 @@ The continuous manuscript SHALL appear as a centered bounded surface with exteri
 
 ### Requirement: Durable reviewed structured edits
 
-The native review panel and future command adapters SHALL stage typed structured editing transactions separately from canonical content. A stage SHALL bind exact project, document, base revision, complete before/after trees and reason. Apply SHALL replay the commands against that unchanged base and atomically commit content, history, exact note mappings and proposal status. Reject SHALL only change proposal status. Undo Apply SHALL append a compensating revision only while the applied document remains exact, restoring note attachments while retaining current note text and lifecycle. Unresolved working drafts SHALL block Apply/Undo without being deleted. Imported proposal data SHALL remain preservation evidence rather than active mutation authority.
+The native review panel and command adapters SHALL stage project-scoped typed transactions without canonical changes. Apply SHALL revalidate and atomically commit content, history, note mappings and status against the exact base. Reject SHALL change status only. Undo Apply SHALL require the unchanged applied state. Drafts and imported evidence SHALL NOT become implicit mutation authority.
 
 #### Scenario: Formatting changes before proposal Apply
 - **WHEN** a staged structured proposal is reviewed after a formatting-only canonical change
@@ -120,3 +120,8 @@ The native review panel and future command adapters SHALL stage typed structured
 #### Scenario: Exact selected passage is attached to review
 - **WHEN** the author captures a supported native selection for review
 - **THEN** the saved selection chip retains exact project/revision/ranges and supports reveal, clear and explicit recapture without searching for another occurrence; actual document edits make it visibly stale
+
+
+#### Scenario: Review meets a pending draft or imported evidence
+- **WHEN** Apply or Undo encounters an unresolved working draft, or an imported archive contains proposal/replay data
+- **THEN** the draft is preserved and blocks mutation, while imported proposal data remains quarantined preservation evidence rather than active proposals
