@@ -1,4 +1,7 @@
-# Install an engineering candidate
+# Installing WriterCraft alpha.2
+
+Download the package matching your operating system from the [alpha.2 release](https://github.com/avacadorun-dev/writer-craft/releases/tag/v0.1.0-alpha.2). The release provides DMG, per-user Windows setup and Debian packages, combined `SHA256SUMS` and exact-source manifests. This is an engineering alpha of the implemented native rich editor; full original-product parity continues in alpha.3.
+
 
 Installer work is included in the owner-approved alpha.2 scope. These instructions accompany **engineering artifacts**, not a published alpha.2 release or platform UX acceptance. The workspace version remains authoritative; an engineering artifact can still report `0.1.0-alpha.1` while alpha.2 is under development. Published alpha.1 tags and assets are unchanged. Issue [#3](https://github.com/avacadorun-dev/writer-craft/issues/3) stays open through hosted qualification and the owner's final candidate checks.
 
@@ -44,4 +47,4 @@ Remove with `sudo apt remove writercraft`. `sudo apt purge writercraft` also lea
 
 The workflow builds all packages from one immutable commit and exact workspace version. It verifies ARM64 Mach-O, x64 PE and amd64 ELF payloads; mounted DMG filesystem/Applications link/app signature; Windows per-user registration/Start menu identity; Debian launcher and dependencies; installed binary versions/checksums; and Windows/Linux unattended install/uninstall with an unchanged synthetic sentinel in the real default user-data directory. Linux removal and purge run on Debian 12 and Ubuntu 24.04. Windows also preserves an unknown file in the program directory.
 
-Only a successfully completed run and its evidence prove those checks passed for that source. They do not establish complete editor parity, native GUI/accessibility acceptance on every OS, signing/notarization, automatic updates or the owner's final acceptance. No job creates tags, draft releases, release assets or publications.
+Only a successfully completed run and its evidence prove those checks passed for that source. They do not establish complete editor parity, native GUI/accessibility acceptance on every OS, signing/notarization, automatic updates or the owner's final acceptance. The packaging workflow itself creates no tags or publications. The separate gated release workflow stages these verified packages into a new draft under explicit owner authorization; a separate maintainer action publishes the prerelease.

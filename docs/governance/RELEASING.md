@@ -1,102 +1,57 @@
 # Versioning and releases
 
-## Current alpha.2 decision
+Build and package optimized artifacts on GitHub Actions. Never commit build trees, app bundles, installers, workspace databases or private manuscripts. Published tags and assets are immutable.
 
-The latest owner instruction authorizes publication of the completed coherent checkpoint as `0.1.0-alpha.2` under the independent scope `native-rich-editor-alpha`. Unfinished full-parity work moves to alpha.3. Earlier all-issues alpha.2 and editor-first deferral statements below are historical and superseded. Preserve published alpha.1 unchanged. The final installer release path must ship the editor-enabled **normal app identity**, use the verified DMG/per-user setup/Debian packages rather than old portable default-editor archives, retain engineering evidence unchanged and add separate exact-source scoped release acceptance. All package generation remains hosted. README uses actual compiled captures and direct release downloads. Product issues require separate final owner acceptance.
+## Current decision
 
-WriterCraft ships source through Git and distribution builds through GitHub Actions. Do not commit `target/`, app bundles, ZIPs, databases or local build artifacts. Local packaging defaults to debug; optimized `--release` packaging is reserved for GitHub Actions.
+The owner explicitly authorized publishing the completed coherent checkpoint as **0.1.0-alpha.2**, with native installers and current README screenshots. The independent scope is `native-rich-editor-alpha`: an engineering prerelease of the implemented writing workspace. Complete original-editor/product parity and unfinished large workstreams continue in alpha.3. Publication does not close product issues or certify daily use. This supersedes earlier all-issues alpha.2 scheduling and editor-only deferrals.
 
-## Version contract
+## Versions and data
 
-`[workspace.package].version` in the root `Cargo.toml` is the only authored app version. All workspace crates inherit it. Update `Cargo.lock` through Cargo, add the matching changelog section and rerun checks. Packaging derives the full version and the numeric Apple marketing version from that source; the CI run number supplies the Apple build number.
+`workspace.package.version` in root Cargo.toml is the authored application version. Workspace crates inherit it; their Cargo.lock package versions must agree and hosted `cargo metadata --locked`, tests and builds must accept the unchanged dependency graph. Dependency revisions and checksums are never mass-updated to advance an app prerelease. Packaging derives exact SemVer, Apple numeric version and Windows/Debian equivalents. CI supplies the Apple build number.
 
-Use [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html). The first prepared candidate is `0.1.0-alpha.1`. Advance the prerelease sequence for another candidate of the same intended release. Before 1.0, document incompatible user/CLI/storage changes and advance the minor version rather than quietly changing contracts in a patch. Compatible fixes advance patch versions. Once 1.0 is reached, breaking public contracts require a major version, additive compatible behavior a minor version, and compatible fixes a patch.
+Use SemVer 2.0.0. Advance alpha/beta/rc sequences for candidates of one intended release. Document breaking public contracts and data migrations; before 1.0, advance the minor version for incompatible public changes. Version 1.0 requires the complete declared legacy workflows and matching independent `full-parity` UX/migration gates. SQLite schema, rich-document schema, external `.wstudio` format and app version are independent. Preserve data and unknown source fields across their supported migrations.
 
-The public contract includes documented CLI/JSON behavior and data-preservation/migration guarantees. App version, SQLite schema, rich-document schema and `.wstudio` container version are separate. Never infer one from another or bump the external transfer format merely for a UI release. A substantial independent library has its own repository and versioning when that boundary is justified.
+## Engineering and release gates
 
-A released version/tag is immutable: do not force-move a tag or replace published assets. Record known limitations. No feature outside the legacy parity scope should displace required migration work. Version 1.0 requires the declared complete legacy workflows plus macOS distribution and independent UX acceptance; it does not silently assert Windows/Linux support.
-
-## Two different gates
-
-| Gate | What passes | What it does not grant |
-| --- | --- | --- |
-| Source / engineering preview | Version/changelog consistency, source/evidence structure, tests, Clippy, OpenSpec and honest review disposition | Public-release or Author pilot approval |
-| Tagged release candidate | All engineering checks plus independent acceptance of the current source fingerprint and named scope, no unresolved blockers, actual visual/interaction evidence | Stable publication or full parity outside that scope |
-
-An open review may still accompany a clearly labeled engineering preview artifact. It cannot pass the tagged release gate. The independent designer owns acceptance; the implementer does not stamp their own review approved. Owner corrections update the feedback log, reviewer preparation and regression evidence.
-
-## Hosted workflow
-
-[Verify WriterCraft](../../.github/workflows/ci.yml) runs on pull requests, pushes to `main` and manual dispatch. macOS checks cover the complete workspace, OpenSpec and source/evidence gates. Linux/Windows verification jobs cover the shared core/transfer/CLI; they are not desktop interaction evidence. After those checks, push-main and manual runs use a native-runner preview matrix:
-
-| Runner | Rust target | Engineering archive |
-| --- | --- | --- |
-| `macos-15` ARM64 | `aarch64-apple-darwin` | app ZIP, ad-hoc signed |
-| `windows-latest` x64 | `x86_64-pc-windows-msvc` | executable ZIP, unsigned |
-| `ubuntu-24.04` x64 | `x86_64-unknown-linux-gnu` | executable tar.gz, unsigned |
-
-Each successful matrix entry uploads its versioned preview archive, SHA-256 checksums, source/build evidence and preview disposition for 14 days. The archive includes the repository license, bundled font/icon notices and target-resolved Rust dependency notices. Native compilation is performed on its matching host; it is not presented as tested desktop interaction, platform support acceptance or complete workflow parity. Jobs fail independently, so one successful artifact does not imply all three builds passed. Inspect the actual hosted run before announcing availability.
-
-`package-portable.py` permits optimized builds only with `GITHUB_ACTIONS=true` on the expected native runner. It reads the authored workspace version, builds with `--locked --release --target`, checks Windows PE32+ or Linux ELF x86-64 identity, and creates a ZIP/tar.gz containing the executable, license, font/icon notices, Rust dependency notice inventory, preview note and build metadata. Its `--self-test` validates local-build refusal, host mismatch, architecture mismatch, archive contents, Linux execute permissions and checksum integrity without running Cargo. The Linux artifact is a GNU-libc binary from Ubuntu 24.04, not a universal static binary or AppImage; compatible graphics/window-system/desktop runtime libraries remain system dependencies. Windows/Linux archives are portable build previews, not installer packages.
-
-[Release candidate](../../.github/workflows/release.yml) accepts a pushed `v<version>` tag or manual dispatch. It rechecks source/tests/OpenSpec and the stricter release gate, then builds the accepted macOS candidate on a hosted `macos-15` ARM64 runner. This remains the first independently qualified desktop platform; its `native-foundation` acceptance does not qualify Windows/Linux interaction or full product parity. After the macOS job succeeds, a native Windows/Linux matrix builds additional engineering archives. Both jobs check out the exact commit emitted by the gated macOS job, even when a manually dispatched branch has since advanced. Build provenance uses that checked-out commit rather than assuming the workflow event's SHA names a manually selected tag.
-
-Manual dispatch without a tag produces three build-only candidate artifacts. A supplied tag must already exist and match the workspace version exactly. Neither workflow creates a tag. Windows/Linux files retain their `-preview` names and unsigned, engineering-only evidence; including them with a macOS candidate does not promote their UX qualification.
-
-Only an existing prerelease tag can create/update a **draft prerelease**, and that job waits for all three platform archives. Separate downloaded artifact directories prevent `SHA256SUMS`, preview notes and evidence from overwriting another platform's files. `scripts/stage-release-assets.py` verifies all three input archive checksums, matching versions, the accepted macOS report and portable source commits/scope. It then creates one combined `SHA256SUMS`, a `release-manifest.json`, distinct platform-prefixed evidence/preview files and notes that explain the mixed qualification. A missing, tampered or differently sourced portable archive fails the complete draft preparation. Its fixture tests exercise successful staging, missing platforms, checksum tampering, commit mismatch and an unaccepted macOS gate without building or publishing anything.
-
-The resulting draft contains the macOS ARM64 app ZIP, Windows x64 executable preview ZIP and Linux x64 GNU-libc preview tar.gz, plus combined checksums and per-platform evidence. Candidate artifacts are retained for 30 days in Actions. The draft job alone has `contents: write`; build jobs keep read-only repository permissions. It refuses an already published release. An existing unpublished draft may have its candidate assets refreshed; published assets are never intentionally replaced. Tag and matching manual-dispatch runs share the same release concurrency group. A maintainer reviews and publishes later under the owner's release instruction. No stable release is published by these workflows.
-
-Actions are pinned to official repository commit SHAs verified on 2026-11-07. The [runner-image catalog](https://github.com/actions/runner-images#available-images) identifies `macos-15` as ARM64. The workflow also verifies architecture. Tooling uses the locked Cargo graph and pinned `@fission-ai/openspec@1.16.1` with telemetry/update checks disabled. Update pins deliberately and revalidate the workflow.
-
-Native OS file-association registration is deferred until opening a file through the OS is implemented and tested; in-app archive preview remains available. The macOS preview ZIP contains `WriterCraft.app`, ad-hoc signed unless a configured signing identity is deliberately supplied. Windows/Linux engineering archives are unsigned; their code signing, installer integration, runtime qualification and auto-update channels remain separate acceptance work. A successful ad-hoc verification is not Developer ID notarization. Add signing/notarization as separately tested release work; never describe an unsigned/ad-hoc preview as notarized.
-
-The stdlib-only `scripts/generate-notices.py` traverses normal dependency edges from `studio-desktop` in locked, target-filtered Cargo metadata. It preserves available package notice texts, declared SPDX metadata and public repository URLs in `THIRD_PARTY_NOTICES.txt`, without local machine paths. Workspace entries and build/dev-only edges are excluded. Packages whose registry source omits notice files are explicitly inventoried; this is an attribution inventory, not a legal completeness assertion. Its fixture checks cover dependency closure, original text preservation, declared files and unavailable notices.
-
-## Selected editor milestone
-
-The owner selected complete current-editor parity for alpha.2 on 2026-11-08. The active source declares `workspace.metadata.writercraft.required-ux-scope = "full-editor-parity"`. Release validation requires the independent record to match that exact scope as well as source/version; an earlier native-foundation approval cannot qualify it. This scope covers the full editor matrices, not complete product parity. A model/storage/layout checkpoint cannot pass it. Keep the released alpha.1 tag/assets unchanged; deferred installation packaging is not part of this editor-first scope.
-
-## Independent UX evidence record
-
-Keep the narrative review and findings. For machine validation, the independent reviewer owns `docs/design/UX_GATE.json`. It is authoritative over historical review prose. Required fields:
-
-```json
-{
-  "schema_version": 1,
-  "status": "changes-required",
-  "independent": true,
-  "reviewer": "independent UI/UX designer",
-  "scope": "native-foundation",
-  "version": "0.1.0-alpha.1",
-  "source_fingerprint": "SHA256_FROM_THE_COMMAND_BELOW",
-  "blockers": ["finding IDs until independently retested"],
-  "evidence": [
-    {"path": "docs/images/workspace-dark.png", "sha256": "ACTUAL_FILE_SHA256"},
-    {"path": "docs/images/workspace-light.png", "sha256": "ACTUAL_FILE_SHA256"}
-  ],
-  "interaction_evidence": "docs/design/UX_REVIEW_002.md"
-}
-```
-
-This example is deliberately not an approval. A release record must use `status: accepted`, an exact current fingerprint/version, an empty blockers list, real checked-in image hashes and a nonempty interaction report. It accepts only its named scope. Use `pending`, `changes-required` or `accepted`; a pending/rejected gate cannot be bypassed by an older approved review. Machine checks verify references/freshness, not the truth of a human interaction claim. Version 1.0+ additionally requires `scope: full-parity` and a matching accepted `docs/migration/PARITY_GATE.json`; native-foundation approval cannot grant full parity.
+- Source checks validate metadata, actual source fingerprints, tests, Clippy, OpenSpec and honest review disposition. They may produce clearly labeled engineering artifacts while a release gate is pending.
+- The authoritative `docs/design/UX_GATE.json` must independently accept the exact version, current fingerprint and selected scope before a tagged release. Historical approval cannot override a current pending/rejected gate. The implementer does not approve their own review.
+- Gate evidence includes at least two actual checked-in PNGs under `docs/images`, matching hashes, a named independent reviewer, no unresolved in-scope blockers and a nonempty interaction report. A source/assets/version or fingerprinted design-contract change invalidates acceptance. Gate JSON, review prose and screenshots are excluded from the fingerprint to avoid circular approval commits.
+- `native-rich-editor-alpha` approval never means `full-editor-parity`, full migration, exhaustive IME/accessibility coverage or Windows/Linux desktop interaction. The release notes must name remaining work and platform limits.
 
 ```sh
-python3 scripts/release-check.py --fingerprint
 python3 scripts/release-check.py --mode source
-python3 scripts/release-check.py --mode release --tag v0.1.0-alpha.1 --require-prerelease
+python3 scripts/release-check.py --fingerprint
+python3 scripts/release-check.py --mode release --tag v0.1.0-alpha.2 --require-prerelease
 ```
 
-The fingerprint includes app/core/transfer/CLI source, Cargo manifests/lock, runtime assets and the four desktop/UX/feedback/workflow design contracts. It excludes gate JSON, review prose and screenshots. A source/assets/version change invalidates prior acceptance. Recording a review in a later documentation commit does not create a circular commit-hash requirement. Evidence file hashes prevent silently substituting screenshots after approval.
+## Hosted packaging
 
-## Maintainer sequence
+The reusable `.github/workflows/distribution-alpha2.yml` freezes one commit/version and builds the **native-editor-enabled normal application**, not the isolated preview or old default-editor portable archives. It verifies:
 
-1. Finish the named implementation scope, update specs/feedback and run required checks. Keep unsupported workflows explicit.
-2. Set the workspace version, regenerate the lockfile and write its changelog entry. Follow the owner's selected project license (MIT) and preserve third-party notices.
-3. Capture the actual new build using isolated data; retain dark/light and affected language/size/failure evidence. Do not restart an owner's running preview merely to make a release screenshot.
-4. Obtain independent review/retest, then record its exact version/fingerprint and evidence. `changes-required` remains blocked.
-5. Push source to `main`, inspect each actual hosted matrix job and download/check its platform artifact. Do not report a hosted build passed until it completed; state which platform jobs passed or failed.
-6. Under the owner's release instruction, create/push the matching prerelease tag or dispatch a candidate for an existing tag. Inspect all three resulting archives, the combined checksums and per-platform evidence in the draft; preserve the macOS accepted-scope versus Windows/Linux engineering-preview distinction.
-7. Publish only after the corresponding explicit release decision. Never use an automatic stable-publish step.
+| Platform | Package | Hosted checks |
+|---|---|---|
+| macOS ARM64, 14+ | DMG | Mach-O, HFS+ image, Applications link, mounted version/signature, normal-app settled native captures |
+| Windows x64 | Per-user NSIS setup | PE/static runtime, Start menu/app identity, install/remove, unchanged user data and unknown program files |
+| Debian 12 / Ubuntu 24.04 amd64 | Debian package | ELF/dependencies/launcher, install/remove/purge and unchanged user data on both systems |
 
-GitHub [workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow) and [release API behavior](https://docs.github.com/en/rest/releases/releases#create-a-release) are the upstream references. Draft creation is distinct from publication, and artifacts are distinct from releases.
+All three packages must share the exact commit, version and actual compiled-source fingerprint. `.gitattributes` preserves identical text checkout bytes across hosts; evidence hashing does not hide differences through normalization. The aggregate rehashes every installer and preserves per-platform evidence. Normal-app capture runs use isolated synthetic temporary databases and never access an owner's running preview or original project.
+
+Engineering package metadata deliberately retains `release_ready:false` and `platform_ux_qualified:false`. Successful package checks do not manufacture independent GUI acceptance. `scripts/stage-installer-release.py` rechecks all three platform records/checksums against the tagged source and creates a separate scoped release manifest; original engineering records remain unchanged.
+
+## Release sequence
+
+1. Freeze completed scope, version/changelog and dependency pins. Preserve unfinished work in existing issues and the alpha.3 milestone.
+2. Run hosted default/all-feature tests, strict Clippy/fmt, OpenSpec and native installer qualification. Check actual job outcomes and real captures; a workflow definition is not a successful run.
+3. Inspect the normal packaged app with synthetic data, retain interaction/reopen evidence and actual README screenshots, then obtain independent exact-fingerprint scoped review. Keep owner issue acceptance separate.
+4. Merge the reviewed source into main. Create and push its matching immutable prerelease tag only under an explicit release instruction (already granted for alpha.2).
+5. `release.yml` verifies that existing tag and accepted gate, reruns default/native checks and calls the same installer graph at the frozen commit. The final job stages verified DMG/setup/deb, combined SHA256SUMS, installation notes and source/release manifests into a **new unpublished draft**. It refuses any existing release, including a draft; published assets are never replaced.
+6. Inspect actual draft assets, checksums and source/version evidence, then publish the prerelease under the owner's release authorization. No automatic stable publication or unrequested signing/update infrastructure.
+
+Build jobs have read-only repository permissions; only the draft job can write release contents. Actions, installer compiler and Linux build image are pinned. Optimized package scripts refuse accidental local builds. Source verification/fixture scripts may run locally without Cargo or creating installers.
+
+## Installation and signing
+
+See [INSTALL.md](../distribution/INSTALL.md). macOS is ad-hoc signed, not Developer ID signed/notarized; Windows is unsigned. Apple/Windows may require their normal user approval for downloaded apps. Linux requires its declared desktop/graphics/portal dependencies. Hosted installation checks do not qualify every desktop, file association or automatic update. Uninstall removes program files while preserving user workspaces. The normal app uses normal WriterCraft storage; isolated previews retain their own path. Never delete either while preparing a release.
+
+Distribution retains MIT, bundled font/icon notices and target-resolved Rust dependency attribution. `generate-notices.py` inventories available normal-dependency texts and declared licenses, without private machine paths; it is not a legal completeness assertion. The published alpha.1 release keeps its original archives, metadata and evidence unchanged.

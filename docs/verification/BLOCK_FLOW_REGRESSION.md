@@ -25,3 +25,8 @@ The earlier independent [182c9a3 capture review](../design/UX_CAPTURE_REVIEW_182
 - Full application and settled opaque captures must pass at an exact committed source before the correction is described as verified in WriterCraft.
 - Independent native review must inspect the actual settled block neighborhoods, typography/adaptive states and interaction outcomes. The owner is still exploring the separate `141fce5` window; do not replace it or use its clipboard/caret for automation.
 - Bug#12 and all other alpha.2 product issues stay open until the owner checks the final complete candidate and approves closure. No alpha.2 release/tag is authorized by these engineering checkpoints.
+
+
+## Final nineteen-view static checkpoint and release cut
+
+Exact app source e9af41771babefca9c56658e382106faa6a2c944 passed all 19 settled native capture cases in hosted run42487095816. Independent review: [UX_CAPTURE_REVIEW_E9AF417.md](../design/UX_CAPTURE_REVIEW_E9AF417.md). This includes the large wrapped image caption and following independent heading; no visible P0/P1 overlap was found in the observed constrained viewports. True-wide/interactions were not inferred. The owner subsequently authorized the completed alpha.2 checkpoint and deferred remaining large work to alpha.3; final versioned normal-app captures are required for the new scoped release review.
