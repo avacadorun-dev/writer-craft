@@ -68,6 +68,11 @@ impl StudioApp {
                         )
                         .on_hover_text(&document.title);
                     });
+                #[cfg(feature = "editor-preview")]
+                if self.rich.is_some() {
+                    self.rich_editor(ui, t);
+                    return;
+                }
                 egui::ScrollArea::vertical()
                     .id_salt((&document.id, "manuscript"))
                     .auto_shrink([false, false])

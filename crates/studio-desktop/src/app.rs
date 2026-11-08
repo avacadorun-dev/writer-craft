@@ -5,6 +5,8 @@ mod library;
 mod manuscript;
 mod navigator;
 mod review;
+#[cfg(feature = "editor-preview")]
+mod rich_editor;
 mod settings;
 use crate::{
     i18n::{InterfacePreferences, Language},
@@ -50,6 +52,8 @@ pub struct StudioApp {
     documents: Vec<Document>,
     document: Option<Document>,
     body: String,
+    #[cfg(feature = "editor-preview")]
+    rich: Option<rich_editor::RichState>,
     dirty: Option<Instant>,
     autosave_paused: bool,
     library: bool,
@@ -119,6 +123,8 @@ impl StudioApp {
             documents: vec![],
             document: None,
             body: String::new(),
+            #[cfg(feature = "editor-preview")]
+            rich: None,
             dirty: None,
             autosave_paused: false,
             library: true,
@@ -183,6 +189,13 @@ impl StudioApp {
         }
         if demo {
             if app.projects.is_empty() {
+                #[cfg(feature = "editor-preview")]
+                if crate::editor_preview_requested() {
+                    app.create_editor_example()?;
+                } else {
+                    app.create_example()?;
+                }
+                #[cfg(not(feature = "editor-preview"))]
                 app.create_example()?;
             }
             if let Some(project) = app.projects.first().cloned() {
@@ -217,6 +230,10 @@ impl StudioApp {
         self.project = Some(project);
         self.document = None;
         self.body.clear();
+        #[cfg(feature = "editor-preview")]
+        {
+            self.rich = None;
+        }
         self.library = false;
         if let Some(document) = self.documents.first().cloned() {
             self.open_document(document)?;
@@ -227,13 +244,17 @@ impl StudioApp {
     fn open_document(&mut self, document: Document) -> AppResult<()> {
         self.save()?;
         let document = self.workspace.document(&document.id)?;
+        #[cfg(feature = "editor-preview")]
+        let rich = rich_editor::RichState::open(&self.workspace, &document)?;
         self.body.clone_from(&document.body);
         self.dirty = None;
         self.autosave_paused = false;
         if self.error.is_none() {
             self.status = "All changes saved".into();
         }
-        if let Some(draft) = self.workspace.draft(&document.id)? {
+        if document.rich_json.is_none()
+            && let Some(draft) = self.workspace.draft(&document.id)?
+        {
             if draft.base_revision == document.revision && draft.body != document.body {
                 self.body = draft.body;
                 self.dirty = Some(Instant::now());
@@ -243,6 +264,14 @@ impl StudioApp {
                 self.documents = self.workspace.list_documents(&document.project_id)?;
                 self.status = "Unsaved text recovered as a separate document".into();
             }
+        }
+        #[cfg(feature = "editor-preview")]
+        {
+            if rich.as_ref().is_some_and(|state| state.recovered) {
+                self.dirty = Some(Instant::now());
+                self.status = "Unsaved text recovered".into();
+            }
+            self.rich = rich;
         }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
@@ -261,6 +290,10 @@ impl StudioApp {
     fn save_dirty_document(&mut self) -> AppResult<()> {
         if self.dirty.is_none() {
             return Ok(());
+        }
+        #[cfg(feature = "editor-preview")]
+        if self.rich.is_some() {
+            return self.save_rich_editor();
         }
         if let Some(document) = self.document.as_ref() {
             let saved =
