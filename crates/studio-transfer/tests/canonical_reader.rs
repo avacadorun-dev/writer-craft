@@ -115,7 +115,7 @@ fn corrupted_payload_with_valid_zip_crc_should_fail_before_workspace_activation(
     let mut changed = false;
     for index in 0..input.len() {
         let mut entry = input.by_index(index).unwrap();
-        let name = entry.name().to_owned();
+        let name = std::str::from_utf8(entry.name_raw()).unwrap().to_owned();
         let mut bytes = Vec::new();
         entry.read_to_end(&mut bytes).unwrap();
         if !changed && name.starts_with("objects/") && !bytes.is_empty() {
