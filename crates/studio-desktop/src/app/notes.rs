@@ -44,6 +44,7 @@ pub(super) struct NotesState {
     delete_confirmation: Option<PassageAnnotation>,
     reveal_row: bool,
     last_error: Option<Box<dyn std::error::Error + Send + Sync>>,
+    reported_error_epoch: Option<u64>,
 }
 impl NotesState {
     pub(super) fn clear(&mut self) {
@@ -215,6 +216,12 @@ impl DecorationSource for NotesFrame<'_> {
         pending: &[ReplayProof],
     ) -> craft_editor_egui::Result<Vec<TextDecoration>> {
         let key = (revision, self.state.epoch);
+        if self.snapshot.is_none() {
+            // Preparation already reported this context's acquisition failure.
+            // Typing must not create a fresh modal for every new input revision.
+            self.state.invalid = true;
+            return Err(craft_editor_egui::Error::DecorationSource);
+        }
         if self.state.preview_key != Some(key) {
             self.state.preview_key = Some(key);
             let result = (|| -> AppResult<Vec<PassageAnnotation>> {
@@ -229,10 +236,14 @@ impl DecorationSource for NotesFrame<'_> {
                 Ok(notes) => {
                     self.state.preview = notes;
                     self.state.invalid = false;
+                    self.state.reported_error_epoch = None;
                 }
                 Err(error) => {
                     self.state.invalid = true;
-                    self.state.last_error = Some(error);
+                    if self.state.reported_error_epoch != Some(self.state.epoch) {
+                        self.state.last_error = Some(error);
+                        self.state.reported_error_epoch = Some(self.state.epoch);
+                    }
                 }
             }
         }
@@ -1341,6 +1352,50 @@ mod tests {
         assert!(state.preview.is_empty());
         assert!(state.selected.is_none());
         assert!(state.invalid);
+        Ok(())
+    }
+    #[test]
+    fn failed_note_context_does_not_raise_new_errors_for_each_prose_revision() -> TestResult {
+        let (workspace, document, _, mut editor) = fixture()?;
+        let mut state = NotesState::default();
+        let mut stale = document.clone();
+        stale.revision += 1;
+        assert!(state.prepare(&workspace, &stale).is_err());
+        let t = theme::tokens(&egui::Context::default());
+        for revision in 1..=3 {
+            let mut frame = state.frame(&[], Language::English, t);
+            assert!(
+                frame
+                    .decorations(editor.document(), Revision(revision), &[])
+                    .is_err()
+            );
+            assert!(frame.take_error().is_none());
+        }
+        state.invalidate();
+        state.prepare(&workspace, &document)?;
+        editor.apply(Transaction {
+            base_revision: editor.revision(),
+            commands: vec![Command::ReplaceText {
+                range: TextRange {
+                    block_id: "p".into(),
+                    start: ScalarOffset(0),
+                    end: ScalarOffset(0),
+                },
+                expected: "".into(),
+                replacement: "New ".into(),
+            }],
+        })?;
+        for (index, revision) in (5..=7).enumerate() {
+            let mut frame = state.frame(&[], Language::English, t);
+            // Deliberately omit the required proofs: derived projection fails,
+            // but only the first failure in this metadata epoch is reported.
+            assert!(
+                frame
+                    .decorations(editor.document(), Revision(revision), &[])
+                    .is_err()
+            );
+            assert_eq!(frame.take_error().is_some(), index == 0);
+        }
         Ok(())
     }
 }
