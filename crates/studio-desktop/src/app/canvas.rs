@@ -1608,6 +1608,138 @@ mod tests {
         assert_eq!(app.workspace.document(&document.id)?, document);
         Ok(())
     }
+    fn backup_fixture() -> AppResult<(tempfile::TempDir, StudioApp, String)> {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("board-backup.sqlite");
+        let ctx = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(ctx);
+        let mut app = StudioApp::new(&creation, database, false, None)?;
+        let project = app.workspace.create_project("Board backup prerequisite")?;
+        app.workspace
+            .create_document(&project.id, "Sentinel", "Unrelated writing")?;
+        let board = app
+            .workspace
+            .create_project_canvas(&project.id, "Board", graph())?;
+        app.open_project(project.clone())?;
+        app.open_canvas(&board.canvas.id)?;
+        Ok((directory, app, project.id))
+    }
+    #[test]
+    fn backup_should_wait_for_exact_board_acknowledgement_and_later_typing() -> TestResult {
+        let (_directory, mut app, project) = backup_fixture()?;
+        let database = app.database.clone();
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        let board = state.snapshot.canvas.id.clone();
+        let revision = state.snapshot.revision.clone();
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "First requested writing".into();
+        let prepared = state.session.prepare(editor.submit()?, &state.dialect)?;
+        state.text_editor = Some(editor);
+        let (sender, receiver) = mpsc::channel();
+        state.pending = Some(receiver);
+        assert!(!app.prepare_workspace_backup()?);
+        assert!(app.storage.modal_open());
+        assert!(!app.storage.busy());
+        *app.canvas
+            .as_mut()
+            .ok_or("canvas")?
+            .text_editor
+            .as_mut()
+            .ok_or("editor")?
+            .text_mut() = "Later exact writing 日本語 😀".into();
+        sender
+            .send(persist_candidate(
+                &database, &project, &board, revision, prepared,
+            ))
+            .map_err(|_| "completion")?;
+        let ctx = egui::Context::default();
+        app.poll_canvas(&ctx);
+        assert_eq!(
+            app.workspace
+                .project_canvas(&project, &board)?
+                .revision
+                .content["nodes"][0]["text"],
+            "First requested writing"
+        );
+        assert!(
+            !app.prepare_workspace_backup()?,
+            "a first acknowledgement is not a receipt for later typing"
+        );
+        assert!(!app.storage.busy());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.canvas.as_ref().ok_or("canvas")?.pending.is_some() && Instant::now() < deadline {
+            app.poll_canvas(&ctx);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(app.prepare_workspace_backup()?);
+        assert!(!app.storage.modal_open());
+        assert!(
+            !app.storage.busy(),
+            "preparation alone never starts a backup worker"
+        );
+        assert_eq!(
+            app.workspace
+                .project_canvas(&project, &board)?
+                .revision
+                .content["nodes"][0]["text"],
+            "Later exact writing 日本語 😀"
+        );
+        assert_eq!(
+            app.workspace.list_documents(&project)?[0].body,
+            "Unrelated writing"
+        );
+        Ok(())
+    }
+    #[test]
+    fn backup_failure_or_composition_should_preserve_the_card_and_start_no_snapshot_job()
+    -> TestResult {
+        let (_directory, mut app, project) = backup_fixture()?;
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        let board = state.snapshot.canvas.id.clone();
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "Retained unsaved source 😀".into();
+        state.text_editor = Some(editor);
+        state.text_composing = true;
+        assert!(app.prepare_workspace_backup().is_err());
+        assert!(!app.storage.busy());
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        state.text_composing = false;
+        let prepared = state.session.prepare(
+            state.text_editor.as_mut().ok_or("editor")?.submit()?,
+            &state.dialect,
+        )?;
+        let (sender, receiver) = mpsc::channel();
+        state.pending = Some(receiver);
+        assert!(!app.prepare_workspace_backup()?);
+        sender
+            .send(CommitCompletion {
+                prepared: Some(prepared),
+                result: Err(std::io::Error::other("Synthetic persistence failure").into()),
+                checkpoint_version: None,
+            })
+            .map_err(|_| "completion")?;
+        app.poll_canvas(&egui::Context::default());
+        assert!(app.canvas.as_ref().ok_or("canvas")?.failed.is_some());
+        assert!(!app.storage.busy());
+        assert!(app.storage.modal_open());
+        app.cancel_workspace_backup_preflight();
+        assert!(!app.storage.modal_open());
+        let state = app.canvas.as_ref().ok_or("canvas")?;
+        assert!(state.blocks_navigation());
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Retained unsaved source 😀"
+        );
+        assert_eq!(
+            app.workspace
+                .project_canvas(&project, &board)?
+                .revision
+                .content,
+            graph()
+        );
+        Ok(())
+    }
+
     fn graph() -> serde_json::Value {
         json!({"nodes":[{"id":"card","type":"text","x":0,"y":0,"width":300,"height":180,"text":"Old 😀 text","x-writers-studio":{"card":{"typeId":"unknown","fields":{"opaque":[1,null]}},"future":{"keep":true}}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"keep":true}}})
     }
@@ -1756,6 +1888,19 @@ impl StudioApp {
             return Err(PendingCanvas.into());
         }
         Ok(())
+    }
+    /// Start or continue saving only the matching active board; true means acknowledged clean.
+    /// This never starts a transfer or treats a queued worker as a durability receipt.
+    pub(super) fn flush_canvas_for_transfer(&mut self, project: Option<&str>) -> AppResult<bool> {
+        let Some(state) = self
+            .canvas
+            .as_mut()
+            .filter(|state| project.is_none_or(|project| project == state.project_id))
+        else {
+            return Ok(true);
+        };
+        state.save_now(&self.database)?;
+        Ok(!state.blocks_navigation())
     }
     pub(super) fn open_canvas(&mut self, id: &str) -> AppResult<()> {
         self.ensure_canvas_navigation()?;
