@@ -4,15 +4,20 @@
 //! until explicit apply, and undo refuses to overwrite intervening changes.
 
 mod annotations;
+mod assets;
 mod rich;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationStatus,
     PassageAnnotation,
 };
+pub use assets::{
+    ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, MAX_IMAGE_BYTES,
+    MAX_IMAGE_DIMENSION,
+};
 pub use rich::{RichDraft, RichRevision};
 
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -22,7 +27,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -245,7 +250,7 @@ pub struct Proposal {
 /// and optimistic revision checks. Run synchronous commands off the render thread
 /// when accessing large projects.
 pub struct Workspace {
-    connection: Mutex<Connection>,
+    connection: Arc<Mutex<Connection>>,
     replay_receipts: Mutex<annotations::ReplayCache>,
 }
 
@@ -297,6 +302,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("drafts.sql"))?;
             transaction.execute_batch(include_str!("rich.sql"))?;
             transaction.execute_batch(include_str!("annotations.sql"))?;
+            transaction.execute_batch(include_str!("assets.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -308,7 +314,10 @@ impl Workspace {
             if version < 3 {
                 transaction.execute_batch(include_str!("rich.sql"))?;
             }
-            transaction.execute_batch(include_str!("annotations.sql"))?;
+            if version < 4 {
+                transaction.execute_batch(include_str!("annotations.sql"))?;
+            }
+            transaction.execute_batch(include_str!("assets.sql"))?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         transaction.commit()?;
@@ -316,7 +325,7 @@ impl Workspace {
             "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;",
         )?;
         Ok(Self {
-            connection: Mutex::new(connection),
+            connection: Arc::new(Mutex::new(connection)),
             replay_receipts: Mutex::new(annotations::ReplayCache::default()),
         })
     }
