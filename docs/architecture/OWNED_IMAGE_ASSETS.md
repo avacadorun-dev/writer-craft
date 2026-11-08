@@ -33,3 +33,11 @@ Every `snapshot.load(node)` checks the exact src/assetId pair, captured identity
 Fourteen new core fixtures cover four formats, source removal/reopen, original byte/dimension bounds, MIME spoofing, missing/foreign/mismatched references, opaque canonical preservation, lazy worker ownership, checksum corruption, failed writes, rich drafts/Undo/Redo/history, schema-4 upgrade and retention of a nonimage resource larger than the image limit. They have not been run locally; all Cargo checks run on GitHub.
 
 The full native gate still needs author import/drop at the real location, cancellation/error feedback, image selection/sizing/alt/caption, actual rendering and restart evidence. The current renderer's 16M-pixel decode budget is not a core import limit and needs a large-image strategy before full E08 acceptance. Retaining original GIF/WebP bytes does not establish animation acceptance. Full `.wstudio` project compatibility, remaining media workflows, conflict copies and asset-aware export stay explicitly pending.
+
+## Imported logical identities and frozen render capabilities
+
+Source project IDs are opaque strings of at most 512 bytes, rather than necessarily UUIDs. Canonical image source/assetId bindings retain those original logical keys. The owning project resolves a media alias once into a native UUID; metadata and byte reads still require that same project. Native authoring asset APIs continue to use native UUIDs.
+
+A render snapshot maps each requested logical key to verified native metadata and later reads that captured native identity, rather than resolving a mutable alias again. Clipboard exports retain the requested logical `ImageTransfer.source_id`; the destination imports/reuses verified owned bytes and returns an explicit logical-to-native binding. A foreign ID, capsule project hint, filename or source URL cannot authorize a lookup outside the fixed project. Syntax checks alone grant no resource authority.
+
+Synthetic contracts cover two projects sharing an opaque image key, exact bytes, alias rebinding after snapshot capture, cross-project transfer, foreign alias targets, mismatched canonical src bindings and an actual original-project importer fixture. Their current hosted qualification is recorded separately from native interaction acceptance.

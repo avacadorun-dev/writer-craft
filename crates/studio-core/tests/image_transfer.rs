@@ -87,7 +87,7 @@ fn every_transfer_descriptor_is_validated_before_any_import() -> TestResult {
         let mut bad = image.clone();
         bad.source_id = uuid::Uuid::new_v4().to_string();
         match field {
-            0 => bad.source_id = "not-an-id".into(),
+            0 => bad.source_id = " ".into(),
             1 => bad.byte_size += 1,
             2 => bad.sha256 = "0".repeat(64),
             3 => bad.media_type = "image/jpeg".into(),
