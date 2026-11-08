@@ -651,7 +651,7 @@ fn restore_note(
             params![document, project],
             |row| read_unsigned(row, 0),
         )?;
-        transaction.execute("INSERT INTO document_annotation_snapshots(document_id,document_revision,annotation_id,attachment_json) VALUES(?1,?2,?3,?4)",params![document,revision,native,serde_json::to_string(&serde_json::json!({"anchor":state.anchor,"status":state.anchor_status}))?])?;
+        transaction.execute("INSERT INTO document_annotation_snapshots(document_id,document_revision,annotation_id,attachment_json) VALUES(?1,?2,?3,?4)",params![document,super::sqlite_integer(revision)?,native,serde_json::to_string(&serde_json::json!({"anchor":state.anchor,"status":state.anchor_status}))?])?;
     }
     Ok(())
 }
