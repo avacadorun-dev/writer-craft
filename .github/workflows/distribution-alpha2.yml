@@ -1,0 +1,237 @@
+name: Verify alpha.2 engineering installers
+
+on:
+  push:
+    branches: [feature/full-editor-parity]
+    paths:
+      - '.github/workflows/distribution-alpha2.yml'
+      - 'scripts/package-installers.py'
+      - 'scripts/test-package-installers.py'
+      - 'scripts/verify-windows-installer.ps1'
+      - 'scripts/package-macos.sh'
+      - 'docs/distribution/**'
+      - 'openspec/changes/installable-distribution/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-alpha2-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  MACOSX_DEPLOYMENT_TARGET: '14.0'
+
+jobs:
+  source:
+    name: Freeze installer source identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Validate installer policy and fixture checks without compiling
+        id: source
+        run: |
+          python scripts/test-package-installers.py
+          python scripts/release-check.py --mode source --github-output
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  installer:
+    name: Build and exercise ${{ matrix.platform }} installer
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - os: windows-2025
+            platform: windows-x64
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 70
+    defaults:
+      run:
+        shell: bash
+    env:
+      SOURCE_COMMIT: ${{ needs.source.outputs.commit }}
+      RUST_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install pinned official Windows compiler without system installation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'nsis-3.12.zip'
+          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip' -OutFile $archive
+          $expected = '56581f90db321581c5381193d796fffcf2d24b2f8fed2160a6c6a3baa67f2c4f'
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'NSIS compiler checksum mismatch.' }
+          $destination = Join-Path $env:RUNNER_TEMP 'writercraft-nsis'
+          Expand-Archive $archive $destination
+          "WRITERCRAFT_NSIS=$destination\nsis-3.12" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Prepare pinned application compiler
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup default 1.97.0
+          rustup target add "$RUST_TARGET"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: installer-${{ runner.os }}-${{ runner.arch }}-rust-1.97.0-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            installer-${{ runner.os }}-${{ runner.arch }}-rust-1.97.0-
+      - name: Build and inspect engineering installer from exact source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          env GITHUB_SHA="$SOURCE_COMMIT" python scripts/package-installers.py build --platform "${{ matrix.platform }}" --output artifacts/installers
+      - name: Exercise unattended per-user Windows install and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-installer.ps1 -OutputDirectory artifacts/installers
+      - name: Retain installer qualification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WriterCraft-${{ needs.source.outputs.version }}-${{ matrix.platform }}-installer-engineering-${{ github.run_id }}
+          path: |
+            artifacts/installers/*.dmg
+            artifacts/installers/*-setup.exe
+            artifacts/installers/*.deb
+            artifacts/installers/*.json
+            artifacts/installers/*.txt
+            artifacts/installers/*.log
+            artifacts/installers/*.nsi
+            artifacts/installers/SHA256SUMS
+            artifacts/installers/INSTALL.md
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
+
+  linux-debian:
+    name: Build and exercise Debian 12 amd64 installer
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    container:
+      # Official Rust image index resolved from Docker Hub on 2026-11-08; Debian 12 / glibc 2.36.
+      image: rust:1.97.0-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073
+      options: --platform linux/amd64
+    env:
+      SOURCE_COMMIT: ${{ needs.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - name: Install Debian build, dependency and package inspection tools
+        run: |
+          apt-get update
+          apt-get install -y python3 pkg-config libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libwayland-dev libx11-dev dpkg-dev desktop-file-utils
+          rustc -vV
+          test "$(rustc --version | cut -d ' ' -f2)" = 1.97.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /usr/local/cargo/registry
+            /usr/local/cargo/git
+            target
+          key: installer-debian12-amd64-rust-1.97.0-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            installer-debian12-amd64-rust-1.97.0-
+      - name: Build from exact source and exercise Debian install, remove and purge
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          env GITHUB_SHA="$SOURCE_COMMIT" python3 scripts/package-installers.py build --platform linux-amd64 --output artifacts/installers
+          python3 scripts/package-installers.py verify-linux --output artifacts/installers
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: Debian12-${{ needs.source.outputs.version }}-installer-intermediate-${{ github.run_id }}
+          path: |
+            artifacts/installers/*.deb
+            artifacts/installers/*.json
+            artifacts/installers/*.txt
+            artifacts/installers/SHA256SUMS
+            artifacts/installers/INSTALL.md
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
+
+  linux-ubuntu:
+    name: Exercise the same Debian package on Ubuntu 24.04
+    needs: [source, linux-debian]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Debian12-${{ needs.source.outputs.version }}-installer-intermediate-${{ github.run_id }}
+          path: artifacts/installers
+      - name: Install package inspection tool and exercise install, remove and purge
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils
+          python scripts/package-installers.py verify-linux --output artifacts/installers
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: WriterCraft-${{ needs.source.outputs.version }}-linux-amd64-installer-engineering-${{ github.run_id }}
+          path: artifacts/installers/*
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
+
+  combine:
+    name: Verify one source/version across all installer artifacts
+    needs: [source, installer, linux-ubuntu]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: WriterCraft-${{ needs.source.outputs.version }}-*-installer-engineering-${{ github.run_id }}
+          path: downloaded-installers
+          merge-multiple: false
+      - name: Require complete package checks, exact source identity and checksums
+        run: python scripts/package-installers.py collect --downloads downloaded-installers --output verified-installers
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WriterCraft-${{ needs.source.outputs.version }}-all-installers-engineering-${{ github.run_id }}
+          path: verified-installers/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
