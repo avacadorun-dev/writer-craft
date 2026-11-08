@@ -35,9 +35,39 @@ impl ProjectPortableExportWorker {
         project: &str,
         cancel: &ProjectTransferCancellation,
     ) -> Result<PreparedPortableProject> {
+        self.prepare_inner(project, None, cancel)
+    }
+    /// Capture the explicitly displayed project only if its title still matches inside the same
+    /// read transaction. A renamed target cannot produce an export labelled as the old project.
+    pub fn prepare_named(
+        &mut self,
+        project: &str,
+        expected_title: &str,
+        cancel: &ProjectTransferCancellation,
+    ) -> Result<PreparedPortableProject> {
+        self.prepare_inner(project, Some(expected_title), cancel)
+    }
+    fn prepare_inner(
+        &mut self,
+        project: &str,
+        expected_title: Option<&str>,
+        cancel: &ProjectTransferCancellation,
+    ) -> Result<PreparedPortableProject> {
         let mut connection = self.workspace.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Deferred)?;
         require_project(&transaction, project)?;
+        if let Some(expected) = expected_title {
+            let actual: String = transaction.query_row(
+                "SELECT title FROM projects WHERE id=?1",
+                [project],
+                |row| row.get(0),
+            )?;
+            if actual != expected {
+                return invalid(
+                    "The selected project changed before capture; review the project and try again",
+                );
+            }
+        }
         let mut output = Builder::new(cancel.clone())?;
         let original: Option<(i64, u64)> = transaction.query_row(
             "SELECT rowid,length(CAST(raw_manifest AS BLOB)) FROM project_portability WHERE project_id=?1",

@@ -168,3 +168,31 @@ fn opaque_source_should_export_a_named_read_only_preview_without_inventing_rich_
     assert_eq!(reading.body, "Preview only");
     assert!(reading.rich_content.is_none());
 }
+
+#[test]
+fn explicit_export_target_should_refuse_a_changed_displayed_title_before_preparation() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("workspace.sqlite");
+    let workspace = Workspace::open(&database).unwrap();
+    let project = workspace.create_project("Displayed project").unwrap();
+    let mut worker = ProjectPortableExportWorker::open(&database).unwrap();
+    assert!(
+        worker
+            .prepare_named(
+                &project.id,
+                "A different displayed project",
+                &ProjectTransferCancellation::default()
+            )
+            .is_err()
+    );
+    assert!(
+        worker
+            .prepare_named(
+                &project.id,
+                &project.title,
+                &ProjectTransferCancellation::default()
+            )
+            .is_ok()
+    );
+    assert_eq!(workspace.list_projects().unwrap(), vec![project]);
+}
