@@ -12,6 +12,7 @@ impl DailyControls {
         self.find.is_some()
     }
 
+    #[cfg(test)]
     pub(super) fn editing_title(&self) -> bool {
         self.title.is_some()
     }
@@ -229,6 +230,7 @@ impl StudioApp {
                 }
                 draft.focus = false;
             }
+            draft.field_focused = field.has_focus();
             let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
             if escape {
                 clear_title_input_state(&draft);
@@ -664,6 +666,79 @@ mod tests {
         let rich = app.rich.as_ref().ok_or("missing session")?;
         assert_eq!(rich.session.document().to_json()?, before);
         assert_eq!(rich.session.selection(), selection.as_ref());
+        Ok(())
+    }
+
+    #[test]
+    fn title_escape_discards_only_title_draft_and_clears_native_edit_state() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let document = app.document.clone().ok_or("missing document")?;
+        let context = egui::Context::default();
+        let tokens = theme::resolve(&app.settings, false);
+        title_draft(&mut app, "Original title")?;
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 400.0),
+            )),
+            ..Default::default()
+        };
+        let _ = context.run(input.clone(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                app.document_title(ui, &document, tokens);
+            });
+        });
+        let id = app
+            .daily_controls
+            .title
+            .as_ref()
+            .and_then(|draft| draft.field_id)
+            .ok_or("missing title field")?;
+        let mut typed = input.clone();
+        typed.events.push(egui::Event::Text("Changed title".into()));
+        let _ = context.run(typed, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                app.document_title(ui, &document, tokens);
+            });
+        });
+        let mut escape = input;
+        escape.events.push(egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        let _ = context.run(escape, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                app.document_title(ui, &document, tokens);
+            });
+        });
+        assert!(!app.daily_controls.editing_title());
+        assert!(egui::TextEdit::load_state(&context, id).is_none());
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_title_save_never_persists_uncommitted_composition() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let document = app.document.clone().ok_or("missing document")?;
+        title_draft(&mut app, "未確定")?;
+        app.daily_controls
+            .title
+            .as_mut()
+            .ok_or("missing title draft")?
+            .composing = true;
+        assert!(app.commit_title_edit().is_err());
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        assert_eq!(
+            app.daily_controls
+                .title
+                .as_ref()
+                .map(|draft| draft.value.as_str()),
+            Some("未確定")
+        );
         Ok(())
     }
 }
