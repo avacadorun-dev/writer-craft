@@ -21,7 +21,7 @@ WriterCraft prepares the catalog off the paint path, caches by exact atom source
 
 [Hosted run 42454627759](https://github.com/avacadorun-dev/craft-editor/actions/runs/42454627759), source `5e5d33882156df2f752845bb10a07587bc7fb3da`, passed 91 model, 35 view and 11 renderer tests (137 total), strict Clippy and geometry/canvas/native-atom examples. Its retained PNGs include actual flowchart, sequence and state diagrams, display/inline formulas, a vector illustration and an explicitly labelled invalid-source fallback. The renderer agent inspected the PNGs; application/native interaction and independent UX acceptance remain separate.
 
-The subsequent pin adds source-backed formula-command restrictions and the proof's non-deserialization compile-fail example. Its results must be recorded after execution; an earlier passing run must not be attributed to a later commit.
+The subsequent pin `5d2b78abb2961675ac65df037ebce4b1d47ea73a` adds source-backed formula-command restrictions and the proof's non-deserialization compile-fail example. [Hosted run 42455174414](https://github.com/avacadorun-dev/craft-editor/actions/runs/42455174414) passed 91 model, 35 view and 12 renderer tests (138 total), one compile-fail doctest, strict Clippy and all three rendering examples. Its hosted dependency lock matches the committed file exactly. These results belong to that exact source; application and native acceptance remain pending.
 
 ## Complete application specimen
 

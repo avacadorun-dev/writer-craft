@@ -181,6 +181,19 @@ impl InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Read only",
+        [
+            "Только чтение",
+            "Read only",
+            "Schreibgeschützt",
+            "Lecture seule",
+            "Solo lectura",
+            "Somente leitura",
+            "只读",
+            "読み取り専用",
+        ],
+    ),
+    (
         "The note changed. Reload it before editing.",
         [
             "Заметка изменилась. Обновите её перед редактированием.",

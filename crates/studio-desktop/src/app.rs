@@ -787,23 +787,22 @@ fn nav_row(
     t: Tokens,
 ) -> egui::Response {
     let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), egui::Sense::click());
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), egui::Sense::click());
     if selected || response.hovered() {
         ui.painter()
             .rect_filled(rect, 5.0, if selected { t.accent_soft } else { t.surface });
     }
     let mut child = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(rect.shrink2(Vec2::new(10.0, 3.0)))
+            .max_rect(rect.shrink2(Vec2::new(8.0, 3.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
     icons::icon(
         &mut child,
         icon,
-        17.0,
+        20.0,
         if selected { t.accent } else { t.muted },
     );
-    child.add_space(4.0);
     child.add(
         egui::Label::new(RichText::new(label).size(14.0).color(if selected {
             t.text

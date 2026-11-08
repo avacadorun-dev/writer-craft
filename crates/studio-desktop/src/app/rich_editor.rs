@@ -158,7 +158,7 @@ impl StudioApp {
             .frame(
                 egui::Frame::new()
                     .fill(t.editor)
-                    .inner_margin(egui::Margin::symmetric(16, 4)),
+                    .inner_margin(egui::Margin::symmetric(24, 4)),
             )
             .show(ui, |ui| {
                 let boundary = ui.max_rect();
@@ -168,6 +168,9 @@ impl StudioApp {
                     Stroke::new(1.0, t.border),
                 );
                 ui.horizontal_centered(|ui| {
+                    ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
+                    ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+                    ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
                     ui.spacing_mut().item_spacing.x = 3.0;
                     ui.add_enabled_ui(!rich.read_only && !rich.session.is_composing(), |ui| {
                         let kind = current_block(&rich.session)
@@ -227,7 +230,8 @@ impl StudioApp {
                                             if state == MarkState::Mixed { 1.0 } else { 0.0 },
                                             t.accent,
                                         ))
-                                        .min_size(egui::vec2(30.0, 30.0)),
+                                        .frame_when_inactive(active || state == MarkState::Mixed)
+                                        .min_size(egui::vec2(32.0, 32.0)),
                                 )
                                 .on_hover_text(if state == MarkState::Mixed {
                                     format!("{} · {}", l.text(msgid), l.text("Mixed formatting"))

@@ -40,44 +40,45 @@ impl StudioApp {
                                 .size()
                                 .x
                                 + 24.0;
-                            let title_width = (ui.available_width() - focus_width - 48.0).max(60.0);
+                            let read_only = document.read_only
+                                || (document.rich_json.is_some()
+                                    && !cfg!(feature = "editor-preview"));
+                            let badge_width = if read_only {
+                                ui.painter()
+                                    .layout_no_wrap(
+                                        l.text("Read only").into(),
+                                        FontId::proportional(11.0),
+                                        t.warning,
+                                    )
+                                    .size()
+                                    .x
+                                    + 16.0
+                            } else {
+                                0.0
+                            };
+                            let title_width =
+                                (ui.available_width() - focus_width - badge_width - 48.0).max(60.0);
                             ui.allocate_ui_with_layout(
                                 egui::vec2(title_width, 34.0),
                                 Layout::left_to_right(Align::Center),
                                 |ui| {
-                                    let read_only = document.read_only
-                                        || (document.rich_json.is_some()
-                                            && !cfg!(feature = "editor-preview"));
-                                    if read_only {
-                                        ui.vertical(|ui| {
-                                            ui.add(
-                                                egui::Label::new(
-                                                    RichText::new(&document.title)
-                                                        .size(18.0)
-                                                        .strong(),
-                                                )
-                                                .truncate(),
-                                            )
-                                            .on_hover_text(&document.title);
-                                            ui.label(
-                                                RichText::new(
-                                                    l.text("Original format · read only"),
-                                                )
-                                                .size(11.0)
-                                                .color(t.warning),
-                                            );
-                                        });
-                                    } else {
-                                        ui.add(
-                                            egui::Label::new(
-                                                RichText::new(&document.title).size(18.0).strong(),
-                                            )
-                                            .truncate(),
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(&document.title).size(18.0).strong(),
                                         )
-                                        .on_hover_text(&document.title);
-                                    }
+                                        .truncate(),
+                                    )
+                                    .on_hover_text(&document.title);
                                 },
                             );
+                            if read_only {
+                                ui.label(
+                                    RichText::new(l.text("Read only"))
+                                        .size(11.0)
+                                        .color(t.warning),
+                                )
+                                .on_hover_text(l.text("Original format · read only"));
+                            }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if icons::icon_button(ui, Icon::Export, l.text("Export text"))
                                     .clicked()

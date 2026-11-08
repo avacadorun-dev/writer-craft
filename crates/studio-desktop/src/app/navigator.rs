@@ -11,10 +11,11 @@ impl StudioApp {
             .frame(
                 egui::Frame::new()
                     .fill(t.panel)
-                    .inner_margin(egui::Margin::symmetric(14, 18)),
+                    .inner_margin(egui::Margin::symmetric(16, 14)),
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    ui.add_space(8.0);
                     ui.label(
                         RichText::new(if self.library {
                             l.text("LIBRARY")
@@ -68,22 +69,6 @@ impl StudioApp {
                         .color(t.muted),
                     );
                 } else {
-                    if let Some(project) = &self.project {
-                        ui.add(
-                            egui::Label::new(RichText::new(&project.title).size(17.0).strong())
-                                .truncate(),
-                        )
-                        .on_hover_text(&project.title);
-                        ui.label(
-                            RichText::new(l.format(
-                                "Documents: {count}",
-                                &[("count", self.documents.len().to_string())],
-                            ))
-                            .size(12.0)
-                            .color(t.muted),
-                        );
-                    }
-                    ui.add_space(18.0);
                     ui.add(
                         egui::TextEdit::singleline(&mut self.search)
                             .hint_text(l.text("Find a document…"))
@@ -91,8 +76,20 @@ impl StudioApp {
                     );
                     ui.add_space(14.0);
                     ui.horizontal(|ui| {
-                        icons::icon(ui, Icon::Folder, 16.0, t.muted);
+                        ui.add_space(8.0);
+                        icons::icon(ui, Icon::Folder, 20.0, t.muted);
                         ui.label(RichText::new(l.text("Manuscript")).size(13.0).strong());
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(self.documents.len().to_string())
+                                    .size(12.0)
+                                    .color(t.muted),
+                            )
+                            .on_hover_text(l.format(
+                                "Documents: {count}",
+                                &[("count", self.documents.len().to_string())],
+                            ));
+                        });
                     });
                     ui.add_space(6.0);
                     let mut selected = None;
@@ -101,6 +98,7 @@ impl StudioApp {
                         .auto_shrink([false, false])
                         .max_height((ui.available_height() - 90.0).max(80.0))
                         .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing.y = 0.0;
                             for document in &self.documents {
                                 if !self.search.is_empty()
                                     && !document
@@ -118,7 +116,6 @@ impl StudioApp {
                                 {
                                     selected = Some(document.clone());
                                 }
-                                ui.add_space(3.0);
                             }
                         });
                     if let Some(document) = selected {
