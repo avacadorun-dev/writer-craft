@@ -263,7 +263,7 @@ fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
             },
             ClipboardRequest::Paste { bundle, guard } => match job.scope.prepare_paste(&bundle) {
                 Ok(outbound) if current(epochs, job.cancel_epoch, job.write_epoch) => {
-                    Prepared::Paste(guard, outbound)
+                    Prepared::Paste(guard, outbound, job.provider.max_bytes())
                 }
                 Ok(_) => Prepared::Cancelled,
                 Err(error) => Prepared::Failed(JobError::Project(error)),
