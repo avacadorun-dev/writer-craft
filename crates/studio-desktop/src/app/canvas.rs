@@ -734,6 +734,23 @@ impl CanvasState {
         }
         Ok(())
     }
+    /// Flush the active card through its normal guarded save, retaining direct input focus.
+    /// An already pending write remains in progress; this is not an early durability claim.
+    pub(super) fn save_now(&mut self, database: &Path) -> AppResult<()> {
+        if self.pending.is_some() {
+            return Ok(());
+        }
+        if self.failed.is_some() {
+            return self.retry(database);
+        }
+        if self.text_composing {
+            return Err(PendingCanvas.into());
+        }
+        if self.text_editor.as_ref().is_some_and(TextCardEditor::dirty) {
+            return self.submit_inline(database);
+        }
+        Ok(())
+    }
     fn drive_inline(&mut self, database: &Path, ctx: &egui::Context) -> AppResult<()> {
         if self.pending.is_some()
             || self.failed.is_some()
@@ -1309,6 +1326,107 @@ mod tests {
                 .revision
                 .content,
             graph()
+        );
+        Ok(())
+    }
+    fn show_card_frame(
+        state: &mut CanvasState,
+        database: &Path,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+        time: f64,
+    ) {
+        let tokens = theme::resolve(&ThemeSettings::default(), false);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    Vec2::new(1000., 680.),
+                )),
+                events,
+                time: Some(time),
+                focused: true,
+                ..Default::default()
+            },
+            |root| {
+                egui::CentralPanel::default().show(root, |ui| {
+                    state.show(ui, database, Language::English, tokens, false);
+                });
+            },
+        );
+        output.textures_delta.clear();
+        output.platform_output.commands.clear();
+    }
+    #[test]
+    fn actual_host_card_input_should_accept_native_paste_and_done_without_opening_a_source_modal()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("native-card.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic native card input")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.intent(
+            &database,
+            CanvasIntent::EditText {
+                base: state.session.identity(),
+                node_id: "card".into(),
+            },
+        )?;
+        assert!(!state.modal_open());
+        let ctx = egui::Context::default();
+        show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+        let key = |key, modifiers| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        };
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![
+                key(egui::Key::A, egui::Modifiers::COMMAND),
+                egui::Event::Paste("Native in-card 日本語 🪶".into()),
+            ],
+            1.,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("direct input")?.text(),
+            "Native in-card 日本語 🪶"
+        );
+        assert!(state.blocks_navigation());
+        assert!(state.pending.is_none());
+        assert_eq!(
+            state.session.document().node("card").ok_or("card")?.body(),
+            "Old 😀 text"
+        );
+        state.save_now(&database)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(&ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(state.pending.is_none());
+        assert!(state.text_editor.is_some());
+        assert!(!state.blocks_navigation());
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![key(egui::Key::Enter, egui::Modifiers::COMMAND)],
+            2.,
+        );
+        assert!(state.text_editor.is_none());
+        assert!(!state.modal_open());
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .content["nodes"][0]["text"],
+            "Native in-card 日本語 🪶"
         );
         Ok(())
     }
