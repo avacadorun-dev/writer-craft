@@ -23,6 +23,15 @@ impl Kind {
             Self::Link => "Link",
         }
     }
+    fn icon(self) -> Icon {
+        match self {
+            Self::Mermaid => Icon::Diagram,
+            Self::Math | Self::InlineMath => Icon::Formula,
+            Self::Code => Icon::Code,
+            Self::Image => Icon::Image,
+            Self::Link => Icon::Link,
+        }
+    }
     fn node_type(self) -> &'static str {
         match self {
             Self::Mermaid => "mermaidBlock",
@@ -422,15 +431,22 @@ fn mark_button(
     ui: &mut egui::Ui,
     session: &mut EditorSession,
     action: Format,
-    label: &str,
-    glyph: &str,
+    msgid: &str,
+    icon: Icon,
+    l: Language,
     t: Tokens,
 ) -> AppResult<()> {
     let state = active(session, action);
+    let label = l.text(msgid);
+    let tooltip = if state == MarkState::Mixed {
+        format!("{} · {}", label, l.text("Mixed formatting"))
+    } else {
+        label.into()
+    };
     let response = ui
         .add_enabled(
             session.selection().is_some(),
-            egui::Button::new(RichText::new(glyph).size(16.0))
+            egui::Button::new("")
                 .selected(state == MarkState::On)
                 .frame_when_inactive(state != MarkState::Off)
                 .stroke(Stroke::new(
@@ -439,19 +455,50 @@ fn mark_button(
                 ))
                 .min_size(egui::vec2(32.0, 32.0)),
         )
-        .on_hover_text(label);
+        .on_hover_text(&tooltip);
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(
+        egui::WidgetInfo::selected(
             egui::WidgetType::Button,
-            session.selection().is_some(),
-            label,
+            ui.is_enabled() && session.selection().is_some(),
+            state == MarkState::On,
+            &tooltip,
         )
     });
+    if ui.is_rect_visible(response.rect) {
+        let color = if !ui.is_enabled() || session.selection().is_none() {
+            ui.visuals().disable(t.text)
+        } else if state != MarkState::Off {
+            t.accent
+        } else {
+            t.text
+        };
+        icons::paint(
+            ui.painter(),
+            egui::Rect::from_center_size(response.rect.center(), egui::Vec2::splat(20.0)),
+            icon,
+            color,
+        );
+    }
     if response.clicked() {
         format(session, action)?;
         session.request_canvas_focus(ui.ctx());
     }
     Ok(())
+}
+fn format_icon(action: Format) -> Icon {
+    match action {
+        Format::Mark("bold") => Icon::Bold,
+        Format::Mark("italic") => Icon::Italic,
+        Format::Mark("underline") => Icon::Underline,
+        Format::Mark("strike") => Icon::Strike,
+        Format::Mark("code") => Icon::Code,
+        Format::Quote => Icon::Quote,
+        Format::Bullet => Icon::BulletList,
+        Format::Ordered => Icon::OrderedList,
+        Format::Indent => Icon::Indent,
+        Format::Outdent => Icon::Outdent,
+        Format::Mark(_) => Icon::TextCursor,
+    }
 }
 
 pub(super) fn toolbar(
@@ -504,30 +551,26 @@ pub(super) fn toolbar(
                     });
                 });
                 ui.separator();
-                for (mark, glyph, msgid) in [
-                    ("bold", "B", "Bold"),
-                    ("italic", "I", "Italic"),
-                    ("underline", "U", "Underline"),
+                for (mark, icon, msgid) in [
+                    ("bold", Icon::Bold, "Bold"),
+                    ("italic", Icon::Italic, "Italic"),
+                    ("underline", Icon::Underline, "Underline"),
                 ] {
                     capture(
-                        mark_button(
-                            ui,
-                            &mut rich.session,
-                            Format::Mark(mark),
-                            l.text(msgid),
-                            glyph,
-                            t,
-                        ),
+                        mark_button(ui, &mut rich.session, Format::Mark(mark), msgid, icon, l, t),
                         &mut error,
                     );
                 }
                 if expanded {
-                    for (action, glyph, msgid) in [
-                        (Format::Mark("strike"), "S̶", "Strikethrough"),
-                        (Format::Mark("code"), "</>", "Inline code"),
+                    for (action, icon, msgid) in [
+                        (Format::Mark("strike"), Icon::Strike, "Strikethrough"),
+                        (Format::Mark("code"), Icon::Code, "Inline code"),
+                        (Format::Quote, Icon::Quote, "Block quote"),
+                        (Format::Bullet, Icon::BulletList, "Bullet list"),
+                        (Format::Ordered, Icon::OrderedList, "Numbered list"),
                     ] {
                         capture(
-                            mark_button(ui, &mut rich.session, action, l.text(msgid), glyph, t),
+                            mark_button(ui, &mut rich.session, action, msgid, icon, l, t),
                             &mut error,
                         );
                     }
@@ -535,25 +578,29 @@ pub(super) fn toolbar(
                 ui.separator();
                 let insert = icons::icon_button(ui, Icon::Plus, l.text("Insert block"));
                 egui::Popup::menu(&insert).show(|ui| {
-                    if ui.button(l.text("Insert table · 3 × 3")).clicked() {
+                    if icons::labeled_button(ui, Icon::Table, l.text("Insert table · 3 × 3"), false)
+                        .clicked()
+                    {
                         capture(insert_table(&mut rich.session), &mut error);
                         rich.session.request_canvas_focus(ui.ctx());
                         ui.close();
                     }
                     for kind in [Kind::Math, Kind::Code, Kind::Image, Kind::Mermaid] {
-                        if ui.button(l.text(kind.title())).clicked() {
+                        if icons::labeled_button(ui, kind.icon(), l.text(kind.title()), false)
+                            .clicked()
+                        {
                             open_dialog(rich, kind, None);
                             ui.close();
                         }
                     }
                     ui.separator();
-                    for (kind, msgid) in [
-                        ("info", "Information callout"),
-                        ("idea", "Idea callout"),
-                        ("warning", "Warning callout"),
-                        ("todo", "Todo callout"),
+                    for (kind, icon, msgid) in [
+                        ("info", Icon::Info, "Information callout"),
+                        ("idea", Icon::Idea, "Idea callout"),
+                        ("warning", Icon::Warning, "Warning callout"),
+                        ("todo", Icon::Todo, "Todo callout"),
                     ] {
-                        if ui.button(l.text(msgid)).clicked() {
+                        if icons::labeled_button(ui, icon, l.text(msgid), false).clicked() {
                             capture(insert_callout(&mut rich.session, kind), &mut error);
                             rich.session.request_canvas_focus(ui.ctx());
                             ui.close();
@@ -564,7 +611,7 @@ pub(super) fn toolbar(
                         ("horizontalRule", "Horizontal rule"),
                         ("sceneBreak", "Scene break"),
                     ] {
-                        if ui.button(l.text(msgid)).clicked() {
+                        if icons::labeled_button(ui, Icon::Minus, l.text(msgid), false).clicked() {
                             capture(insert_separator(&mut rich.session, typ), &mut error);
                             rich.session.request_canvas_focus(ui.ctx());
                             ui.close();
@@ -611,11 +658,15 @@ pub(super) fn toolbar(
                         (Format::Outdent, "Decrease indent"),
                     ] {
                         if ui
-                            .add_enabled(
-                                rich.session.selection().is_some(),
-                                egui::Button::new(l.text(msgid))
-                                    .selected(active(&rich.session, action) == MarkState::On),
-                            )
+                            .add_enabled_ui(rich.session.selection().is_some(), |ui| {
+                                icons::labeled_button(
+                                    ui,
+                                    format_icon(action),
+                                    l.text(msgid),
+                                    active(&rich.session, action) == MarkState::On,
+                                )
+                            })
+                            .inner
                             .clicked()
                         {
                             capture(format(&mut rich.session, action), &mut error);
@@ -626,10 +677,10 @@ pub(super) fn toolbar(
                     ui.separator();
                     for kind in [Kind::InlineMath, Kind::Link] {
                         if ui
-                            .add_enabled(
-                                rich.session.selection().is_some(),
-                                egui::Button::new(l.text(kind.title())),
-                            )
+                            .add_enabled_ui(rich.session.selection().is_some(), |ui| {
+                                icons::labeled_button(ui, kind.icon(), l.text(kind.title()), false)
+                            })
+                            .inner
                             .clicked()
                         {
                             open_dialog(rich, kind, None);
@@ -637,7 +688,8 @@ pub(super) fn toolbar(
                         }
                     }
                     if let Some(target) = editable_target(&rich.session)
-                        && ui.button(l.text("Edit block")).clicked()
+                        && icons::labeled_button(ui, Icon::TextCursor, l.text("Edit block"), false)
+                            .clicked()
                     {
                         if let Some(kind) = Kind::from_node(&target.expected) {
                             open_dialog(rich, kind, Some(target));
@@ -645,7 +697,8 @@ pub(super) fn toolbar(
                         ui.close();
                     }
                     if rich.session.node_selection().is_some()
-                        && ui.button(l.text("Delete block")).clicked()
+                        && icons::labeled_button(ui, Icon::Trash, l.text("Delete block"), false)
+                            .clicked()
                     {
                         capture(
                             rich.session
@@ -788,13 +841,24 @@ pub(super) fn show_dialog(
                         }
                         ui.label(l.text("Leave empty to remove the link."));
                     } else {
-                        ui.label(
-                            l.text(if matches!(dialog.kind, Kind::Math | Kind::InlineMath) {
-                                "LaTeX source"
-                            } else {
-                                "Source"
-                            }),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.label(l.text(
+                                if matches!(dialog.kind, Kind::Math | Kind::InlineMath) {
+                                    "LaTeX source"
+                                } else {
+                                    "Source"
+                                },
+                            ));
+                            if dialog.kind == Kind::Code {
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if icons::icon_button(ui, Icon::Copy, l.text("Copy code"))
+                                        .clicked()
+                                    {
+                                        ui.ctx().copy_text(dialog.source.clone());
+                                    }
+                                });
+                            }
+                        });
                         let syntax_language = match dialog.kind {
                             Kind::Code => dialog.language.as_str(),
                             Kind::Mermaid => "mermaid",
