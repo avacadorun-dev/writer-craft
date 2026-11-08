@@ -24,6 +24,7 @@ pub(super) struct RichState {
     dialog: Option<authoring::BlockDialog>,
     find_requested: bool,
     capture_scroll_offset: f32,
+    capture_text_visible: bool,
     statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
 
@@ -68,6 +69,7 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         }))
     }
@@ -104,6 +106,15 @@ impl RichState {
             id.and_then(|id| find_path(self.session.document().root(), id, NodePath::root()));
         let mut state = self.media.capture_readiness(path.as_ref());
         state.scroll_offset_bits = self.capture_scroll_offset.to_bits();
+        if let Some(path) = path.as_ref()
+            && let Ok(node) = self.session.document().node(path)
+            && matches!(
+                node.node_type.as_str(),
+                "paragraph" | "heading" | "codeBlock"
+            )
+        {
+            state.target_visible = self.capture_text_visible;
+        }
         state
     }
     /// Count the live native tree rather than a lossy autosave/reader projection.
@@ -150,6 +161,7 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         })
     }
@@ -523,12 +535,29 @@ impl StudioApp {
                                             l,
                                             t,
                                         );
-                                        rich.session.show_canvas_with_sources(
-                                            ui,
-                                            &style,
-                                            Some(rich.media.catalog()),
-                                            Some(&mut proof_frame),
-                                        )
+                                        rich.capture_text_visible = false;
+                                        if let Some(target) = self.capture_probe.target() {
+                                            let mut observer =
+                                                native_capture::VisibleTargetFrame::new(
+                                                    &mut proof_frame,
+                                                    target,
+                                                );
+                                            let output = rich.session.show_canvas_with_sources(
+                                                ui,
+                                                &style,
+                                                Some(rich.media.catalog()),
+                                                Some(&mut observer),
+                                            );
+                                            rich.capture_text_visible = observer.visible;
+                                            output
+                                        } else {
+                                            rich.session.show_canvas_with_sources(
+                                                ui,
+                                                &style,
+                                                Some(rich.media.catalog()),
+                                                Some(&mut proof_frame),
+                                            )
+                                        }
                                     };
                                     if rich.proofing.pending() {
                                         ui.ctx().request_repaint_after(Duration::from_millis(50));

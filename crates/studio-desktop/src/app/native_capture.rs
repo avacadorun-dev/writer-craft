@@ -49,6 +49,10 @@ pub(super) struct CaptureProbe {
     navigated_generation: Option<u64>,
 }
 impl CaptureProbe {
+    #[cfg(feature = "editor-preview")]
+    pub(super) fn target(&self) -> Option<&str> {
+        self.target.as_deref()
+    }
     #[cfg(any(feature = "editor-preview", test))]
     fn needs_navigation(&mut self, generation: u64) -> bool {
         if self.navigated_generation == Some(generation) {
@@ -338,5 +342,51 @@ mod tests {
         assert_eq!(std::fs::read(&output)?, b"preserve");
         assert!(validate_output(&directory.path().join("new.png"), &database).is_ok());
         Ok(())
+    }
+}
+
+/// A capture-only observer of the same measured visible text passed to normal decorations.
+/// It delegates unchanged and never creates a diagnostic highlight or guesses visibility.
+#[cfg(feature = "editor-preview")]
+pub(super) struct VisibleTargetFrame<'a> {
+    source: &'a mut dyn craft_editor_egui::decorations::DecorationSource,
+    target: &'a str,
+    pub visible: bool,
+}
+#[cfg(feature = "editor-preview")]
+impl<'a> VisibleTargetFrame<'a> {
+    pub fn new(
+        source: &'a mut dyn craft_editor_egui::decorations::DecorationSource,
+        target: &'a str,
+    ) -> Self {
+        Self {
+            source,
+            target,
+            visible: false,
+        }
+    }
+}
+#[cfg(feature = "editor-preview")]
+impl craft_editor_egui::decorations::DecorationSource for VisibleTargetFrame<'_> {
+    fn decorations(
+        &mut self,
+        document: &craft_editor_model::Document,
+        revision: craft_editor_model::Revision,
+        pending: &[craft_editor_model::ReplayProof],
+    ) -> craft_editor_egui::Result<Vec<craft_editor_egui::decorations::TextDecoration>> {
+        self.source.decorations(document, revision, pending)
+    }
+    fn underlines_in_view(
+        &mut self,
+        document: &craft_editor_model::Document,
+        revision: craft_editor_model::Revision,
+        pending: &[craft_editor_model::ReplayProof],
+        visible: &[craft_editor_egui::Selection],
+    ) -> craft_editor_egui::Result<Vec<craft_editor_egui::decorations::TextUnderline>> {
+        self.visible = visible.iter().any(|range| {
+            range.anchor.block_id == self.target || range.head.block_id == self.target
+        });
+        self.source
+            .underlines_in_view(document, revision, pending, visible)
     }
 }
