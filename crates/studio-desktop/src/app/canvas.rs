@@ -337,6 +337,16 @@ impl CanvasState {
             )),
         )
     }
+    fn add_text_in_view(&mut self, database: &Path) -> AppResult<()> {
+        let center = self.view.camera().center();
+        self.add_text(
+            database,
+            WorldPoint {
+                x: center.x - 150.0,
+                y: center.y - 90.0,
+            },
+        )
+    }
     fn add_text(&mut self, database: &Path, at: WorldPoint) -> AppResult<()> {
         let node = NodeRecord::text(
             uuid::Uuid::new_v4().to_string(),
@@ -516,7 +526,7 @@ impl CanvasState {
                                 add.rect,
                             );
                             if add.clicked() {
-                                let result = self.add_text(database, self.view.camera().center());
+                                let result = self.add_text_in_view(database);
                                 self.set_failure(result);
                             }
                             if ui
@@ -1250,6 +1260,7 @@ mod tests {
             "Later text retained after failure"
         );
         assert!(state.text_editor.as_ref().ok_or("editor")?.dirty());
+        assert_eq!(state.durability_status(), "Unsaved board changes");
         assert!(
             workspace
                 .project_canvas(&project.id, &state.snapshot.canvas.id)?
@@ -1312,7 +1323,14 @@ mod tests {
         let project = workspace.create_project("Synthetic new card")?;
         let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
         let mut state = CanvasState::from_snapshot(&project.id, board)?;
-        state.add_text(&database, WorldPoint { x: 320., y: 0. })?;
+        let center = WorldPoint {
+            x: 4_096.0,
+            y: -8_192.0,
+        };
+        state
+            .view
+            .set_camera(craft_canvas_model::Camera::new(center, 1.5)?);
+        state.add_text_in_view(&database)?;
         assert!(state.text_editor.is_none());
         assert!(state.pending.is_some());
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -1323,6 +1341,16 @@ mod tests {
         assert!(state.pending.is_none());
         let editor = state.text_editor.as_ref().ok_or("direct editor")?;
         assert!(editor.text().is_empty());
+        assert_eq!(
+            state
+                .session
+                .document()
+                .node(editor.node_id())
+                .ok_or("card")?
+                .bounds()
+                .center(),
+            center
+        );
         assert!(state.view.selection().nodes.contains(editor.node_id()));
         assert!(!state.blocks_navigation());
         assert_eq!(
@@ -1532,7 +1560,11 @@ mod tests {
         )?;
         *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
             "Global Save routes to this card".into();
+        app.poll_canvas(&ctx);
+        assert_eq!(app.status, "Unsaved board changes");
+        assert_eq!(app.save_status_msgid(false), "Unsaved board changes");
         app.save_explicit()?;
+        assert_eq!(app.save_status_msgid(false), "Saving…");
         assert!(app.canvas.as_ref().ok_or("canvas")?.pending.is_some());
         let deadline = Instant::now() + Duration::from_secs(5);
         while app.canvas.as_ref().ok_or("canvas")?.pending.is_some() && Instant::now() < deadline {
@@ -1549,6 +1581,15 @@ mod tests {
                 .content["nodes"][0]["text"],
             "Global Save routes to this card"
         );
+        app.poll_canvas(&ctx);
+        assert_eq!(app.save_status_msgid(false), "All changes saved");
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        state.text_composing = true;
+        assert_eq!(app.save_status_msgid(false), "Unsaved board changes");
+        let state = app.canvas.as_mut().ok_or("canvas")?;
+        state.text_composing = false;
+        state.text_save_error = true;
+        assert_eq!(app.save_status_msgid(false), "Attention needed");
         assert_eq!(app.workspace.document(&document.id)?, document);
         Ok(())
     }
