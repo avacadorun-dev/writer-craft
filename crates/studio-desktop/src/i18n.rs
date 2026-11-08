@@ -176,6 +176,19 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Select table",
+        [
+            "Выбрать таблицу",
+            "Select table",
+            "Tabelle auswählen",
+            "Sélectionner le tableau",
+            "Seleccionar tabla",
+            "Selecionar tabela",
+            "选择表格",
+            "表を選択",
+        ],
+    ),
+    (
         "Waiting for the board to finish saving.",
         [
             "Ожидаем завершения сохранения доски.",
