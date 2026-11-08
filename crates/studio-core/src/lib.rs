@@ -35,12 +35,12 @@ pub use project_portability::{
     MAX_PORTABLE_SHARD_BYTES, MAX_PORTABLE_SHARD_RECORDS, MAX_PORTABLE_SHARDS,
     MAX_PORTABLE_TRANSPORT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
     PortableObjectReference, PortableProjectHeader, PortableProjectScope, PortableResourceBudget,
-    PortableShardDescriptor, ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft,
-    ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
-    ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
-    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
-    ValidatedEvidenceReference, ValidatedPortableProjectImport, ValidatedProjectImport,
-    VerifiedPortableRecord, visit_portable_shard,
+    PortableShardDescriptor, PreparedPortableProject, ProjectAssetSource, ProjectAttachment,
+    ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision, ProjectCanvasRevisionInfo,
+    ProjectCanvasSnapshot, ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
+    ProjectPortableExportWorker, ProjectTransferCancellation, ProjectTreeNode,
+    ValidatedEvidenceObject, ValidatedEvidenceReference, ValidatedPortableProjectImport,
+    ValidatedProjectImport, VerifiedPortableRecord, visit_portable_shard,
 };
 pub use rich::{RichDraft, RichRevision};
 pub use rich_review::{RichProposal, RichProposalSummary};

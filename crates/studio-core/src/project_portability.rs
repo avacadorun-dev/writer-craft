@@ -8,6 +8,7 @@ mod evidence;
 mod json;
 mod portable_format;
 mod portable_restore;
+mod portable_stream;
 mod snapshot;
 mod validation;
 
@@ -28,6 +29,7 @@ pub use portable_format::{
     PortableShardDescriptor, VerifiedPortableRecord, visit_portable_shard,
 };
 pub use portable_restore::{MAX_PORTABLE_COMPANION_V1_BYTES, ValidatedPortableProjectImport};
+pub use portable_stream::{PreparedPortableProject, ProjectPortableExportWorker};
 pub use snapshot::{ProjectAssetSource, ProjectExportSnapshot};
 
 use std::collections::{BTreeMap, HashMap};
