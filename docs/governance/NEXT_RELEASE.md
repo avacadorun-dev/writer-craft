@@ -1,6 +1,6 @@
 # Active release: 0.1.0-alpha.3
 
-**Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. New #14 adds researched formatting needs and direct object sizing with backward-compatible Studio migration. Published alpha.1/alpha.2 are immutable.
+**Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. New #14 adds researched project profiles, connected board/document/character/lore scenarios and direct object sizing with backward-compatible Studio migration. Issue #15 restores direct in-card writing and its complete input/save/cancellation lifecycle. Published alpha.1/alpha.2 are immutable.
 
 ## Execution and acceptance
 
@@ -12,7 +12,7 @@
 - Builds and native installers run on GitHub. Do not consume local disk for Cargo builds. Do not alter the original application, supplied reference archive, user projects or currently running previews.
 - Root owns integration/release policy and reviewed rich-edit authority. Delegated table work owns the editor adapter and generic-engine qualification. Delegated portability work owns semantic archive validation/restore. A separate designer audits and reviews the resulting compiled workflows.
 
-The nine work packages below remain the implementation inventory. Every unfinished item retains its source-backed requirement; no schedule update claims implementation. README screenshots and package/version/signing evidence must match the final alpha.3 candidate.
+The work packages below remain the implementation inventory, including the explicitly requested discovery and direct-card extensions. Every unfinished item retains its source-backed requirement; no schedule update claims implementation. README screenshots and package/version/signing evidence must match the final alpha.3 candidate.
 
 ---
 
@@ -40,6 +40,8 @@ The nine work packages below remain the implementation inventory. Every unfinish
 7. Finish native Markdown/artifact export and canonical format-2 semantic restore/UI (#11).
 8. Retest remaining complete preference/recovery/control journeys and source parity (#4, #9).
 9. Complete the original editor/native IME/clipboard/accessibility/performance matrix and final full-migration review (#4, #6–#10).
+10. Validate meaningful project profiles, connected board/document/character/lore scenarios and the selected direct object-sizing/formatting scope, preserving old structures (#14).
+11. Finish direct in-card writing, immediate input ownership, acknowledged saves, Cancel/history semantics and clipped/zoomed native input (#15).
 
 Partial implementations remain preserved and explicitly qualified per checkpoint. No private project is a public fixture. Deferred capabilities are not advertised as alpha.2 features. The installer issue (#3), layout issue (#6), syntax issue (#8), components issue (#9) and block-flow bug (#12) retain their precise implemented evidence and outstanding owner checks instead of being mass-closed.
 
@@ -81,11 +83,11 @@ Never publish the owner's manuscript, Canvas content, archive, media or private 
 
 ## Acceptance and publication boundary
 
-An internal source checkpoint, model test, rendered specimen or successful compiler is not a completed alpha.2. Require exact-source hosted checks and installable artifacts; actual native authoring/import/export/recovery interactions; and independent designer review of the changed workflows. The existing `UX_GATE.json` scope `full-editor-parity` remains required and pending; it does not alone accept the additional project/export/install workstreams.
+An internal source checkpoint, model test, rendered specimen or successful compiler is not a completed alpha.3. Require exact-source hosted checks and installable artifacts; actual native authoring/import/export/recovery interactions; and independent designer review of the changed workflows. The existing `UX_GATE.json` scope `full-editor-parity` remains required and pending; it does not alone accept the additional project/export/install workstreams.
 
 When every required check passes, hand the concrete candidate to the owner and stop for final acceptance. Keep product issues open, with evidence and verified checklists, until the owner checks the app and approves closure. Do not use automatic closing keywords. Issue #1 remains closed from the earlier explicit owner confirmation of the Dock icon.
 
-No alpha.2 publication/tag before the required acceptance. Published alpha.1 source, tag and artifacts remain immutable. Package/runtime defaults must open the real native editor without engineering-only launcher flags; signing, OS/architecture and runtime limits must be explicit.
+No alpha.3 publication/tag before the required acceptance. Published alpha.1 and alpha.2 source, tags and artifacts remain immutable. Package/runtime defaults must open the real native editor without engineering-only launcher flags; signing, OS/architecture and runtime limits must be explicit.
 
 ## Scope and design history
 

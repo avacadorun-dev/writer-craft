@@ -1,24 +1,24 @@
 # Migration inventory and acceptance
 
-WriterCraft is an independent native Rust MVP. Existing Writers Studio remains the source of migration contracts and is not modified. A read-only import preview is not full feature parity.
+WriterCraft is the native Rust migration of Writers Studio. This table distinguishes current source implementation from completed native acceptance; it is not a full-parity or release claim. Exact committed builds, passing scopes and failures are recorded in [alpha.3 progress](../verification/ALPHA_3_PROGRESS.md), the linked issues and the independent pending gate. The original repository and private projects remain read-only.
 
-| Feature | Native MVP state | Remaining acceptance |
+| Workstream | Current implementation and bounded evidence | Remaining acceptance |
 |---|---|---|
-| Local projects | Implemented in SQLite | More metadata, custom project structures |
-| Plain text documents | Implemented with optimistic saves | Rich document editor, tree/reorder, formatting |
-| Working drafts | Durable revision-pinned recovery, exact-match cleanup on save | Recovery UX for drafts whose canonical base changed |
-| Revisions | Immutable text snapshots | Named versions and complete original rich history |
-| Exact reviewed replacement | Stage / Apply / Reject / guarded Undo | Grouped multi-document changes, protected ranges |
-| Imported JSON | Opaque value retained; read-only preview | Canonical rich migration and local binary asset storage |
-| `.wstudio` archive | Transfer inspection module | Full transactional import, reference remapping, complete round trip |
-| Dictionary / guide / memory | Not implemented | Typed domain records and revision histories |
-| Anchored annotations | Preserved only within supplied import JSON | Unicode anchors, reanchoring, detached states |
-| Dictation / audio | Not implemented | Native capture, durable chunks, review, transcription providers |
-| Assistant providers | Not implemented | Explicit provider setup, scoped typed tools, real model calls |
-| Canvas | Not implemented | Native interactions, canonical JSON Canvas and extensions |
-| Publishing exports | Plain text only where exposed by CLI | DOCX / EPUB / PDF, rich assets, diagrams, formulas |
-| Automation / MCP | Shared core is callable headlessly | Versioned MCP/CLI protocol and capabilities |
-| Native distribution | Build and packaging pipeline maintained elsewhere | Signing/notarization, platform releases and updates |
+| Local projects and hierarchy | SQLite projects; imported scoped parent/order metadata; native nested navigator/search; shared source-typed node creation and first-content commands plus aggregate project creation added for hosted qualification | Structure-aware native authoring, move/reorder/trash/restore, dynamic schema workflows and researched creation profiles (#10/#14); new commands are not yet a verified UI workflow |
+| Rich manuscripts | Canonical21-node/six-mark model, native WordCraft projection, real image/Mermaid/formula rendering and block authoring; qualified table-local overflow foundation | Whole-table selection integration, complete original input/clipboard/formatting/resize journeys and exact native interaction matrix (#4/#7/#14);63 logical columns is the sole approved native capacity exception |
+| Working drafts | Revision-pinned rich drafts with replay-derived annotation checkpoints; Canvas durable candidate/recovery flow | Complete failure/Cancel/stale/IME/restart behavior, pre-ack card input and acknowledged transfer prerequisites (#2/#4/#10/#15) |
+| Revisions | Immutable text/rich/Canvas revisions and guarded replay; imported source histories/named versions retained | Complete native named-version and cross-module history/recovery journeys (#4/#10) |
+| Reviewed changes | Exact retained attachments, detached typed proposals, scoped stage/Apply/Reject/compensating Undo and native before/after views | Actual supplied-proposal handoffs and complete selection/protected-range/native lifecycle acceptance (#4); do not invent model output |
+| Source data | Immutable original envelopes, scoped resource aliases, unknown-domain evidence and original owned bytes | Full private-reference native migration and lifecycle acceptance; preserving JSON alone does not implement its workflow (#10) |
+| Studio archive import | Pinned versions1–8 archive validation and cancellable transactional whole-project import with native confirmation | Actual complete-project/media/Canvas interactions, cancellation/conflict/restart and original reference round trip (#10) |
+| Canonical portability | Bounded paged format2 export/preflight/semantic restore and pinned ZIP reader; source-compatible format1 restore; Markdown/artifact folder transport added for hosted qualification | Safe selected scope, native export/restore UI, original artifacts/reader limitations, full workload/RSS and exact failure/native acceptance (#11) |
+| Dictionary, guide and memory | Imported typed-domain records, histories/references and unknown fields preserved | Real term chooser/lifecycle and native guide/memory/context workflows; retained records do not replace editing/search/linking (#4/#10) |
+| Passage annotations | Persistent exact Unicode notes, mapped marks, detached/reattached lifecycle and history, source-backed24000-scalar capacity | Complete native note/dictionary/source-link/review/backup journeys, stale/failure and independent input acceptance (#2/#4) |
+| Canvas | Native scoped view, source-compatible graph/history/ack/recovery, move/resize and direct in-card TextEdit; real project-owned raster/PDF integration | Full GFM/card/schema/drawing/connector/media authoring, creation latency, clipped input, source cancellation semantics and native complete-project journeys (#10/#15) |
+| Media and source playback | Original image/PDF/audio/video bytes and aliases preserved; qualified raster/PDF worker foundation; optional generic audio-source decoding qualified separately | Animation, actual device audio/video/segment playback, source navigation and original codec corpus; no playback claim from stored bytes/first-frame raster (#4/#10) |
+| Assistant/MCP integration | Shared canonical core and typed attachment/review commands callable headlessly | Editor handoff and canonical outcomes must be exercised; provider connectivity, recording/transcription and released MCP transport are separate product milestones unless explicitly selected by an issue |
+| Publishing | Plain reader text plus source publishing metadata preservation; portable reading Markdown work tracked in #11 | DOCX/EPUB/PDF publishing is a separate product workflow; source metadata retention is not output support, and alpha.3 requires every specifically selected editor/export criterion |
+| Native distribution | Immutable published alpha.2 installers and package checks; installer request #3 completed | Exact final alpha.3 source/tests, compiled independent gate, installers/README and final acceptance; credentials/signing limits remain explicit |
 
 ## Legacy transfer facts
 

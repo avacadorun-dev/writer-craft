@@ -81,3 +81,8 @@ Issue #14 also covers project types specifically. Existing seven kinds are a bac
 ## Connected writing and direct Canvas authoring
 
 Read F-42/F-43 before changing Canvas input or board/document relationships. Issue #15 requires actual in-card writing, not a modal presented as inline editing, with native input ownership, guarded save acknowledgements and exact draft preservation. Issue #14 additionally requires researched board↔document↔character/lore/dictionary/memory workflows. Preserve existing document references and promotion semantics; do not claim the source had no integration. Compare canonical views, live links, snapshots and independent notes before selecting synchronization or deletion behavior. Keep stable scenario IDs and exact-context return navigation, and include these corrections in the independent UX gate. Layout changes cannot silently mutate manuscript order/content.
+
+
+## Explicit engine publication authorization — 2026-11-09
+
+The user explicitly authorized publishing the reviewed commit e3316ff and subsequent alpha.3 editor-engine changes to `git@github.com:avacadorun-dev/craft-editor.git`, responding “Да, разрешаю публикацию изменений alpha.3 в этом репозитории” to that exact destination. Continue ordinary focused pushes and hosted qualification there within this scope; no duplicate permission question is required. This does not authorize other destinations, private manuscript/fixture uploads, destructive history changes or unrelated releases. Preserve synthetic public fixtures and the existing source/independent acceptance gates. The previous automatic-review push rejection was resolved by this explicit user authorization, not bypassed.
