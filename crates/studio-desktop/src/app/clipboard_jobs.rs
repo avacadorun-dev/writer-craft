@@ -11,7 +11,7 @@ use craft_editor_egui::{
     EditorSession,
     clipboard::{
         ClipboardBundle, ClipboardError, ClipboardProvider, ClipboardRequest, CutGuard, PasteGuard,
-        WriteAck,
+        PreparedPaste, WriteAck,
     },
 };
 use craft_editor_model::Change;
@@ -96,7 +96,7 @@ pub(super) struct ClipboardCompletion {
 enum Prepared {
     Copied,
     Cut(CutGuard, WriteAck),
-    Paste(PasteGuard, ClipboardBundle, usize),
+    Paste(PasteGuard, PreparedPaste),
     Cancelled,
     Failed(JobError),
 }
@@ -247,8 +247,8 @@ impl ClipboardJobs {
                     },
                     None => ClipboardOutcome::Cancelled,
                 },
-                Prepared::Paste(guard, bundle, max_bytes) => match session {
-                    Some(session) => match session.finish_paste(guard, &bundle, max_bytes) {
+                Prepared::Paste(guard, prepared) => match session {
+                    Some(session) => match session.finish_prepared_paste(guard, prepared) {
                         Ok(change) => ClipboardOutcome::Pasted(change),
                         Err(error) => ClipboardOutcome::Failed(JobError::Editor(error)),
                     },
@@ -308,13 +308,15 @@ fn execute(job: Job, epochs: &Epochs) -> ClipboardCompletion {
                 Ok(_) => Prepared::Cancelled,
                 Err(error) => Prepared::Failed(JobError::Project(error)),
             },
-            ClipboardRequest::Paste { bundle, guard } => match job.scope.prepare_paste(&bundle) {
-                Ok(outbound) if current(epochs, job.cancel_epoch, job.write_epoch) => {
-                    Prepared::Paste(guard, outbound, job.provider.max_bytes())
+            ClipboardRequest::Paste { context, guard, .. } => {
+                match job.scope.prepare_paste(&context) {
+                    Ok(prepared) if current(epochs, job.cancel_epoch, job.write_epoch) => {
+                        Prepared::Paste(guard, prepared)
+                    }
+                    Ok(_) => Prepared::Cancelled,
+                    Err(error) => Prepared::Failed(JobError::Project(error)),
                 }
-                Ok(_) => Prepared::Cancelled,
-                Err(error) => Prepared::Failed(JobError::Project(error)),
-            },
+            }
         }
     };
     ClipboardCompletion {
@@ -409,6 +411,44 @@ mod tests {
             ClipboardOutcome::Failed(JobError::Transport(ClipboardError::Write))
         ));
         assert_eq!(result.captured.plain, "BCD");
+        assert_eq!(session.document(), &original);
+        assert!(!session.can_undo());
+        Ok(())
+    }
+    #[test]
+    fn worker_prepares_marker_rules_before_ui_completion_with_exact_raw_capture_and_one_undo()
+    -> TestResult {
+        let jobs = ClipboardJobs::new()?;
+        let mut session = editor()?;
+        let original = session.document().clone();
+        jobs.submit(
+            session.begin_paste(ClipboardBundle {
+                plain: "**bold**".into(),
+                ..Default::default()
+            })?,
+            scope()?,
+            Arc::new(Provider::default()),
+            &egui::Context::default(),
+        )
+        .map_err(|_| "submit failed")?;
+        let completion = completed(&jobs)?;
+        let Prepared::Paste(_, prepared) = &completion.prepared else {
+            return Err("worker did not prepare paste".into());
+        };
+        assert_eq!(prepared.source().plain, "**bold**");
+        assert_eq!(
+            prepared
+                .rich_slice()
+                .ok_or("missing prepared canonical")?
+                .content[0]
+                .inline_text(),
+            "bold"
+        );
+        assert_eq!(session.document(), &original);
+        let result = jobs.complete(completion, Some(&mut session));
+        assert!(matches!(result.outcome, ClipboardOutcome::Pasted(_)));
+        assert_eq!(session.document().block_text("p")?, "AboldE");
+        session.undo()?;
         assert_eq!(session.document(), &original);
         assert!(!session.can_undo());
         Ok(())

@@ -38,7 +38,7 @@ pub(super) fn message(error: &ClipboardError) -> &'static str {
             "The clipboard content is too large. Copy a smaller selection."
         }
         ClipboardError::InvalidSlice => "The clipboard content is invalid. Copy the content again.",
-        ClipboardError::StaleRequest => STALE,
+        ClipboardError::StaleRequest | ClipboardError::InvalidPasteContext => STALE,
         ClipboardError::Busy => BUSY,
         ClipboardError::WritePending => PENDING,
     }
@@ -555,6 +555,7 @@ mod tests {
             ClipboardError::ResourceLimit,
             ClipboardError::InvalidSlice,
             ClipboardError::StaleRequest,
+            ClipboardError::InvalidPasteContext,
             ClipboardError::InvalidAcknowledgement,
             ClipboardError::Busy,
             ClipboardError::WritePending,

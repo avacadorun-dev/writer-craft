@@ -8,8 +8,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use craft_editor_egui::clipboard::{ClipboardBundle, ClipboardFormat, RichSlice};
-use craft_editor_model::Node;
+use craft_editor_egui::clipboard::{
+    AssetReference, ClipboardBundle, ClipboardFormat, ImageBinding, PasteContext, PreparedPaste,
+    RichSlice,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use studio_core::{ImageTransfer, MAX_IMAGE_BYTES, ProjectImages, StudioError};
@@ -154,55 +156,63 @@ impl ProjectClipboard {
         outbound.check_budget(self.max_bytes)?;
         Ok(outbound)
     }
-    /// Validate the complete captured payload, import media atomically, and rewrite only image
-    /// src/assetId bindings. Foreign IDs without a matching capsule fail instead of resolving by
-    /// origin hints. External URLs are staged for explicit host acquisition before any DB writes.
-    pub fn prepare_paste(&self, captured: &ClipboardBundle) -> Result<ClipboardBundle> {
-        captured.check_budget(self.max_bytes)?;
-        let Some(mut slice) = captured.canonical_slice(self.max_bytes)? else {
-            if captured.formats.contains_key(IMAGE_CAPSULE_MIME) {
-                return Err(ProjectClipboardError::InvalidCapsule);
-            }
-            return Ok(captured.clone());
+    /// Prepare source rules once, validate the original capsule, and bind only host-authorized
+    /// image references. The sealed engine result retains its exact original context/provenance.
+    pub fn prepare_paste(&self, context: &PasteContext) -> Result<PreparedPaste> {
+        let mut prepared = context.prepare(self.max_bytes)?;
+        let captured = prepared.source();
+        let source_references = references_from(prepared.source_asset_references())?;
+        let needed_assets = prepared.asset_references();
+        let needed = references_from(&needed_assets)?;
+        let mut transfers = if let Some(images) =
+            capsule_transfers(captured, &source_references, self.max_bytes)?
+        {
+            images
+        } else {
+            self.images.export_images(
+                &needed.owned.iter().cloned().collect::<Vec<_>>(),
+                self.max_bytes,
+            )?
         };
-        let references = references(&slice)?;
-        let transfers =
-            if let Some(images) = capsule_transfers(captured, &references, self.max_bytes)? {
-                images
-            } else {
-                // No attachment: only an already-owned destination reference can be reused.
-                self.images.export_images(
-                    &references.owned.iter().cloned().collect::<Vec<_>>(),
-                    self.max_bytes,
-                )?
-            };
-        if !references.external.is_empty() {
+        if !needed.external.is_empty() {
             return Err(ProjectClipboardError::ExternalImagesRequired(
-                references.external,
+                needed.external,
             ));
         }
+        // Validate the entire source capsule before filtering resources made unnecessary by
+        // source code/literal context. Foreign IDs never become destination lookup authority.
+        transfers.retain(|transfer| needed.owned.contains(&transfer.source_id));
         if transfers.is_empty() {
-            let mut outbound = captured.clone();
-            outbound.formats.remove(IMAGE_CAPSULE_MIME);
-            return Ok(outbound);
+            return Ok(prepared);
         }
         let imported = self.images.import_images(&transfers, self.max_bytes)?;
         let mapping: BTreeMap<_, _> = imported
             .into_iter()
             .map(|image| (image.source_id, image.asset))
             .collect();
-        rewrite_images(&mut slice.content, &mapping)?;
-        let mut outbound = captured.clone();
-        outbound.rich = Some(slice.encode()?);
-        // The canonical bytes changed, invalidating the captured capsule and HTML's old bindings.
-        // Rebuild interoperable representations from the same canonical slice, retaining other
-        // explicitly registered host formats as opaque data.
-        let representations = slice.bundle()?;
-        outbound.html = representations.html;
-        outbound.plain = representations.plain;
-        outbound.formats.remove(IMAGE_CAPSULE_MIME);
-        outbound.check_budget(self.max_bytes)?;
-        Ok(outbound)
+        let mut bound = HashSet::new();
+        let mut bindings = Vec::new();
+        for original in needed_assets {
+            if !bound.insert(original.clone()) {
+                continue;
+            }
+            let id = original
+                .asset_id
+                .as_ref()
+                .ok_or(ProjectClipboardError::InvalidCapsule)?;
+            let asset = mapping
+                .get(id)
+                .ok_or(ProjectClipboardError::InvalidCapsule)?;
+            bindings.push(ImageBinding {
+                original,
+                destination: AssetReference {
+                    asset_id: Some(asset.id.clone()),
+                    source: asset.source(),
+                },
+            });
+        }
+        prepared.bind_images(&bindings)?;
+        Ok(prepared)
     }
 }
 #[derive(Default)]
@@ -265,8 +275,11 @@ fn capsule_transfers(
     Ok(Some(images))
 }
 fn references(slice: &RichSlice) -> Result<References> {
+    references_from(&slice.asset_references())
+}
+fn references_from(references: &[AssetReference]) -> Result<References> {
     let mut output = References::default();
-    for reference in slice.asset_references() {
+    for reference in references {
         let source_id = reference.source.strip_prefix("asset://").or_else(|| {
             reference
                 .source
@@ -287,7 +300,7 @@ fn references(slice: &RichSlice) -> Result<References> {
                 .any(|image| image.source == reference.source)
             {
                 output.external.push(ExternalImage {
-                    source: reference.source,
+                    source: reference.source.clone(),
                 });
             }
         } else {
@@ -295,34 +308,6 @@ fn references(slice: &RichSlice) -> Result<References> {
         }
     }
     Ok(output)
-}
-fn rewrite_images(
-    nodes: &mut [Node],
-    mapping: &BTreeMap<String, studio_core::ImageAsset>,
-) -> Result<()> {
-    for node in nodes {
-        if node.node_type == "imageBlock" {
-            let Some(id) = node.string_attr("assetId") else {
-                return Err(ProjectClipboardError::InvalidCapsule);
-            };
-            let asset = mapping
-                .get(id)
-                .ok_or(ProjectClipboardError::InvalidCapsule)?;
-            let attrs = node
-                .attrs
-                .as_mut()
-                .ok_or(ProjectClipboardError::InvalidCapsule)?;
-            attrs.insert(
-                "assetId".into(),
-                serde_json::Value::String(asset.id.clone()),
-            );
-            attrs.insert("src".into(), serde_json::Value::String(asset.source()));
-        }
-        if let Some(children) = &mut node.content {
-            rewrite_images(children, mapping)?;
-        }
-    }
-    Ok(())
 }
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -386,6 +371,35 @@ mod tests {
             .ok_or("missing image")?
             .into())
     }
+    fn prepare_bundle(
+        scope: &ProjectClipboard,
+        captured: &ClipboardBundle,
+    ) -> Result<ClipboardBundle> {
+        let mut session = EditorSession::new(
+            Document::plain("target", "").map_err(craft_editor_egui::Error::from)?,
+            Revision(0),
+        );
+        session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "target".into(),
+                offset: craft_editor_model::ScalarOffset(0),
+            },
+            head: DocPoint {
+                block_id: "target".into(),
+                offset: craft_editor_model::ScalarOffset(0),
+            },
+        })?;
+        let craft_editor_egui::clipboard::ClipboardRequest::Paste { context, .. } =
+            session.begin_paste(captured.clone())?
+        else {
+            return Err(ProjectClipboardError::InvalidCapsule);
+        };
+        let prepared = scope.prepare_paste(&context)?;
+        if let Some(slice) = prepared.rich_slice() {
+            return Ok(slice.bundle()?);
+        }
+        Ok(prepared.source().clone())
+    }
     #[test]
     fn copy_capsule_contains_exact_selected_image_and_is_bound_to_exact_canonical_bytes()
     -> TestResult {
@@ -418,11 +432,11 @@ mod tests {
         let workspace = Workspace::memory()?;
         let (source, captured, id) = fixture(&workspace)?;
         let copied = source.prepare_copy(&captured)?;
-        let same = source.prepare_paste(&copied)?;
+        let same = prepare_bundle(&source, &copied)?;
         assert_eq!(image_id(&same)?, id);
         let project = workspace.create_project("Destination")?;
         let destination = ProjectClipboard::new(workspace.project_images(&project.id)?, LIMIT);
-        let pasted = destination.prepare_paste(&copied)?;
+        let pasted = prepare_bundle(&destination, &copied)?;
         let new_id = image_id(&pasted)?;
         assert_ne!(new_id, id);
         let old: Value = serde_json::from_slice(captured.rich.as_deref().ok_or("missing source")?)?;
@@ -439,14 +453,68 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn external_marker_rules_and_owned_image_binding_share_one_sealed_preparation() -> TestResult {
+        let workspace = Workspace::memory()?;
+        let (scope, _, id) = fixture(&workspace)?;
+        let captured = ClipboardBundle {
+            html: Some(format!(
+                "<p>**bold**</p><figure data-image-block=\"\" data-asset-id=\"{id}\"><img src=\"/api/media/{id}/content\" alt=\"Alt\"><figcaption>Caption</figcaption></figure>"
+            )),
+            plain: "**bold**\nImage".into(),
+            ..Default::default()
+        };
+        let mut session = EditorSession::new(Document::plain("target", "leftright")?, Revision(0));
+        let point = DocPoint {
+            block_id: "target".into(),
+            offset: craft_editor_model::ScalarOffset(4),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        let original = session.document().clone();
+        let craft_editor_egui::clipboard::ClipboardRequest::Paste { context, guard, .. } =
+            session.begin_paste(captured.clone())?
+        else {
+            return Err("missing paste".into());
+        };
+        let prepared = scope.prepare_paste(&context)?;
+        assert_eq!(prepared.source(), &captured);
+        let slice = prepared.rich_slice().ok_or("missing rich slice")?;
+        assert!(slice.content[0].children().iter().any(|node| {
+            node.text.as_deref() == Some("bold")
+                && node
+                    .marks
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|mark| mark.mark_type == "bold")
+        }));
+        assert_eq!(
+            slice.asset_references()[0].asset_id.as_deref(),
+            Some(id.as_str())
+        );
+        assert_eq!(slice.content[1].string_attr("caption"), Some("Caption"));
+        session.finish_prepared_paste(guard, prepared)?;
+        session.undo()?;
+        assert_eq!(session.document(), &original);
+        assert_eq!(
+            session
+                .selection()
+                .map(|selection| selection.anchor.offset.0),
+            Some(4)
+        );
+        Ok(())
+    }
+    #[test]
     fn missing_capsule_never_authorizes_foreign_uuid_but_existing_destination_owner_can_paste()
     -> TestResult {
         let workspace = Workspace::memory()?;
         let (source, captured, id) = fixture(&workspace)?;
-        assert_eq!(image_id(&source.prepare_paste(&captured)?)?, id);
+        assert_eq!(image_id(&prepare_bundle(&source, &captured)?)?, id);
         let project = workspace.create_project("Other")?;
         let destination = ProjectClipboard::new(workspace.project_images(&project.id)?, LIMIT);
-        assert!(destination.prepare_paste(&captured).is_err());
+        assert!(prepare_bundle(&destination, &captured).is_err());
         assert!(workspace.image_asset(&project.id, &id).is_err());
         Ok(())
     }
@@ -493,7 +561,10 @@ mod tests {
             }
             bad.formats
                 .insert(IMAGE_CAPSULE_MIME.into(), serde_json::to_vec(&capsule)?);
-            assert!(destination.prepare_paste(&bad).is_err(), "accepted {field}");
+            assert!(
+                prepare_bundle(&destination, &bad).is_err(),
+                "accepted {field}"
+            );
         }
         Ok(())
     }
@@ -514,13 +585,13 @@ mod tests {
             .insert(IMAGE_CAPSULE_MIME.into(), serde_json::to_vec(&capsule)?);
         let project = workspace.create_project("Target")?;
         let destination = ProjectClipboard::new(workspace.project_images(&project.id)?, LIMIT);
-        assert!(destination.prepare_paste(&copied).is_ok());
+        assert!(prepare_bundle(&destination, &copied).is_ok());
         let tight = ProjectClipboard::new(
             workspace.project_images(&project.id)?,
             captured.rich.as_ref().map_or(0, Vec::len),
         );
         assert!(tight.prepare_copy(&captured).is_err());
-        assert!(tight.prepare_paste(&copied).is_err());
+        assert!(prepare_bundle(&tight, &copied).is_err());
         Ok(())
     }
     #[test]
@@ -560,7 +631,7 @@ mod tests {
             ..Default::default()
         };
         let Err(ProjectClipboardError::ExternalImagesRequired(images)) =
-            source.prepare_paste(&captured)
+            prepare_bundle(&source, &captured)
         else {
             return Err("external image was not staged".into());
         };
