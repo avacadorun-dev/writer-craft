@@ -236,6 +236,12 @@ impl StudioApp {
         ui.add_space(8.0);
     }
     pub(super) fn save_status_msgid(&self, unsaved_notes: bool) -> &str {
+        #[cfg(feature = "editor-preview")]
+        if let Some(canvas) = &self.canvas
+            && canvas.durability_status() != "All changes saved"
+        {
+            return canvas.durability_status();
+        }
         if self.status == "All changes saved" && self.preferences_need_attention() {
             if unsaved_notes {
                 "Manuscript saved · unsaved notes and session-only settings"

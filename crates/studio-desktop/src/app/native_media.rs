@@ -476,6 +476,7 @@ mod tests {
     fn imported(database: &std::path::Path, bytes: &[u8], mime: &str) -> AppResult<String> {
         let source = Workspace::memory()?;
         let project = source.create_project("Synthetic native media")?;
+        source.create_document(&project.id, "Media reference", "Synthetic source text")?;
         let mut manifest = source
             .project_export_snapshot(&project.id)?
             .manifest()

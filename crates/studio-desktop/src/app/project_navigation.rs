@@ -22,6 +22,7 @@ pub(super) struct ProjectOutline {
     mapped_documents: HashSet<String>,
     document_rows: HashMap<String, usize>,
     collapsed: HashSet<usize>,
+    search_collapsed: HashSet<usize>,
     visible: Vec<(usize, usize)>,
     query: String,
     selected_document: Option<String>,
@@ -161,6 +162,7 @@ impl ProjectOutline {
                     break;
                 }
                 self.collapsed.remove(&index);
+                self.search_collapsed.remove(&index);
                 cursor = self.nodes[index].parent;
             }
             self.dirty = true;
@@ -168,12 +170,25 @@ impl ProjectOutline {
         let query = query.trim().to_lowercase();
         if self.query != query {
             self.query = query;
+            self.search_collapsed.clear();
             self.dirty = true;
         }
         if self.dirty {
             self.rebuild_visible();
             self.dirty = false;
         }
+    }
+
+    fn toggle(&mut self, index: usize) {
+        let collapsed = if self.query.is_empty() {
+            &mut self.collapsed
+        } else {
+            &mut self.search_collapsed
+        };
+        if !collapsed.remove(&index) {
+            collapsed.insert(index);
+        }
+        self.dirty = true;
     }
 
     fn rebuild_visible(&mut self) {
@@ -204,7 +219,13 @@ impl ProjectOutline {
                 continue;
             }
             self.visible.push((index, depth));
-            if !searching && self.collapsed.contains(&index) {
+            if (if searching {
+                &self.search_collapsed
+            } else {
+                &self.collapsed
+            })
+            .contains(&index)
+            {
                 hidden_below = Some(depth);
             }
         }
@@ -245,8 +266,12 @@ impl ProjectOutline {
                             if node.children.is_empty() {
                                 ui.add_space(32.0);
                             } else {
-                                let expanded =
-                                    !self.collapsed.contains(&index) || !self.query.is_empty();
+                                let expanded = !(if self.query.is_empty() {
+                                    &self.collapsed
+                                } else {
+                                    &self.search_collapsed
+                                })
+                                .contains(&index);
                                 let label = language.format(
                                     if expanded {
                                         "Collapse {title}"
@@ -300,8 +325,14 @@ impl ProjectOutline {
                                 && ui.input(|input| input.key_pressed(egui::Key::ArrowRight));
                             let left = response.has_focus()
                                 && ui.input(|input| input.key_pressed(egui::Key::ArrowLeft));
-                            if (right && self.collapsed.contains(&index))
-                                || (left && !self.collapsed.contains(&index))
+                            let collapsed = (if self.query.is_empty() {
+                                &self.collapsed
+                            } else {
+                                &self.search_collapsed
+                            })
+                            .contains(&index);
+                            if !node.children.is_empty()
+                                && ((right && collapsed) || (left && !collapsed))
                             {
                                 toggle = Some(index);
                             }
@@ -329,9 +360,7 @@ impl ProjectOutline {
             });
         ui.spacing_mut().item_spacing.y = row_spacing;
         if let Some(index) = toggle {
-            if !self.collapsed.remove(&index) {
-                self.collapsed.insert(index);
-            }
+            self.toggle(index);
             self.dirty = true;
             ui.ctx().request_repaint();
         }
@@ -399,8 +428,13 @@ mod tests {
             outline.nodes[outline.visible[2].0].document_id.as_deref(),
             Some("doc-b")
         );
+        outline.toggle(0);
+        outline.synchronize(&documents, None, "echo");
+        assert_eq!(labels(&outline), vec!["root"]);
         outline.synchronize(&documents, None, "");
         assert_eq!(labels(&outline), vec!["root"]);
+        outline.synchronize(&documents, None, "echo");
+        assert_eq!(outline.visible.len(), 3);
         outline.synchronize(&documents, Some("doc-b"), "");
         assert_eq!(outline.visible.len(), 3);
         assert_eq!(source[1].metadata["parentId"], "root");

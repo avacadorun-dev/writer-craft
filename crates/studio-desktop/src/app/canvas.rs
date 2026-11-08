@@ -165,6 +165,18 @@ impl CanvasState {
                 .as_ref()
                 .is_some_and(|editor| editor.dirty() || editor.has_submission())
     }
+    /// One acknowledgement-aware status shared by all visible save indicators.
+    pub(super) fn durability_status(&self) -> &'static str {
+        if self.failed.is_some() || self.failure.is_some() || self.text_save_error {
+            "Attention needed"
+        } else if self.pending.is_some() {
+            "Saving…"
+        } else if self.blocks_navigation() {
+            "Unsaved board changes"
+        } else {
+            "All changes saved"
+        }
+    }
     fn editable(&self) -> bool {
         self.pending.is_none() && self.failed.is_none() && self.snapshot.draft.is_none()
     }
@@ -473,15 +485,9 @@ impl CanvasState {
                             self.set_failure(result);
                         }
                         ui.label(
-                            RichText::new(l.text(if self.pending.is_some() {
-                                "Saving…"
-                            } else if self.blocks_navigation() {
-                                "Unsaved board changes"
-                            } else {
-                                "All changes saved"
-                            }))
-                            .size(12.0)
-                            .color(tokens.muted),
+                            RichText::new(l.text(self.durability_status()))
+                                .size(12.0)
+                                .color(tokens.muted),
                         );
                     });
                 });
@@ -505,7 +511,7 @@ impl CanvasState {
                             if icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false)
                                 .clicked()
                             {
-                                let result = self.add_text(database, WorldPoint { x: 0.0, y: 0.0 });
+                                let result = self.add_text(database, self.view.camera().center());
                                 self.set_failure(result);
                             }
                             if ui
@@ -1751,14 +1757,7 @@ impl StudioApp {
             return;
         };
         let result = state.poll(ctx);
-        self.status = if state.pending.is_some() {
-            "Saving…"
-        } else if state.failed.is_some() || state.failure.is_some() {
-            "Attention needed"
-        } else {
-            "All changes saved"
-        }
-        .into();
+        self.status = state.durability_status().into();
         let resource = state.take_resource();
         self.record_error(result);
         if let Some(resource) = resource {

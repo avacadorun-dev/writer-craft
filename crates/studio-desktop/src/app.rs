@@ -764,6 +764,10 @@ impl eframe::App for StudioApp {
             && (self.storage.modal_open() || self.project_import.busy() || canvas_close_blocked)
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            #[cfg(feature = "editor-preview")]
+            if canvas_close_blocked {
+                self.record_error(Err(canvas::PendingCanvas.into()));
+            }
         } else if ctx.input(|i| i.viewport().close_requested()) {
             let title_result = self.commit_title_edit();
             if title_result.is_err() {
