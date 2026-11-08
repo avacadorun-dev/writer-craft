@@ -57,7 +57,8 @@ pub fn is_workspace_data_path(target: &Path, database: &Path) -> std::io::Result
                 .zip(protected_normalized.file_name())
                 .is_some_and(|(a, b)| {
                     a.to_string_lossy()
-                        .eq_ignore_ascii_case(&b.to_string_lossy())
+                        .trim_end_matches(['.', ' '])
+                        .eq_ignore_ascii_case(b.to_string_lossy().trim_end_matches(['.', ' ']))
                 });
         if target_normalized == protected_normalized || same_parent_name {
             return Ok(true);
@@ -75,9 +76,11 @@ pub fn is_workspace_data_path(target: &Path, database: &Path) -> std::io::Result
 pub(super) fn validate_database_path(database: &Path) -> std::io::Result<()> {
     let reserved = |path: &Path| {
         path.file_name().is_some_and(|name| {
-            PREFERENCES
-                .iter()
-                .any(|reserved| name.to_string_lossy().eq_ignore_ascii_case(reserved))
+            PREFERENCES.iter().any(|reserved| {
+                name.to_string_lossy()
+                    .trim_end_matches(['.', ' '])
+                    .eq_ignore_ascii_case(reserved)
+            })
         })
     };
     let conflict = reserved(database)

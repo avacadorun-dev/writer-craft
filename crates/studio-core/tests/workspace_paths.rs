@@ -10,6 +10,8 @@ fn reserved_preference_database_names_are_rejected_before_creating_files()
         "interface.json",
         "editor.json",
         "APPEARANCE.JSON",
+        "interface.json.",
+        "editor.json ",
     ] {
         let path = directory.path().join(name);
         assert!(Workspace::open(&path).is_err());

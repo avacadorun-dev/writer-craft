@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn code_blocks_and_nonvisible_content_are_not_analyzed() -> TestResult {
         let document = RichTree::from_json(
-            json!({"type":"doc","attrs":{"schemaVersion":1},"content":[
+            json!({"type":"doc","attrs":{"schemaVersion":2},"content":[
                 {"type":"codeBlock","attrs":{"blockId":"p","language":"text"},"content":[{"type":"text","text":"bad"}]}
             ]}),
         )?;
