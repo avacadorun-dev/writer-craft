@@ -182,3 +182,65 @@ fn unchanged_zip_roundtrip_should_preserve_exact_manifest_framing_and_terminal_n
     std::io::Read::read_to_end(&mut exported.by_name("project.json").unwrap(), &mut raw).unwrap();
     assert_eq!(raw, framed);
 }
+
+#[test]
+fn guarded_file_publication_should_verify_reopen_and_never_clobber_existing_or_reserved_paths() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("workspace.sqlite");
+    let source = directory.path().join("source.wstudio");
+    let (manifest, bytes) = fixture(8);
+    archive(&source, &manifest, &bytes, false);
+    let mut opened = ProjectArchive::open(&source).unwrap();
+    let cancel = ProjectTransferCancellation::default();
+    let mut worker = ProjectImportWorker::open(&database).unwrap();
+    let imported = opened.import(&mut worker, &cancel).unwrap();
+    let snapshot = worker
+        .workspace()
+        .project_export_snapshot(&imported.project_id)
+        .unwrap();
+    let destination = directory.path().join("published.wstudio");
+    let receipt =
+        studio_transfer::export_project_archive_file(&snapshot, &database, &destination, &cancel)
+            .unwrap();
+    let encoded = std::fs::read(&destination).unwrap();
+    assert_eq!(receipt.sha256, format!("{:x}", Sha256::digest(&encoded)));
+    assert_eq!(receipt.byte_size, u64::try_from(encoded.len()).unwrap());
+    ProjectArchive::open(&destination)
+        .unwrap()
+        .verify_integrity(&cancel)
+        .unwrap();
+    assert!(
+        studio_transfer::export_project_archive_file(&snapshot, &database, &destination, &cancel)
+            .is_err()
+    );
+    assert_eq!(std::fs::read(&destination).unwrap(), encoded);
+    for name in [
+        "workspace.sqlite",
+        "workspace.sqlite-wal",
+        "workspace.sqlite-shm",
+        "workspace.sqlite-journal",
+        "appearance.json",
+        "interface.json",
+        "editor.json",
+    ] {
+        let target = directory.path().join(name);
+        assert!(
+            studio_transfer::export_project_archive_file(&snapshot, &database, &target, &cancel)
+                .is_err()
+        );
+    }
+    let cancelled = directory.path().join("cancelled.wstudio");
+    cancel.cancel();
+    assert!(
+        studio_transfer::export_project_archive_file(&snapshot, &database, &cancelled, &cancel)
+            .is_err()
+    );
+    assert!(!cancelled.exists());
+    assert!(!std::fs::read_dir(directory.path()).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".writercraft-export-")
+    }));
+}

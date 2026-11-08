@@ -177,6 +177,24 @@ pub fn write_project_archive<W: Write + Seek>(
             "This project contains native notes, recovery or review state; export the canonical companion instead of a legacy-only archive",
         );
     }
+    // Never publish an archive which our bounded reader must reject on reopening.
+    studio_core::ValidatedProjectImport::parse(snapshot.manifest_bytes()).map_err(core_error)?;
+    let expanded = snapshot.attachments().iter().try_fold(
+        u64::try_from(snapshot.manifest_bytes().len()).map_err(|_| {
+            TransferError::Invalid("Export manifest length exceeds capacity".into())
+        })?,
+        |total, attachment| {
+            total
+                .checked_add(attachment.byte_size)
+                .filter(|n| *n <= studio_core::MAX_PROJECT_TRANSFER_BYTES)
+                .ok_or_else(|| {
+                    TransferError::Invalid("Expanded project archive exceeds 512 MiB".into())
+                })
+        },
+    )?;
+    if expanded > studio_core::MAX_PROJECT_TRANSFER_BYTES {
+        return invalid("Expanded project archive exceeds 512 MiB");
+    }
     let mut archive = zip::ZipWriter::new(writer);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     archive.start_file("project.json", options)?;
