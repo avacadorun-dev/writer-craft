@@ -50,7 +50,7 @@ impl ProjectImportWorker {
         if source.logical_project_id() != logical {
             return invalid("Native project identity differs from its immutable original");
         }
-        stream.index.execute_batch("CREATE TABLE IF NOT EXISTS restore_heads(logical_id TEXT PRIMARY KEY,native_id TEXT,head INTEGER NOT NULL,title TEXT NOT NULL,baseline INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS restore_old_documents(old_id TEXT PRIMARY KEY,logical_id TEXT NOT NULL,native_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS restore_notes(old_id TEXT PRIMARY KEY,native_id TEXT NOT NULL,logical_document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS restore_canvases(logical_id TEXT PRIMARY KEY,head INTEGER NOT NULL); DELETE FROM restore_heads; DELETE FROM restore_old_documents; DELETE FROM restore_notes; DELETE FROM restore_canvases;")?;
+        stream.index.execute_batch("CREATE TABLE IF NOT EXISTS restore_heads(logical_id TEXT PRIMARY KEY,native_id TEXT,head INTEGER NOT NULL,title TEXT NOT NULL,baseline INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS restore_old_documents(old_id TEXT PRIMARY KEY,logical_id TEXT NOT NULL,native_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS restore_notes(old_id TEXT PRIMARY KEY,native_id TEXT NOT NULL,logical_document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS restore_canvases(logical_id TEXT PRIMARY KEY,head INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS restore_asset_ids(kind TEXT NOT NULL,logical_id TEXT NOT NULL,PRIMARY KEY(kind,logical_id)); CREATE TABLE IF NOT EXISTS restore_note_ids(kind TEXT NOT NULL,logical_id TEXT NOT NULL,PRIMARY KEY(kind,logical_id)); CREATE TABLE IF NOT EXISTS restore_opaque_ids(logical_id TEXT PRIMARY KEY); DELETE FROM restore_asset_ids; DELETE FROM restore_note_ids; DELETE FROM restore_opaque_ids; DELETE FROM restore_heads; DELETE FROM restore_old_documents; DELETE FROM restore_notes; DELETE FROM restore_canvases;")?;
         let mut connection = self.workspace.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut assets = IndexedAssets(stream);
@@ -320,11 +320,12 @@ fn restore_nodes(
         };
         metadata["currentRevision"] = json!(head);
         let parent = metadata["parentId"].as_str().map(str::to_owned);
-        let position = metadata["position"]
+        if !metadata["position"]
             .as_f64()
-            .filter(|value| value.is_finite() && value.abs() <= 1e12)
-            .ok_or_else(|| StudioError::Validation("Native node position is invalid".into()))?;
-        let _ = position;
+            .is_some_and(|value| value.is_finite() && value.abs() <= 1e12)
+        {
+            return invalid("Native node position is invalid");
+        }
         if !matches!(
             metadata["status"].as_str(),
             Some("idea" | "draft" | "editing" | "ready")
@@ -339,6 +340,12 @@ fn restore_nodes(
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             insert_alias(transaction, project, "node", logical, &alias)?;
             insert_alias(transaction, project, "document", logical, &alias)?;
+        } else if existing
+            .as_ref()
+            .is_some_and(|(handle, _)| handle.is_none())
+            && let Some(native) = native.as_ref()
+        {
+            transaction.execute("UPDATE project_resource_aliases SET native_id=?1 WHERE project_id=?2 AND resource_kind IN ('node','document') AND logical_id=?3",params![native,project,logical])?;
         }
         stream.index.execute("INSERT INTO restore_heads(logical_id,native_id,head,title,baseline) VALUES(?1,?2,?3,?4,?5)",params![logical,native,sqlite_integer(head)?,title,sqlite_integer(baseline)?])?;
         if let Some(old) = optional_string(record, "nativeHandle")? {
@@ -465,6 +472,10 @@ fn restore_assets(
         if !matches!(kind, "media" | "audio") {
             return invalid("Native artifact resource kind is unsupported");
         }
+        stream.index.execute(
+            "INSERT INTO restore_asset_ids(kind,logical_id) VALUES(?1,?2)",
+            params![kind, logical],
+        )?;
         let object = reference(&record["object"])?;
         total = total
             .checked_add(object.byte_size())
@@ -718,6 +729,18 @@ fn restore_notes(
             true,
         )?;
         let source_logical = optional_string(record, "logicalSourceId")?;
+        let stable = id(record, "logicalNativeId")?;
+        stream.index.execute(
+            "INSERT INTO restore_note_ids(kind,logical_id) VALUES(?1,?2)",
+            params![
+                if source_logical.is_some() {
+                    "source"
+                } else {
+                    "native"
+                },
+                source_logical.unwrap_or(stable)
+            ],
+        )?;
         let existing: Option<String> = if let Some(source_logical) = source_logical {
             if !bounded_id(source_logical) {
                 return invalid("Native source-note identity is invalid");
@@ -871,6 +894,10 @@ fn restore_opaque(
 ) -> Result<()> {
     records(stream, "opaqueDocuments", cancel, &mut |_, record| {
         let logical = id(record, "logicalDocumentId")?;
+        stream.index.execute(
+            "INSERT INTO restore_opaque_ids(logical_id) VALUES(?1)",
+            [logical],
+        )?;
         let native = document(transaction, project, logical)?;
         if record["readOnly"].as_bool() != Some(true) {
             return invalid("Opaque original must remain read-only");
@@ -890,12 +917,24 @@ fn restore_opaque(
         Ok(())
     })
 }
+struct PreservationContext<'a, 'connection> {
+    transaction: &'a Transaction<'connection>,
+    project: &'a str,
+    stream: &'a VerifiedPortableProjectStream,
+    cancel: &'a ProjectTransferCancellation,
+}
 fn restore_preservation(
     transaction: &Transaction<'_>,
     project: &str,
     stream: &VerifiedPortableProjectStream,
     cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
+    let context = PreservationContext {
+        transaction,
+        project,
+        stream,
+        cancel,
+    };
     // Existing evidence passes through by its original scoped identity. Never wrap prior bundles.
     records(stream, "evidence", cancel, &mut |_, record| {
         let object = reference(&record["object"])?;
@@ -942,8 +981,7 @@ fn restore_preservation(
     let root: std::collections::BTreeMap<String, Box<serde_json::value::RawValue>> =
         serde_json::from_slice(&stream.root)?;
     preserve_unknown_fields(
-        transaction,
-        project,
+        &context,
         "root",
         "project",
         &root,
@@ -954,20 +992,15 @@ fn restore_preservation(
             "sourceOriginal",
             "components",
         ],
-        stream,
-        cancel,
     )?;
     if let Some(raw) = root.get("sourceOriginal").filter(|raw| raw.get() != "null") {
         let fields = serde_json::from_str(raw.get())?;
         preserve_unknown_fields(
-            transaction,
-            project,
+            &context,
             "source-original",
             "project",
             &fields,
             &["sha256", "byteSize"],
-            stream,
-            cancel,
         )?;
     }
     if let Some(raw) = root.get("components") {
@@ -981,14 +1014,11 @@ fn restore_preservation(
                 .transpose()?
                 .unwrap_or_else(|| "unknown".into());
             preserve_unknown_fields(
-                transaction,
-                project,
+                &context,
                 "component",
                 &domain,
                 &fields,
                 &["domain", "sha256", "byteSize", "recordCount"],
-                stream,
-                cancel,
             )?;
         }
     }
@@ -1008,14 +1038,12 @@ fn restore_preservation(
             serde_json::from_str(&raw)?;
         let Some(known) = known_fields(&domain) else {
             store_bytes_evidence(
-                transaction,
-                project,
+                &context,
                 "portable.unknown-record",
                 &format!("{domain}:{ordinal}"),
                 raw.as_bytes(),
                 "application/json",
                 None,
-                cancel,
             )?;
             continue;
         };
@@ -1025,76 +1053,29 @@ fn restore_preservation(
             .collect::<std::collections::BTreeMap<_, _>>();
         let value: Value = serde_json::from_slice(&serde_json::to_vec(&interpreted)?)?;
         let owner = semantic_owner(&domain, &value, ordinal);
-        preserve_unknown_fields(
-            transaction,
-            project,
-            &domain,
-            &owner,
-            &fields,
-            known,
-            stream,
-            cancel,
-        )?;
+        preserve_unknown_fields(&context, &domain, &owner, &fields, known)?;
         match domain.as_str() {
-            "nativeAnnotations" => preserve_note_extensions(
-                transaction,
-                project,
-                stream,
-                &value["state"],
-                &owner,
-                "state",
-                cancel,
-            )?,
+            "nativeAnnotations" => {
+                preserve_note_extensions(&context, &value["state"], &owner, "state")?
+            }
             "nativeAnnotationHistory" => {
-                preserve_note_extensions(
-                    transaction,
-                    project,
-                    stream,
-                    &value["after"],
-                    &owner,
-                    "after",
-                    cancel,
-                )?;
+                preserve_note_extensions(&context, &value["after"], &owner, "after")?;
                 if !value["before"].is_null() {
-                    preserve_note_extensions(
-                        transaction,
-                        project,
-                        stream,
-                        &value["before"],
-                        &owner,
-                        "before",
-                        cancel,
-                    )?;
+                    preserve_note_extensions(&context, &value["before"], &owner, "before")?;
                 }
             }
             "attachmentEvidence" => {
-                if !restore_attachment_snapshot(transaction, project, stream, &value, cancel)? {
-                    store_record_evidence(
-                        transaction,
-                        project,
-                        stream,
-                        &domain,
-                        &owner,
-                        &raw,
-                        &value,
-                        cancel,
-                    )?;
+                if !restore_attachment_snapshot(&context, &value)? {
+                    store_record_evidence(&context, &domain, &owner, &raw, &value)?;
                 }
             }
             "proseDraftEvidence"
             | "richDraftEvidence"
             | "canvasDraftEvidence"
             | "reviewEvidence"
-            | "richReviewEvidence" => store_record_evidence(
-                transaction,
-                project,
-                stream,
-                &domain,
-                &owner,
-                &raw,
-                &value,
-                cancel,
-            )?,
+            | "richReviewEvidence" => {
+                store_record_evidence(&context, &domain, &owner, &raw, &value)?
+            }
             _ => {}
         }
     }
@@ -1108,7 +1089,7 @@ fn restore_preservation(
         cancel.check()?;
         let object =
             PortableObjectReference::new(&row.get::<_, String>(0)?, read_unsigned(row, 1)?)?;
-        store_object_evidence(transaction, project, stream, &object, cancel)?;
+        store_object_evidence(&context, &object)?;
     }
     Ok(())
 }
@@ -1243,14 +1224,11 @@ fn semantic_owner(domain: &str, value: &Value, ordinal: u64) -> String {
     }
 }
 fn preserve_unknown_fields(
-    transaction: &Transaction<'_>,
-    project: &str,
+    context: &PreservationContext<'_, '_>,
     domain: &str,
     owner: &str,
     fields: &std::collections::BTreeMap<String, Box<serde_json::value::RawValue>>,
     known: &[&str],
-    _stream: &VerifiedPortableProjectStream,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
     for (key, value) in fields {
         if !known.contains(&key.as_str()) {
@@ -1268,28 +1246,24 @@ fn preserve_unknown_fields(
                 value,
             })?;
             store_bytes_evidence(
-                transaction,
-                project,
+                context,
                 "portable.extension",
                 domain,
                 &raw,
                 "application/json",
                 None,
-                cancel,
             )?;
         }
     }
     Ok(())
 }
 fn preserve_note_extensions(
-    transaction: &Transaction<'_>,
-    project: &str,
-    stream: &VerifiedPortableProjectStream,
+    context: &PreservationContext<'_, '_>,
     payload: &Value,
     owner: &str,
     path: &str,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
+    let stream = context.stream;
     let raw = load(
         stream,
         &reference(payload)?,
@@ -1298,8 +1272,7 @@ fn preserve_note_extensions(
     let fields: std::collections::BTreeMap<String, Box<serde_json::value::RawValue>> =
         serde_json::from_slice(&raw)?;
     preserve_unknown_fields(
-        transaction,
-        project,
+        context,
         &format!("note.{path}"),
         owner,
         &fields,
@@ -1314,14 +1287,11 @@ fn preserve_note_extensions(
             "anchor_status",
             "deleted",
         ],
-        stream,
-        cancel,
     )?;
     if let Some(raw) = fields.get("anchor") {
         let fields = serde_json::from_str(raw.get())?;
         preserve_unknown_fields(
-            transaction,
-            project,
+            context,
             &format!("note.{path}.anchor"),
             owner,
             &fields,
@@ -1335,31 +1305,24 @@ fn preserve_note_extensions(
                 "prefix",
                 "suffix",
             ],
-            stream,
-            cancel,
         )?;
     }
     Ok(())
 }
 fn store_record_evidence(
-    transaction: &Transaction<'_>,
-    project: &str,
-    stream: &VerifiedPortableProjectStream,
+    context: &PreservationContext<'_, '_>,
     domain: &str,
     owner: &str,
     raw: &str,
     value: &Value,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
     store_bytes_evidence(
-        transaction,
-        project,
+        context,
         &format!("portable.record.{domain}"),
         owner,
         raw.as_bytes(),
         "application/json",
         None,
-        cancel,
     )?;
     for key in match domain {
         "proseDraftEvidence" => &["body"][..],
@@ -1369,21 +1332,22 @@ fn store_record_evidence(
         _ => &["payload"][..],
     } {
         if let Some(value) = value.get(*key).filter(|value| !value.is_null()) {
-            store_object_evidence(transaction, project, stream, &reference(value)?, cancel)?;
+            store_object_evidence(context, &reference(value)?)?;
         }
     }
     Ok(())
 }
 fn store_bytes_evidence(
-    transaction: &Transaction<'_>,
-    project: &str,
+    context: &PreservationContext<'_, '_>,
     domain: &str,
     owner: &str,
     raw: &[u8],
     mime: &str,
     logical_document: Option<&str>,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
+    let transaction = context.transaction;
+    let project = context.project;
+    let cancel = context.cancel;
     let sha = format!("{:x}", Sha256::digest(raw));
     let logical_id = format!("{:x}", Sha256::digest(format!("{domain}\0{owner}\0{sha}")));
     let object = super::ValidatedEvidenceObject::new(&sha, raw.len() as u64, mime)?;
@@ -1409,12 +1373,13 @@ fn store_bytes_evidence(
     )
 }
 fn store_object_evidence(
-    transaction: &Transaction<'_>,
-    project: &str,
-    stream: &VerifiedPortableProjectStream,
+    context: &PreservationContext<'_, '_>,
     object: &PortableObjectReference,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<()> {
+    let transaction = context.transaction;
+    let project = context.project;
+    let stream = context.stream;
+    let cancel = context.cancel;
     let mime: Option<String> = transaction
         .query_row(
             "SELECT media_type FROM project_evidence_objects WHERE project_id=?1 AND sha256=?2",
@@ -1454,12 +1419,12 @@ fn store_object_evidence(
     )
 }
 fn restore_attachment_snapshot(
-    transaction: &Transaction<'_>,
-    project: &str,
-    stream: &VerifiedPortableProjectStream,
+    context: &PreservationContext<'_, '_>,
     record: &Value,
-    cancel: &ProjectTransferCancellation,
 ) -> Result<bool> {
+    let transaction = context.transaction;
+    let stream = context.stream;
+    let cancel = context.cancel;
     cancel.check()?;
     let payload = json_object(stream, &record["payload"], super::MAX_EVIDENCE_OBJECT_BYTES)?;
     let old_document = id(&payload, "documentId")?;
@@ -1522,14 +1487,11 @@ fn restore_attachment_snapshot(
     // Unknown snapshot properties remain ordinary evidence, separately from native attachment data.
     let fields = serde_json::from_str(raw)?;
     preserve_unknown_fields(
-        transaction,
-        project,
+        context,
         "attachment-snapshot",
         &format!("{logical_document}:{revision}"),
         &fields,
         &["anchor", "status"],
-        stream,
-        cancel,
     )?;
     Ok(true)
 }
