@@ -67,3 +67,11 @@ The named alpha.3 scope SHALL require independent review of a coherent substanti
 #### Scenario: Engineering checks pass without a writing session
 - **WHEN** only semantic fixtures or source inspection are available
 - **THEN** native task acceptance and release readiness remain pending
+
+### Requirement: Coherent native presentation
+
+The application SHALL organize author actions into understandable contextual groups with consistent desktop icon treatment, bounded panes/dialogs and deliberate spacing. Every visited surface in the acceptance journey SHALL have a capture and independent visual/usability disposition. Blocking findings SHALL be corrected and observed again on compiled source before acceptance.
+
+#### Scenario: A working action is hard to discover or visually unfinished
+- **WHEN** the native author walkthrough reveals scattered controls, excessive spacing, unclear icons or inaccessible actions
+- **THEN** acceptance SHALL require a recorded correction and fresh compiled visual and interaction evidence for the affected surface

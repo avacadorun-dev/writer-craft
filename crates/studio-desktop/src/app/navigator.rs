@@ -110,8 +110,10 @@ impl StudioApp {
                     if let Some(action) = self.project_outline.show(
                         ui,
                         &self.documents,
-                        self.document.as_ref().map(|document| document.id.as_str()),
-                        self.tree_ui.selected.as_deref(),
+                        project_navigation::OutlineSelection {
+                            document: self.document.as_ref().map(|document| document.id.as_str()),
+                            node: self.tree_ui.selected.as_deref(),
+                        },
                         &self.search,
                         l,
                         t,

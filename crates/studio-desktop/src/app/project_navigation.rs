@@ -4,6 +4,11 @@ use super::*;
 use std::collections::{HashMap, HashSet};
 use studio_core::ProjectTreeNode;
 
+pub(super) struct OutlineSelection<'a> {
+    pub(super) document: Option<&'a str>,
+    pub(super) node: Option<&'a str>,
+}
+
 struct OutlineNode {
     logical_id: String,
     document_id: Option<String>,
@@ -288,13 +293,12 @@ impl ProjectOutline {
         &mut self,
         ui: &mut egui::Ui,
         documents: &[Document],
-        selected: Option<&str>,
-        selected_node: Option<&str>,
+        selection: OutlineSelection<'_>,
         query: &str,
         language: Language,
         t: Tokens,
     ) -> Option<TreeAction> {
-        self.synchronize(documents, selected, query);
+        self.synchronize(documents, selection.document, query);
         let mut chosen = None;
         let mut toggle = None;
         let count = self.visible.len();
@@ -368,12 +372,12 @@ impl ProjectOutline {
                                 }
                                 response.on_hover_text(label);
                             }
-                            let active = selected_node == Some(node.logical_id.as_str())
-                                || (selected_node.is_none()
+                            let active = selection.node == Some(node.logical_id.as_str())
+                                || (selection.node.is_none()
                                     && node
                                         .document_id
                                         .as_deref()
-                                        .is_some_and(|id| Some(id) == selected));
+                                        .is_some_and(|id| Some(id) == selection.document));
                             let response = ui
                                 .allocate_ui_with_layout(
                                     egui::vec2((ui.available_width() - 32.0).max(40.0), 44.0),

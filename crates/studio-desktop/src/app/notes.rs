@@ -1784,19 +1784,29 @@ impl StudioApp {
                             .show(ui, |ui| {
                                 for (id, title) in &action.pending_drafts {
                                     ui.horizontal(|ui| {
+                                        let label = l.text("Review drafts");
+                                        let action_width = ui
+                                            .painter()
+                                            .layout_no_wrap(
+                                                label.into(),
+                                                egui::TextStyle::Button.resolve(ui.style()),
+                                                t.text,
+                                            )
+                                            .size()
+                                            .x
+                                            + ui.spacing().button_padding.x * 2.0;
                                         ui.add_sized(
-                                            [ui.available_width() - 160.0, 40.0],
+                                            [
+                                                (ui.available_width()
+                                                    - action_width.max(112.0)
+                                                    - ui.spacing().item_spacing.x)
+                                                    .max(1.0),
+                                                40.0,
+                                            ],
                                             egui::Label::new(title).truncate(),
                                         )
                                         .on_hover_text(title);
-                                        if components::action(
-                                            ui,
-                                            l.text("Review drafts"),
-                                            true,
-                                            None,
-                                        )
-                                        .clicked()
-                                        {
+                                        if components::action(ui, label, true, None).clicked() {
                                             review = Some(id.clone());
                                         }
                                     });
@@ -2372,6 +2382,21 @@ mod tests {
         assert_eq!(draft.tags, "B");
         assert_eq!(draft.original, fixture.app.workspace.annotation(&saved.id)?);
         assert!(!draft.changed());
+        let mut remove = TagAction {
+            snapshot: fixture
+                .app
+                .workspace
+                .project_tag_snapshot(&fixture.first.project_id, "B")?,
+            remove: true,
+            ..action
+        };
+        assert!(
+            fixture
+                .app
+                .apply_project_tag_action(&fixture.first.project_id, &mut remove)?
+        );
+        fixture.app.refresh_notes()?;
+        assert!(!fixture.app.notes.drafts.contains_key(&saved.id));
         Ok(())
     }
 
