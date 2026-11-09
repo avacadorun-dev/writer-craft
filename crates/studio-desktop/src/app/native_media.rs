@@ -303,6 +303,11 @@ impl MediaCache {
                     l.text("Preview unavailable. The original file is preserved."),
                 );
                 let button = ui.button(l.text("Retry rendering"));
+                super::capture_connected_writing::actionable_control(
+                    ui,
+                    &format!("media.retry.{}", key.resource),
+                    &button,
+                );
                 retry = button.clicked();
                 output.pointer_captured = button.hovered();
                 output.keyboard_captured = button.has_focus();

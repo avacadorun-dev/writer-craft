@@ -27,8 +27,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae" }
 craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae", features = ["wordcraft-canvas", "native-clipboard"] }
 craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae" }
-craft-canvas-model = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "69f23820b4f0f6a463944afc590a11caf1b0f864" }
-craft-canvas-egui = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "69f23820b4f0f6a463944afc590a11caf1b0f864" }
+craft-canvas-model = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "6b68eb4e84aa41b713a148e6a456048f3c1168f9" }
+craft-canvas-egui = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "6b68eb4e84aa41b713a148e6a456048f3c1168f9" }
 craft-media-preview = { git = "https://github.com/avacadorun-dev/craft-media-preview", rev = "f3705126177b694c4609f4e66799021000618bee", default-features = false, features = ["images", "pdf"] }
 craft-media-egui = { git = "https://github.com/avacadorun-dev/craft-media-preview", rev = "f3705126177b694c4609f4e66799021000618bee" }
 studio-core = { path = "crates/studio-core" }

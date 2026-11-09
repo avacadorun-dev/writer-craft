@@ -2,13 +2,13 @@
 use super::native_media::{MediaCache, MediaViewer};
 use super::*;
 use craft_canvas_egui::{
-    CanvasIntent, CanvasView, CanvasViewConfig, CanvasViewHost, CanvasViewLabels, InlineTextOutput,
-    NodeBodyResponse, TextCardEditor,
+    CanvasIntent, CanvasView, CanvasViewConfig, CanvasViewHost, CanvasViewLabels, CanvasViewOutput,
+    InlineTextOutput, NodeBodyResponse, TextCardEditor, VisibleNodeGeometry,
 };
 use craft_canvas_model::{
     CanvasCommand, CanvasDialect, CanvasDocument, CanvasError, CanvasLimits, CanvasSession,
-    CanvasTransaction, ContentIdentity, EdgeRecord, GroupBehavior, IdMapping, NodeKind, NodePolicy,
-    NodeRecord, PreparedChange, WorkControl, WorldPoint, WorldRect,
+    CanvasTransaction, ConnectorEndpoint, ContentIdentity, EdgeRecord, GroupBehavior, IdMapping,
+    NodeKind, NodePolicy, NodeRecord, PreparedChange, Side, WorkControl, WorldPoint, WorldRect,
 };
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -81,6 +81,25 @@ impl CanvasDialect for SourceDialect {
     }
 }
 
+/// Connect gestures select endpoints without moving the cards beneath their handles.
+struct BoardInputDialect<'a> {
+    source: &'a SourceDialect,
+    connecting: bool,
+}
+impl CanvasDialect for BoardInputDialect<'_> {
+    fn node_policy(&self, node: &NodeRecord) -> NodePolicy {
+        let mut policy = self.source.node_policy(node);
+        if self.connecting {
+            policy.movable = false;
+            policy.resizable = false;
+        }
+        policy
+    }
+    fn can_connect(&self, node: &NodeRecord) -> bool {
+        self.source.can_connect(node)
+    }
+}
+
 enum PendingOperation {
     Transaction(CanvasTransaction),
     Undo(ContentIdentity),
@@ -126,6 +145,7 @@ pub(super) struct CanvasState {
     fit_on_open: bool,
     tool: BoardTool,
     connect_source: Option<String>,
+    connect_source_side: Option<Side>,
     press_origin: Option<egui::Pos2>,
     /// Board tool active when the primary press landed; toolbar clicks in the
     /// same frame must not retro-activate placement for an earlier press.
@@ -169,6 +189,7 @@ impl CanvasState {
             fit_on_open: true,
             tool: BoardTool::default(),
             connect_source: None,
+            connect_source_side: None,
             press_origin: None,
             press_tool: BoardTool::default(),
             viewport_size: Vec2::new(800.0, 600.0),
@@ -472,22 +493,53 @@ impl CanvasState {
     /// Cancel a pending connection source selection without any mutation.
     fn cancel_connect_selection(&mut self) {
         self.connect_source = None;
+        self.connect_source_side = None;
     }
     /// Board-click handler for a completed card press: select the source, then connect.
     fn board_card_click(&mut self, database: &Path, ctx: &egui::Context, node_id: &str) {
+        self.board_endpoint_click(database, ctx, node_id, None);
+    }
+    fn board_endpoint_click(
+        &mut self,
+        database: &Path,
+        ctx: &egui::Context,
+        node_id: &str,
+        side: Option<Side>,
+    ) {
         if self.tool != BoardTool::Connect {
             return;
         }
         let source = self.connect_source.clone();
         match source.as_deref() {
-            // A second press on the source card is not a self-connection.
-            Some(source) if source == node_id => {}
+            // Whole-card clicks do not invent an ambiguous loop. Explicit handles
+            // can connect different sides on the same card.
+            Some(source)
+                if source == node_id && (side.is_none() || self.connect_source_side.is_none()) => {}
             Some(source) => {
+                let source_side = self.connect_source_side;
                 self.cancel_connect_selection();
-                let result = self.connect_nodes(database, ctx, source, node_id);
+                let result = if source_side.is_none() && side.is_none() {
+                    self.connect_nodes(database, ctx, source, node_id)
+                } else {
+                    self.connect_endpoints(
+                        database,
+                        ctx,
+                        ConnectorEndpoint {
+                            node_id: source.into(),
+                            side: source_side,
+                        },
+                        ConnectorEndpoint {
+                            node_id: node_id.into(),
+                            side,
+                        },
+                    )
+                };
                 self.set_failure(result);
             }
-            None => self.connect_source = Some(node_id.to_owned()),
+            None => {
+                self.connect_source = Some(node_id.to_owned());
+                self.connect_source_side = side;
+            }
         }
     }
     /// Build and durably insert one connector between two existing cards through the
@@ -499,30 +551,58 @@ impl CanvasState {
         from: &str,
         to: &str,
     ) -> AppResult<()> {
-        if from == to {
-            return Err(CanvasError::Invalid("A card cannot be connected to itself".into()).into());
+        self.connect_endpoints(
+            database,
+            ctx,
+            ConnectorEndpoint {
+                node_id: from.into(),
+                side: None,
+            },
+            ConnectorEndpoint {
+                node_id: to.into(),
+                side: None,
+            },
+        )
+    }
+    fn connect_endpoints(
+        &mut self,
+        database: &Path,
+        ctx: &egui::Context,
+        from: ConnectorEndpoint,
+        to: ConnectorEndpoint,
+    ) -> AppResult<()> {
+        if from.node_id == to.node_id
+            && (from.side.is_none() || to.side.is_none() || from.side == to.side)
+        {
+            return Err(CanvasError::Invalid(
+                "Choose different sides for a connection on the same card".into(),
+            )
+            .into());
         }
         let document = self.session.document();
         let from_node = document
-            .node(from)
-            .ok_or_else(|| CanvasError::NotFound(from.into()))?;
+            .node(&from.node_id)
+            .ok_or_else(|| CanvasError::NotFound(from.node_id.clone()))?;
         let to_node = document
-            .node(to)
-            .ok_or_else(|| CanvasError::NotFound(to.into()))?;
+            .node(&to.node_id)
+            .ok_or_else(|| CanvasError::NotFound(to.node_id.clone()))?;
         if !self.dialect.can_connect(from_node) {
-            return Err(CanvasError::NotEditable(from.into()).into());
+            return Err(CanvasError::NotEditable(from.node_id).into());
         }
         if !self.dialect.can_connect(to_node) {
-            return Err(CanvasError::NotEditable(to.into()).into());
+            return Err(CanvasError::NotEditable(to.node_id).into());
         }
-        let edge = EdgeRecord::parse(
-            &serde_json::to_string(&serde_json::json!({
-                "id": uuid::Uuid::new_v4().to_string(),
-                "fromNode": from,
-                "toNode": to,
-            }))?,
-            self.session.limits(),
-        )?;
+        let mut value = serde_json::json!({
+            "id":uuid::Uuid::new_v4().to_string(),
+            "fromNode":from.node_id,"toNode":to.node_id
+        });
+        if let Some(side) = from.side {
+            value["fromSide"] = side.as_str().into();
+        }
+        if let Some(side) = to.side {
+            value["toSide"] = side.as_str().into();
+        }
+        let edge = EdgeRecord::parse(&serde_json::to_string(&value)?, self.session.limits())?;
         let index = self.session.document().edges().len();
         self.command(database, vec![CanvasCommand::InsertEdge { edge, index }])?;
         ctx.request_repaint();
@@ -1062,11 +1142,28 @@ impl CanvasState {
             editor: self.text_editor.as_mut(),
             inline_output: &mut inline_output,
             blocked: input_blocked,
+            pointer_captured: false,
+        };
+        let input_dialect = BoardInputDialect {
+            source: &self.dialect,
+            connecting: self.tool == BoardTool::Connect,
         };
         let output = self
             .view
-            .show(ui, &self.session, &self.dialect, &mut host, &config);
-        self.paint_connections(ui, output.viewport, tokens);
+            .show(ui, &self.session, &input_dialect, &mut host, &config);
+        // Embedded controls own their pointer action in both the engine and the
+        // host's tool routing. A consumed press cannot become a later endpoint.
+        let body_owns_pointer = host.pointer_captured;
+        if body_owns_pointer {
+            self.press_origin = None;
+        }
+        let connection_owns_pointer = self.paint_connections(
+            ui,
+            &output,
+            tokens,
+            l,
+            config.interactive && !body_owns_pointer,
+        );
         for error in output.errors {
             self.failure = Some(error.to_string());
         }
@@ -1086,6 +1183,9 @@ impl CanvasState {
             .iter()
             .any(|intent| matches!(intent, CanvasIntent::Transaction(_)));
         for intent in output.intents {
+            if body_owns_pointer || connection_owns_pointer {
+                continue;
+            }
             let filtered = match &intent {
                 CanvasIntent::CreateText { .. } => {
                     self.tool != BoardTool::Select
@@ -1111,9 +1211,12 @@ impl CanvasState {
         if config.interactive
             && self.editable()
             && self.text_editor.is_none()
+            && self.connection_editor.is_none()
             && ui.input(|input| input.focused)
             && self.tool == tool_at_frame_start
             && !pan_input
+            && !body_owns_pointer
+            && !connection_owns_pointer
         {
             // A pending connection source must never dangle after its card disappeared.
             if self
@@ -1173,17 +1276,29 @@ impl CanvasState {
                         .find(|node| node.reserved.contains(point))
                         .map(|node| node.node_id.as_str())
                 };
-                match (node_at(origin), node_at(pos)) {
-                    (Some(pressed), Some(released))
-                        if pressed == released && self.press_tool == BoardTool::Connect =>
+                if self.press_tool == BoardTool::Connect {
+                    let pressed = self.connection_endpoint_at(&output.nodes, origin, board_rect);
+                    let released = self.connection_endpoint_at(&output.nodes, pos, board_rect);
+                    if let (Some(pressed), Some(released)) = (pressed, released)
+                        && pressed == released
                     {
-                        self.board_card_click(database, ui.ctx(), released);
+                        if released.side.is_some() {
+                            self.board_endpoint_click(
+                                database,
+                                ui.ctx(),
+                                &released.node_id,
+                                released.side,
+                            );
+                        } else {
+                            self.board_card_click(database, ui.ctx(), &released.node_id);
+                        }
                     }
-                    (None, None) if self.press_tool == BoardTool::Text => {
-                        let result = self.place_text_at(database, ui.ctx(), pos, output.viewport);
-                        self.set_failure(result);
-                    }
-                    _ => {}
+                } else if self.press_tool == BoardTool::Text
+                    && node_at(origin).is_none()
+                    && node_at(pos).is_none()
+                {
+                    let result = self.place_text_at(database, ui.ctx(), pos, output.viewport);
+                    self.set_failure(result);
                 }
             }
         } else {
@@ -1228,6 +1343,7 @@ impl CanvasState {
                     "selected_edges":self.view.selection().edges,
                     "tool":match self.tool { BoardTool::Select => "select", BoardTool::Text => "text", BoardTool::Connect => "connect" },
                     "connect_source":self.connect_source,
+                    "connect_source_side":self.connect_source_side.map(Side::as_str),
                     "camera":{"center":[camera.center().x,camera.center().y],"zoom":camera.zoom()},
                     "viewport":rect(output.viewport),
                     "visible_nodes":output.nodes.iter().map(|node|serde_json::json!({"node_id":node.node_id,"reserved":rect(node.reserved),"body_clip":rect(node.body_clip)})).collect::<Vec<_>>()
@@ -1621,6 +1737,7 @@ struct CardBody<'a> {
     editor: Option<&'a mut TextCardEditor>,
     inline_output: &'a mut Option<InlineTextOutput>,
     blocked: bool,
+    pointer_captured: bool,
 }
 impl CanvasViewHost for CardBody<'_> {
     fn pending_text_editor(&self) -> Option<&TextCardEditor> {
@@ -1641,10 +1758,11 @@ impl CanvasViewHost for CardBody<'_> {
                 .inner;
             let input = output.input;
             *self.inline_output = Some(output);
+            self.pointer_captured |= input.pointer_captured;
             return input;
         }
         if let Some(id) = media_resource(node) {
-            return self.media.card(
+            let input = self.media.card(
                 ui,
                 self.project,
                 &id,
@@ -1652,6 +1770,8 @@ impl CanvasViewHost for CardBody<'_> {
                 self.language,
                 self.tokens,
             );
+            self.pointer_captured |= input.pointer_captured;
+            return input;
         }
         let color = self.tokens.text;
         let font = egui::FontId::proportional((14.0 * zoom as f32).clamp(8.0, 42.0));

@@ -37,6 +37,18 @@ pub(super) fn control(ctx: &egui::Context, key: &str, rect: Rect) {
         });
     }
 }
+/// Popup sizing passes allocate rectangles without interactive controls. Never
+/// expose those allocations as click targets for a compiled native probe.
+pub(super) fn actionable_control(ui: &egui::Ui, key: &str, response: &egui::Response) {
+    if ui.is_visible()
+        && ui.is_enabled()
+        && !ui.is_sizing_pass()
+        && response.enabled()
+        && ui.is_rect_visible(response.rect)
+    {
+        control(ui.ctx(), key, response.rect.intersect(ui.clip_rect()));
+    }
+}
 /// Record bounded semantic state from the surface that was painted in this frame.
 pub(super) fn observe(ctx: &egui::Context, surface: &str, state: Value) {
     if enabled(ctx) {
@@ -167,6 +179,7 @@ pub(super) struct ConnectedCapture {
     card: Option<String>,
     seed: Value,
     connection_graph: Option<Value>,
+    control_candidate: Option<(String, Rect)>,
     phase: usize,
     clipped_camera_positioned: bool,
     events: Vec<Event>,
@@ -280,6 +293,7 @@ impl ConnectedCapture {
             card: None,
             seed,
             connection_graph,
+            control_candidate: None,
             phase: 0,
             clipped_camera_positioned: false,
             events: Vec::new(),
@@ -303,6 +317,7 @@ impl ConnectedCapture {
         ctx.data_mut(|data| data.insert_temp(egui::Id::new(FRAME), Observation::default()));
     }
     fn advance(&mut self, name: &str, state: &Value, events: Vec<Event>) {
+        self.control_candidate = None;
         self.steps.push(json!({"step":name,"observed_state_sha256":digest(state),"phase":self.phase,"observed_native_state":state,"input_provenance":"scripted egui RawInput, not OS events"}));
         self.events = events;
         self.phase += 1;
@@ -313,7 +328,22 @@ impl ConnectedCapture {
             .get(key)
             .filter(|rect| rect.is_positive())
         {
+            // A new popup can report its sizing-pass geometry before its final
+            // placement. Require an unchanged observed target in consecutive frames.
+            if self.scenario == "canvas-connections" {
+                let candidate = (key.to_owned(), *rect);
+                if self.control_candidate.as_ref() != Some(&candidate) {
+                    self.control_candidate = Some(candidate);
+                    return;
+                }
+            }
             self.advance(name, state, click(*rect));
+            if let Some(step) = self.steps.last_mut() {
+                step["control_id"] = json!(key);
+                step["control_rect"] = rect_value(*rect);
+            }
+        } else {
+            self.control_candidate = None;
         }
     }
     fn expected_text(&self) -> String {
