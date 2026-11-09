@@ -501,7 +501,7 @@ fn additive_schema_three_migration_preserves_documents_and_existing_rich_history
     assert_eq!(
         raw.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
 }
 
