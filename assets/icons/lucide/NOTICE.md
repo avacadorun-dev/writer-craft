@@ -3,7 +3,7 @@
 Source: https://github.com/lucide-icons/lucide
 Pinned upstream commit: `53fab88ff9d1b48f4704b5b5b560d6b4d560bf4c`.
 Original geometry: `https://raw.githubusercontent.com/lucide-icons/lucide/53fab88ff9d1b48f4704b5b5b560d6b4d560bf4c/icons/<name>.svg`.
-The complete upstream LICENSE is retained, including ISC copyright and Feather-derived MIT notices. WriterCraft's separate monk brand mark is not a Lucide utility icon.
+The complete upstream LICENSE is retained, including ISC copyright and Feather-derived MIT notices. WriterCraft's separate lion-writer brand mark is not a Lucide utility icon.
 
 All 52 utility icons use this one library. Original SVGs are unmodified. Native vector data is generated mechanically from their SVG paths/circles/rectangles; no icon was redrawn by hand. Geometry uses the original24×24 coordinate space, stroke width2 and round caps/joins. A generation-only Rust tool uses kurbo0.13.1 for SVG curves and Lyon for fill/stroke tessellation at0.01 source-unit tolerance. Native rendering adds a one-physical-pixel antialias fringe at the actual display scale. No SVG runtime, font asset or application dependency is added.
 

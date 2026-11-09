@@ -152,6 +152,7 @@ impl StudioApp {
         demo: bool,
         capture: Option<PathBuf>,
     ) -> AppResult<Self> {
+        crate::brand::initialize(&cc.egui_ctx)?;
         let workspace = Workspace::open(&database)?;
         let mut preference_errors = Vec::new();
         let interface_path = database.with_file_name("interface.json");

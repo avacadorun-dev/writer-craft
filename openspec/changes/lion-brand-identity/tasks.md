@@ -1,0 +1,6 @@
+- [x] Inventory active brand surfaces and preserve the source with provenance.
+- [x] Replace all active monk implementations through one generator and native texture.
+- [x] Compare sizes/fills on Light/Dark and verify mask/opacity/platform icon dimensions.
+- [ ] Update the centered banner and current README visuals.
+- [ ] Pass exact-source hosted checks and independent compiled visual review.
+- [ ] Record complete issue #16 evidence before closure.

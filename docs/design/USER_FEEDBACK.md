@@ -196,3 +196,10 @@ Regression requirements: real native typing, selection, clipboard, Unicode/IME, 
 Date: 2026-11-09. Extend existing [research issue #14](https://github.com/avacadorun-dev/writer-craft/issues/14) to establish a well-designed relationship between boards and documents for scripts/scenes/beats, character profiles/behavior, lore/world rules and related dictionary/memory records. These views must support one writing task, with predictable editing and return navigation. Investigate workflow hypotheses; do not claim the original application had no relationships or already offered complete synchronization.
 
 Compare canonical multi-view records, stable live references, revision-pinned excerpts/snapshots and independent notes. Define editing authority, refresh/conflict handling, rename/move/delete/restore and source-compatible persistence before choosing synchronization. Board layout changes must not silently reorder or edit the manuscript. Maintain PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02, including precise starting/return context, failure/cancel/stale and export/restore outcomes. Research/proposed architecture is not implementation acceptance. Use this correction in the designer's next review and preserve all original Studio data while evaluating additions.
+
+
+## F-44 — approved lion identity and completion-focused execution
+
+On2026-11-09 the user supplied the lion-writer handoff and requested replacement of the old logo throughout current branding, native application and platform icons, with deliberate size/background treatment. Preserve the supplied character; maintain Light/Dark coherence and exact source provenance. Independent review must inspect actual compiled header and packaged icon, not only an asset board. Historical released screenshots remain historical evidence. Tracked in #16.
+
+The same instruction corrects fragmented delivery: limit implementation to one product issue at a time, assign bounded file ownership and observable acceptance, and integrate/review/verify before starting another feature. Root owns the queue, CI and closure evidence. Research or a green library alone is not issue completion.

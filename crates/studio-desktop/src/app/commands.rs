@@ -38,7 +38,8 @@ impl StudioApp {
                         if cfg!(target_os = "macos") {
                             ui.add_space(76.0);
                         }
-                        crate::brand::mark(ui, 28.0, t.accent, t.text);
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        crate::brand::mark(ui, 32.0);
                         ui.add(
                             egui::Label::new(RichText::new("WriterCraft").size(17.0).strong())
                                 .truncate(),

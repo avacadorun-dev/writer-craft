@@ -91,7 +91,7 @@ Read the structured preferences contract in `DESKTOP_UX.md` before reviewing set
 
 - Header/title/close control share a vertical center; the footer is bounded and Done has equal vertical insets. Verify normal and minimum-size Settings captures.
 - Settings group headings align left with the navigation grid. No centered group labels, overlapping text or mixed utility icon families.
-- All utility glyphs use the licensed Lucide subset; product branding uses the monk/book mark. Check 28-pixel toolbar readability and light/dark contrast.
+- All utility glyphs use the licensed Lucide subset; product branding uses the approved lion-writer mark. Check 32-pixel toolbar readability and light/dark contrast.
 - Appearance preview cards display actual theme colors and keep mode and palette as separate controls. Selected state is legible without relying solely on fill color.
 - Show the real complete updated interface and open the owner's isolated demonstration preview after the icon replacement.
 

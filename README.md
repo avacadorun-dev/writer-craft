@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/writercraft-banner.svg" alt="WriterCraft — your stories, your files, your workspace" width="100%" />
+  <img src="docs/images/writercraft-banner.png" alt="WriterCraft — your stories, your files, your workspace" width="100%" />
 </p>
 
 <p align="center">
@@ -33,7 +33,7 @@ The macOS app is ad-hoc signed and **not notarized**; Windows packages are unsig
 
 ## The workspace
 
-Actual compiled macOS application captures with synthetic demo content. These are application screenshots, not design mockups.
+The following are historical **alpha.2** macOS captures with synthetic demo content. They show the released version, including its former monk identity; alpha.3 introduces the lion writer shown above. These are application screenshots, not design mockups.
 
 <p align="center">
   <img src="docs/images/alpha2/workspace-dark.png" alt="WriterCraft alpha.2 native rich manuscript, document navigation and formatting in dark appearance" width="100%" />
@@ -56,7 +56,7 @@ Actual compiled macOS application captures with synthetic demo content. These ar
 - **Native rich writing.** Formatting, headings, lists, tables and the currently integrated block insertion/property dialogs; local image assets, Mermaid, inline/display formulas, code with syntax decoration and callouts.
 - **A deliberate writing surface.** Continuous local scrolling, bounded text measure, Focus, adaptive document presentation and configurable font, line height and spacing.
 - **Local persistence.** SQLite workspaces, immutable revisions, autosave and recoverable rich drafts. Revision checks protect later work from stale edits. Current passage-note support is included; its complete legacy lifecycle remains in progress.
-- **Appearance and language.** Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese. Independent Light/Dark/System modes and seven non-green palettes, Lucide controls and the monk/book identity.
+- **Appearance and language.** Russian, English, German, French, Spanish, Portuguese, Simplified Chinese and Japanese. Independent Light/Dark/System modes and seven non-green palettes and Lucide controls. The new lion-writer identity is part of alpha.3 development.
 - **Acknowledged preferences.** Invalid or externally changed files are preserved. Unsaved choices remain explicitly session-only, with Retry and scoped Reload.
 - **Transparent local storage.** Data-location and backup controls, archive inspection, and shared persistence/transfer foundations for the continuing migration.
 - **Reviewable changes.** The existing exact-text proposal utility uses explicit Apply/Reject and guarded Undo. Live providers and the complete rich-assistant workflow remain unfinished.
