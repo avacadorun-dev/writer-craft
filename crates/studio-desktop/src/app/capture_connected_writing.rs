@@ -11,6 +11,9 @@ const FRAME: &str = "connected-capture-frame";
 const INITIAL: &str = "Synthetic card: Привет 😀 e\u{301}";
 const LATER: &str = " — later draft 日本語";
 const CLIPPED_TEXT: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+const CONNECTION_ID: &str = "capture-connection";
+const CONNECTION_TARGET: &str = "capture-target";
+const CONNECTION_LABEL: &str = "Связь 日本語 😀 e\u{301}";
 
 #[derive(Clone, Default)]
 struct Observation {
@@ -163,6 +166,7 @@ pub(super) struct ConnectedCapture {
     documents: Vec<Document>,
     card: Option<String>,
     seed: Value,
+    connection_graph: Option<Value>,
     phase: usize,
     clipped_camera_positioned: bool,
     events: Vec<Event>,
@@ -188,7 +192,11 @@ impl ConnectedCapture {
         }
         if !matches!(
             scenario.as_str(),
-            "canvas-inline" | "canvas-cancel" | "canvas-clipped-2x" | "hierarchy-search"
+            "canvas-inline"
+                | "canvas-cancel"
+                | "canvas-clipped-2x"
+                | "canvas-connections"
+                | "hierarchy-search"
         ) {
             return Err("unknown_connected_capture_scenario".into());
         }
@@ -220,10 +228,17 @@ impl ConnectedCapture {
             documents.push(app.workspace.create_rich_document(&project.id, title, json!({"type":"doc","attrs":{"schemaVersion":4},"content":[{"type":"paragraph","attrs":{"blockId":format!("capture-p-{index}")},"content":[{"type":"text","text":format!("Synthetic document identity {index}. Привет 😀 日本語") }]}]}))?);
         }
         let seed = json!({"id":"capture-seed","type":"text","x":-350,"y":0,"width":300,"height":180,"text":"Saved independent note","future":{"retain":true}});
+        let connection_graph = (scenario == "canvas-connections").then(|| json!({
+            "nodes":[seed.clone(), {"id":CONNECTION_TARGET,"type":"text","x":350,"y":0,"width":300,"height":180,"text":"Linked planning note","future":{"retain":"target"}}],
+            "edges":[{"id":CONNECTION_ID,"fromNode":"capture-seed","toNode":CONNECTION_TARGET,"label":"Before","future":{"vendor":{"retained":[1,null,"未変更"]}}}],
+            "future":{"retain":"exact"}
+        }));
         let board = app.workspace.create_project_canvas(
             &project.id,
             "Synthetic writing board",
-            json!({"nodes":[seed.clone()],"edges":[],"future":{"retain":"exact"}}),
+            connection_graph.clone().unwrap_or_else(
+                || json!({"nodes":[seed.clone()],"edges":[],"future":{"retain":"exact"}}),
+            ),
         )?;
         app.open_project(project.clone())?;
         let source: Vec<ProjectTreeNode> = [
@@ -264,6 +279,7 @@ impl ConnectedCapture {
             documents,
             card: None,
             seed,
+            connection_graph,
             phase: 0,
             clipped_camera_positioned: false,
             events: Vec::new(),
@@ -319,6 +335,9 @@ impl ConnectedCapture {
             }
         }
         let saved = workspace.project_canvas(&self.project, &self.board)?;
+        if self.scenario == "canvas-connections" {
+            return self.verify_connection_preservation(&workspace, &saved, state);
+        }
         let nodes = saved.revision.content["nodes"]
             .as_array()
             .ok_or("connected_capture_missing_nodes")?;
@@ -397,6 +416,60 @@ impl ConnectedCapture {
             return Err("connected_capture_unexpected_durable_history".into());
         }
         self.durability_evidence = json!({"independent_workspace_reread":true,"process_restart_verified":false,"history":history_evidence});
+        self.preservation_verified = true;
+        Ok(())
+    }
+    fn verify_connection_preservation(
+        &mut self,
+        workspace: &Workspace,
+        saved: &studio_core::ProjectCanvasSnapshot,
+        state: &Value,
+    ) -> AppResult<()> {
+        let original = self
+            .connection_graph
+            .as_ref()
+            .ok_or("connection_capture_missing_fixture")?;
+        let mut labelled = original.clone();
+        labelled["edges"][0]["label"] = json!(CONNECTION_LABEL);
+        if saved.revision.info.revision != 6
+            || saved.revision.content != labelled
+            || saved.revision.content != state["canonical"]
+            || state["revision"] != 6
+        {
+            return Err("connection_capture_final_graph_or_revision_mismatch".into());
+        }
+        let history = workspace.project_canvas_history(&self.project, &self.board, None, 16)?;
+        if history.len() != 6 {
+            return Err("connection_capture_unexpected_history_count".into());
+        }
+        let mut removed = original.clone();
+        removed["edges"] = json!([]);
+        let mut history_evidence = Vec::new();
+        for revision in history {
+            let historical =
+                workspace.project_canvas_revision(&self.project, &self.board, revision.revision)?;
+            let expected = match revision.revision {
+                1 => original,
+                2 | 4 | 6 => &labelled,
+                3 | 5 => &removed,
+                _ => return Err("connection_capture_unexpected_revision".into()),
+            };
+            if historical.content != *expected {
+                return Err("connection_capture_history_changed_identity_or_unknown_fields".into());
+            }
+            history_evidence.push(json!({
+                "revision":revision.revision,
+                "content_sha256":digest(&historical.content),
+                "edge_present":historical.content["edges"].as_array().is_some_and(|edges| !edges.is_empty()),
+                "connection_label":historical.content["edges"][0]["label"],
+                "exact_graph_verified":true
+            }));
+        }
+        self.durability_evidence = json!({
+            "independent_workspace_reread":true,"process_restart_verified":false,
+            "history":history_evidence,"unknown_edge_fields_preserved":true,
+            "unchanged_nodes_and_unrelated_manuscripts":true
+        });
         self.preservation_verified = true;
         Ok(())
     }
@@ -568,6 +641,121 @@ impl ConnectedCapture {
             _ => {}
         }
     }
+    fn drive_connections(&mut self, observation: &Observation, state: &Value) {
+        let selected = state["selected_edges"]
+            .as_array()
+            .is_some_and(|edges| edges.iter().any(|id| id == CONNECTION_ID));
+        let saved = |revision, present| {
+            let expected_edges = if present { 1 } else { 0 };
+            state["revision"] == revision
+                && state["canonical"]["edges"]
+                    .as_array()
+                    .is_some_and(|edges| edges.len() == expected_edges)
+                && (!present
+                    || (state["canonical"]["edges"][0]["id"] == CONNECTION_ID
+                        && state["canonical"]["edges"][0]["label"] == CONNECTION_LABEL))
+                && ["pending", "failed", "recovery", "navigation_blocked"]
+                    .iter()
+                    .all(|key| state[*key] == false)
+                && state["connection_editor"].is_null()
+        };
+        match self.phase {
+            0 => self.click_control(
+                observation,
+                "open-connections-menu",
+                state,
+                "canvas.connections",
+            ),
+            1 => self.click_control(
+                observation,
+                "select-existing-connection",
+                state,
+                &format!("canvas.connection.select.{CONNECTION_ID}"),
+            ),
+            2 if selected => self.advance(
+                "selected-exact-connection",
+                state,
+                key(Key::Escape, Modifiers::NONE),
+            ),
+            3 => self.click_control(
+                observation,
+                "reopen-selected-connection-menu",
+                state,
+                "canvas.connections",
+            ),
+            4 if selected => self.click_control(
+                observation,
+                "edit-connection-label",
+                state,
+                "canvas.connection.edit",
+            ),
+            5 if state["connection_editor"]["edge_id"] == CONNECTION_ID => {
+                self.click_control(
+                    observation,
+                    "focus-native-label-field",
+                    state,
+                    "canvas.connection.label",
+                );
+            }
+            6 if state["connection_editor"]["expected"] == "Before" => {
+                let mut events = key(Key::A, Modifiers::COMMAND);
+                events.push(Event::Text(CONNECTION_LABEL.into()));
+                self.advance("replace-label-with-exact-unicode", state, events);
+            }
+            7 if state["connection_editor"]["label"] == CONNECTION_LABEL => {
+                self.click_control(
+                    observation,
+                    "save-native-connection-label",
+                    state,
+                    "canvas.connection.save",
+                );
+            }
+            8 if saved(2, true)
+                && value_rect(&state["connection_label_rect"])
+                    .is_some_and(|rect| rect.is_positive()) =>
+            {
+                self.advance("label-durably-acknowledged-and-painted", state, vec![]);
+            }
+            9 => self.click_control(
+                observation,
+                "open-menu-for-connection-delete",
+                state,
+                "canvas.connections",
+            ),
+            10 if selected => self.click_control(
+                observation,
+                "delete-selected-connection",
+                state,
+                "canvas.connection.delete",
+            ),
+            11 if saved(3, false) => self.click_control(
+                observation,
+                "undo-connection-deletion",
+                state,
+                "canvas.undo",
+            ),
+            12 if saved(4, true) => self.click_control(
+                observation,
+                "redo-connection-deletion",
+                state,
+                "canvas.redo",
+            ),
+            13 if saved(5, false) => self.click_control(
+                observation,
+                "restore-label-for-final-painted-capture",
+                state,
+                "canvas.undo",
+            ),
+            14 if saved(6, true)
+                && value_rect(&state["connection_label_rect"])
+                    .is_some_and(|rect| rect.is_positive()) =>
+            {
+                self.advance("connection-lifecycle-acknowledged", state, vec![]);
+                self.terminal = true;
+            }
+            _ => {}
+        }
+    }
     pub(super) fn readiness(
         &mut self,
         app: &mut StudioApp,
@@ -586,6 +774,23 @@ impl ConnectedCapture {
             .unwrap_or(Value::Null);
         if !state.is_null() {
             state["native_caret"] = ctx.output(|output| output.ime.map(|ime|json!({"input_rect":rect_value(ime.rect),"cursor_rect":rect_value(ime.cursor_rect)}))).unwrap_or(Value::Null);
+            if self.scenario == "canvas-connections" {
+                state["connection_editor"] = observation
+                    .surfaces
+                    .get("canvas_connection")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                state["connection_editor_rect"] = observation
+                    .controls
+                    .get("canvas.connection.label")
+                    .map(|rect| rect_value(*rect))
+                    .unwrap_or(Value::Null);
+                state["connection_label_rect"] = observation
+                    .controls
+                    .get(&format!("canvas.connection.painted.{CONNECTION_ID}"))
+                    .map(|rect| rect_value(*rect))
+                    .unwrap_or(Value::Null);
+            }
             if !self.scenario.starts_with("canvas-") {
                 state["rendered_target_rect"] = observation
                     .controls
@@ -603,6 +808,8 @@ impl ConnectedCapture {
                 if let Err(error) = self.position_clipped_camera(app, ctx, &state) {
                     self.failure = Some(error.to_string());
                 }
+            } else if self.scenario == "canvas-connections" {
+                self.drive_connections(&observation, &state);
             } else if self.scenario.starts_with("canvas-") {
                 self.drive_canvas(&observation, &state);
             } else {
@@ -621,7 +828,13 @@ impl ConnectedCapture {
             step["observed_frame"] = json!(ctx.cumulative_frame_nr());
         }
         self.final_state = state;
-        let visible = if self.scenario.starts_with("canvas-") {
+        let visible = if self.scenario == "canvas-connections" {
+            has_visible_node(&self.final_state, "capture-seed")
+                && has_visible_node(&self.final_state, CONNECTION_TARGET)
+                && value_rect(&self.final_state["connection_label_rect"]).is_some_and(|rect| {
+                    rect.is_positive() && ctx.content_rect().contains(rect.center())
+                })
+        } else if self.scenario.starts_with("canvas-") {
             self.card
                 .as_deref()
                 .is_some_and(|id| has_visible_node(&self.final_state, id))
@@ -683,7 +896,7 @@ impl ConnectedCapture {
         }
     }
     pub(super) fn evidence(&self) -> Value {
-        json!({"scenario":self.scenario,"expected_project_id":self.project,"expected_card_id":self.card,"expected_document_id":self.documents[2].id,"phase":self.phase,"steps":self.steps,"terminal":self.terminal,"content_contract_satisfied":self.preservation_verified && self.failure.is_none(),"failure":self.failure,"durability_evidence":self.durability_evidence,"diagnostic":self.diagnostic,"final_state":self.final_state,"fixture_source":"Persisted synthetic documents and board; imported-shape ProjectTreeNode projection. This is not importer or process-restart acceptance.","input_provenance":"scripted egui RawInput through compiled native widgets; no OS pasteboard/IME/accessibility claim","os_input_acceptance":false,"full_journey_acceptance":false})
+        json!({"scenario":self.scenario,"expected_project_id":self.project,"expected_card_id":self.card,"expected_document_id":self.documents[2].id,"expected_connection_id":self.connection_graph.as_ref().map(|_| CONNECTION_ID),"expected_connection_label":self.connection_graph.as_ref().map(|_| CONNECTION_LABEL),"phase":self.phase,"steps":self.steps,"terminal":self.terminal,"content_contract_satisfied":self.preservation_verified && self.failure.is_none(),"failure":self.failure,"durability_evidence":self.durability_evidence,"diagnostic":self.diagnostic,"final_state":self.final_state,"fixture_source":"Persisted synthetic documents and board; imported-shape ProjectTreeNode projection. This is not importer or process-restart acceptance.","input_provenance":"scripted egui RawInput through compiled native widgets; no OS pasteboard/IME/accessibility claim","os_input_acceptance":false,"full_journey_acceptance":false})
     }
 }
 

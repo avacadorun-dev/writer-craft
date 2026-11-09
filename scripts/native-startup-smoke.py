@@ -146,17 +146,19 @@ def validate_connected_state(state: dict, scenario: str) -> None:
     if state.get("canonical_unchanged") is not None or probe.get("os_input_acceptance") is not False or probe.get("full_journey_acceptance") is not False:
         raise ValueError("Scripted native-widget evidence must not claim unchanged content or OS/full-journey acceptance")
     steps = probe.get("steps") or []
-    required = 7 if scenario == "hierarchy-search" else 4
+    required = 15 if scenario == "canvas-connections" else 7 if scenario == "hierarchy-search" else 4
     if len(steps) < required or any(len(step.get("observed_state_sha256", "")) != 64 for step in steps):
         raise ValueError("Connected native action record is missing or incomplete")
     durability = probe.get("durability_evidence") or {}
-    expected_history = {"canvas-inline": 4, "canvas-cancel": 2, "canvas-clipped-2x": 3, "hierarchy-search": 1}.get(scenario)
+    expected_history = {"canvas-inline": 4, "canvas-cancel": 2, "canvas-clipped-2x": 3, "canvas-connections": 6, "hierarchy-search": 1}.get(scenario)
     if durability.get("independent_workspace_reread") is not True or durability.get("process_restart_verified") is not False or len(durability.get("history") or []) != expected_history:
         raise ValueError("Connected native probe has no exact independent durability/history record")
     final = probe.get("final_state") or {}
     if final.get("project_id") != probe.get("expected_project_id"):
         raise ValueError("Connected probe observed a different project")
-    if scenario.startswith("canvas-"):
+    if scenario == "canvas-connections":
+        validate_connection_lifecycle(probe, final, durability)
+    elif scenario.startswith("canvas-"):
         card = probe.get("expected_card_id")
         nodes = (final.get("canonical") or {}).get("nodes") or []
         chosen = [node for node in nodes if node.get("id") == card]
@@ -188,6 +190,52 @@ def validate_connected_state(state: dict, scenario: str) -> None:
             raise ValueError("Nested duplicate-name navigation did not reach the exact expected document")
     else:
         raise ValueError("Unknown connected native scenario")
+
+
+def validate_connection_lifecycle(probe: dict, final: dict, durability: dict) -> None:
+    """One named label/delete/history probe, with a painted restored label in its final PNG."""
+    expected_label = "Связь 日本語 😀 e\u0301"
+    expected_id = "capture-connection"
+    if probe.get("expected_connection_id") != expected_id or probe.get("expected_connection_label") != expected_label:
+        raise ValueError("Connection probe did not name the exact synthetic edge and Unicode label")
+    canonical = final.get("canonical") or {}
+    edges, nodes = canonical.get("edges") or [], canonical.get("nodes") or []
+    if len(edges) != 1 or edges[0] != {"id": expected_id, "fromNode": "capture-seed", "toNode": "capture-target", "label": expected_label, "future": {"vendor": {"retained": [1, None, "未変更"]}}}:
+        raise ValueError("Restored connection identity, Unicode label or unknown fields changed")
+    if len(nodes) != 2 or {node.get("id") for node in nodes} != {"capture-seed", "capture-target"} or canonical.get("future") != {"retain": "exact"}:
+        raise ValueError("Connection probe changed unrelated board objects")
+    if final.get("revision") != 6 or final.get("editor") is not None or final.get("connection_editor") is not None or any(final.get(key) is not False for key in ("pending", "failed", "recovery", "navigation_blocked")) or final.get("status") != "All changes saved":
+        raise ValueError("Final connection state is not durably acknowledged")
+    viewport, label_rect = final.get("viewport") or [], final.get("connection_label_rect") or []
+    if len(viewport) != 4 or len(label_rect) != 4 or not (viewport[0] <= label_rect[0] < label_rect[2] <= viewport[2] and viewport[1] <= label_rect[1] < label_rect[3] <= viewport[3]):
+        raise ValueError("The restored connection label has no current clipped paint rectangle")
+    visible = {node.get("node_id"): node.get("body_clip") or [] for node in final.get("visible_nodes", [])}
+    if any(len(visible.get(node, [])) != 4 or visible[node][2] <= visible[node][0] or visible[node][3] <= visible[node][1] for node in ("capture-seed", "capture-target")):
+        raise ValueError("Connection endpoint cards are not visible in the final frame")
+    names = [
+        "open-connections-menu", "select-existing-connection", "selected-exact-connection",
+        "reopen-selected-connection-menu", "edit-connection-label", "focus-native-label-field",
+        "replace-label-with-exact-unicode", "save-native-connection-label",
+        "label-durably-acknowledged-and-painted", "open-menu-for-connection-delete",
+        "delete-selected-connection", "undo-connection-deletion", "redo-connection-deletion",
+        "restore-label-for-final-painted-capture", "connection-lifecycle-acknowledged",
+    ]
+    steps = probe.get("steps") or []
+    if [step.get("step") for step in steps] != names:
+        raise ValueError("Connection probe is missing an actual named widget action")
+    edited = steps[7].get("observed_native_state") or {}
+    editor, field = edited.get("connection_editor") or {}, edited.get("connection_editor_rect") or []
+    if editor.get("edge_id") != expected_id or editor.get("label") != expected_label or editor.get("expected") != "Before" or len(field) != 4 or field[2] <= field[0] or field[3] <= field[1]:
+        raise ValueError("The native label editor did not expose the exact edited text and field geometry")
+    history = durability.get("history") or []
+    if len(history) != 6 or {row.get("revision") for row in history} != set(range(1, 7)) or durability.get("unknown_edge_fields_preserved") is not True or durability.get("unchanged_nodes_and_unrelated_manuscripts") is not True:
+        raise ValueError("Connection probe has no complete reread/preservation receipt")
+    for row in history:
+        revision = row["revision"]
+        present = revision not in (3, 5)
+        expected = "Before" if revision == 1 else expected_label if present else None
+        if row.get("edge_present") is not present or row.get("connection_label") != expected or row.get("exact_graph_verified") is not True or len(row.get("content_sha256", "")) != 64:
+            raise ValueError("Connection compensating history differs from label/delete/Undo/Redo")
 
 
 def validate_bundle_identity(info: dict, commit: str, normal_app: bool) -> None:
@@ -260,6 +308,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
             "compact-light-en-canvas-inline": "canvas-inline",
             "compact-dark-en-canvas-cancel": "canvas-cancel",
             "compact-light-en-canvas-clipped-2x": "canvas-clipped-2x",
+            "compact-light-en-canvas-connections": "canvas-connections",
             "compact-light-en-hierarchy-search": "hierarchy-search",
         }
         for name, language, section, compact, flags in (
@@ -286,6 +335,7 @@ def main(bundle: Path, normal_app: bool = False) -> int:
             ("compact-light-en-canvas-inline", "en", None, True, ["--light"]),
             ("compact-dark-en-canvas-cancel", "en", None, True, []),
             ("compact-light-en-canvas-clipped-2x", "en", None, True, ["--light"]),
+            ("compact-light-en-canvas-connections", "en", None, True, ["--light"]),
             ("compact-light-en-hierarchy-search", "en", None, True, ["--light"]),
         ):
             target = targets.get(name)
@@ -384,10 +434,32 @@ def self_test() -> None:
                 with self.assertRaises(ValueError): validate_capture_state(bad, "final-cell", target_kind="text")
         def test_connected_capture_refuses_default_readiness_and_invented_acceptance(self):
             good = {"schema_version": 1, "status": "captured", "target_block": None, "canonical_unchanged": True, "stable_frames": 3, "observed_inner_size_points": [1000, 680], "render_readiness": {"settled": True, "target_visible": True, "visible_atoms": 1, "target_is_text": False, "visible_text_targets": 0, "pending_atoms": 0, "failed_atoms": 0}}
-            for scenario in ("canvas-inline", "canvas-cancel", "canvas-clipped-2x", "hierarchy-search"):
+            for scenario in ("canvas-inline", "canvas-cancel", "canvas-clipped-2x", "canvas-connections", "hierarchy-search"):
                 with self.assertRaises(ValueError): validate_capture_state(good, None, scenario)
             probe = {"scenario": "canvas-inline", "terminal": True, "content_contract_satisfied": True, "failure": None, "os_input_acceptance": True, "full_journey_acceptance": False}
             with self.assertRaises(ValueError): validate_connected_state(dict(good, canonical_unchanged=None, connected_capture=probe), "canvas-inline")
+        def test_connection_capture_requires_unknown_fields_history_and_native_label_geometry(self):
+            import copy
+            label = "Связь 日本語 😀 e\u0301"
+            names = ["open-connections-menu", "select-existing-connection", "selected-exact-connection", "reopen-selected-connection-menu", "edit-connection-label", "focus-native-label-field", "replace-label-with-exact-unicode", "save-native-connection-label", "label-durably-acknowledged-and-painted", "open-menu-for-connection-delete", "delete-selected-connection", "undo-connection-deletion", "redo-connection-deletion", "restore-label-for-final-painted-capture", "connection-lifecycle-acknowledged"]
+            steps = [{"step": name} for name in names]
+            steps[7]["observed_native_state"] = {"connection_editor": {"edge_id": "capture-connection", "label": label, "expected": "Before"}, "connection_editor_rect": [20, 20, 300, 60]}
+            probe = {"expected_connection_id": "capture-connection", "expected_connection_label": label, "steps": steps}
+            edge = {"id": "capture-connection", "fromNode": "capture-seed", "toNode": "capture-target", "label": label, "future": {"vendor": {"retained": [1, None, "未変更"]}}}
+            final = {"canonical": {"nodes": [{"id": "capture-seed"}, {"id": "capture-target"}], "edges": [edge], "future": {"retain": "exact"}}, "revision": 6, "pending": False, "failed": False, "recovery": False, "navigation_blocked": False, "status": "All changes saved", "viewport": [0, 0, 800, 500], "connection_label_rect": [300, 200, 450, 230], "visible_nodes": [{"node_id": node, "body_clip": [10, 10, 110, 110]} for node in ("capture-seed", "capture-target")]}
+            history = [{"revision": n, "edge_present": n not in (3, 5), "connection_label": "Before" if n == 1 else None if n in (3, 5) else label, "exact_graph_verified": True, "content_sha256": "a" * 64} for n in range(1, 7)]
+            durability = {"history": history, "unknown_edge_fields_preserved": True, "unchanged_nodes_and_unrelated_manuscripts": True}
+            validate_connection_lifecycle(probe, final, durability)
+            bad = copy.deepcopy(final)
+            del bad["canonical"]["edges"][0]["future"]
+            with self.assertRaisesRegex(ValueError, "unknown fields"):
+                validate_connection_lifecycle(probe, bad, durability)
+            with self.assertRaisesRegex(ValueError, "paint rectangle"):
+                validate_connection_lifecycle(probe, dict(final, connection_label_rect=None), durability)
+            bad = copy.deepcopy(durability)
+            bad["history"][4]["edge_present"] = True
+            with self.assertRaisesRegex(ValueError, "compensating history"):
+                validate_connection_lifecycle(probe, final, bad)
         def test_clipped_caret_cannot_pass_from_boolean_labels_alone(self):
             final = {"camera": {"zoom": 2}}
             probe = {"diagnostic": {"actual_zoom": 2, "card_is_clipped": True, "native_caret_visible": True, "status": "passed", "clip": [0, 0, 100, 100], "cursor": [120, 20, 122, 40]}}
