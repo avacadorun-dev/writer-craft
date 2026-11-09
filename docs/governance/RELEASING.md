@@ -4,6 +4,10 @@ Build and package optimized artifacts on GitHub Actions. Never commit build tree
 
 ## Current decision
 
+F-49–F-52 now authorize a bounded **0.1.0-alpha.3**, named `structured-writing-alpha`, after concrete exact-candidate verification. No repeated publication permission is required. It covers the selected native author journey, #7 direct existing-block re-editing, #11 handoff and the concurrent visual/usability review in `ALPHA3_STRUCTURED_WRITING_PLAN.md`. Its current independent gate is pending. Full Canvas #17, full parity #4 and all unfinished parts of broad issues remain open. Preserve published alpha.1/alpha.2 and the running user preview.
+
+The alpha.2 decision below is historical:
+
 The owner explicitly authorized publishing the completed coherent checkpoint as **0.1.0-alpha.2**, with native installers and current README screenshots. The independent scope is `native-rich-editor-alpha`: an engineering prerelease of the implemented writing workspace. Complete original-editor/product parity and unfinished large workstreams continue in alpha.3. Publication does not close product issues or certify daily use. This supersedes earlier all-issues alpha.2 scheduling and editor-only deferrals.
 
 ## Versions and data
@@ -18,11 +22,12 @@ Use SemVer 2.0.0. Advance alpha/beta/rc sequences for candidates of one intended
 - The authoritative `docs/design/UX_GATE.json` must independently accept the exact version, current fingerprint and selected scope before a tagged release. Historical approval cannot override a current pending/rejected gate. The implementer does not approve their own review.
 - Gate evidence includes at least two actual checked-in PNGs under `docs/images`, matching hashes, a named independent reviewer, no unresolved in-scope blockers and a nonempty interaction report. A source/assets/version or fingerprinted design-contract change invalidates acceptance. Gate JSON, review prose and screenshots are excluded from the fingerprint to avoid circular approval commits.
 - `native-rich-editor-alpha` approval never means `full-editor-parity`, full migration, exhaustive IME/accessibility coverage or Windows/Linux desktop interaction. The release notes must name remaining work and platform limits.
+- `structured-writing-alpha` has its own selected journey contract and hashed independent native/visual evidence. It retains the same exact-source, data-preservation and package gates. Its approval cannot satisfy the preserved pending full-parity inventory or unvisited-platform GUI claims.
 
 ```sh
 python3 scripts/release-check.py --mode source
 python3 scripts/release-check.py --fingerprint
-python3 scripts/release-check.py --mode release --tag v0.1.0-alpha.2 --require-prerelease
+python3 scripts/release-check.py --mode release --tag v0.1.0-alpha.3 --require-prerelease
 ```
 
 ## Hosted packaging
@@ -44,7 +49,7 @@ Engineering package metadata deliberately retains `release_ready:false` and `pla
 1. Freeze completed scope, version/changelog and dependency pins. Preserve unfinished work in existing issues and the alpha.3 milestone.
 2. Run hosted default/all-feature tests, strict Clippy/fmt, OpenSpec and native installer qualification. Check actual job outcomes and real captures; a workflow definition is not a successful run.
 3. Inspect the normal packaged app with synthetic data, retain interaction/reopen evidence and actual README screenshots, then obtain independent exact-fingerprint scoped review. Keep owner issue acceptance separate.
-4. Merge the reviewed source into main. Create and push its matching immutable prerelease tag only under an explicit release instruction (already granted for alpha.2).
+4. Merge the reviewed source into main. Create and push its matching immutable prerelease tag only under an explicit release instruction (already granted for the bounded alpha.3).
 5. `release.yml` verifies that existing tag and accepted gate, reruns default/native checks and calls the same installer graph at the frozen commit. The final job stages verified DMG/setup/deb, combined SHA256SUMS, installation notes and source/release manifests into a **new unpublished draft**. It refuses any existing release, including a draft; published assets are never replaced.
 6. Inspect actual draft assets, checksums and source/version evidence, then publish the prerelease under the owner's release authorization. No automatic stable publication or unrequested signing/update infrastructure.
 
@@ -58,6 +63,6 @@ Distribution retains MIT, bundled font/icon notices and target-resolved Rust dep
 
 ## Completeness and complete tasks
 
-For alpha.3's `full-editor-parity` and later `full-parity`, the existing UX gate must also accept every inventory, capability and journey from `docs/migration/PARITY_SCOPE.json`. `scripts/parity_gate.py` is loaded by the existing release checker; no separate invocation or competing approval is required. Source mode reports pending coverage without claiming release readiness. Release mode refuses omitted/unknown/duplicate IDs, unreviewed inventory completeness, pending/stale evidence or incomplete task paths. Each independent observation carries the current source/lock/contract fingerprint and hashed reports; see `docs/design/ROLE_JOURNEYS.md`.
+For eventual `full-editor-parity` and later `full-parity`, the existing UX gate must also accept every inventory, capability and journey from `docs/migration/PARITY_SCOPE.json`. `scripts/parity_gate.py` is loaded by the existing release checker; no separate invocation or competing approval is required. Source mode reports pending coverage without claiming release readiness. Release mode refuses omitted/unknown/duplicate IDs, unreviewed inventory completeness, pending/stale evidence or incomplete task paths. Each independent observation carries the current source/lock/contract fingerprint and hashed reports; see `docs/design/ROLE_JOURNEYS.md`.
 
 The initial101 capability rows, eight inventory groups and six journeys are a coverage scaffold. They are not101 delivered features, a percentage complete or a substitute for an exhaustive source audit. Grouped rows must be split/refined when the audit finds hidden behaviors. The validator proves consistent traceability only; independent native observation and real research judgment remain required.

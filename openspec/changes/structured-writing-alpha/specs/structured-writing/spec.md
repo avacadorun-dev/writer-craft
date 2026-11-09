@@ -24,6 +24,18 @@ Authors SHALL rename, edit, move, reorder, trash and restore documents and folde
 - **WHEN** a folder is trashed and restored
 - **THEN** all active descendants participate, independently trashed descendants remain in Trash, and a missing, trashed or disallowed parent causes refusal before mutation
 
+### Requirement: Direct tree organization
+
+The hierarchy SHALL support native drag-and-drop into valid folders and before/after siblings, with highlighted targets and insertion lines. Adjacent creation controls and compact indentation SHALL remain usable at three/four nested levels. Contextual and keyboard alternatives SHALL remain available. Hover expansion and edge autoscroll SHALL support organizing larger projects.
+
+#### Scenario: Move a scene into a collapsed chapter
+- **WHEN** an author drags a scene over a collapsed valid chapter and drops it after the folder expands
+- **THEN** the target preview SHALL match one guarded persisted move; stable identities, text and history remain unchanged
+
+#### Scenario: Reject or cancel a drag
+- **WHEN** a drag targets itself, a descendant, a schema-disallowed parent, leaves the tree or is cancelled with Escape
+- **THEN** invalid placement SHALL be visible and no structure/content mutation SHALL occur
+
 ### Requirement: Exact consultation return
 
 An author SHALL consult and edit a reference document and return to the acknowledged originating scene with exact selection and measured scroll when its revision remains unchanged. Failed navigation MUST retain drafts and the return route.

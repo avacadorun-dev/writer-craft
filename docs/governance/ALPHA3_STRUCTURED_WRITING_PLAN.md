@@ -29,6 +29,14 @@ Joins PT-EDIT-01/PT-KNOW-01 and the explicitly requested manual tagging extensio
 
 Joins the selected #11/PT-MIG-01/PT-NONF-01 transfer path. Export the intended manuscript/reference scope as readable Markdown with actual assets, inspect the resulting organization, and separately export/restore a complete canonical project. The restored copy must retain tree order, stable logical references, rich text, passage tags/notes, histories and original assets. Explain any reader-format limitation and private annotation inclusion before exporting. Cancel/failed output must not publish a misleading partial success.
 
+### A3-REEDIT-01 — revise an existing technical/story object
+
+After #14 acceptance, complete #7 on existing rendered Mermaid and inline/display formula objects: single click selects, double click opens the exact source, context-menu and keyboard paths reach the same guarded editor. Apply rerenders the same object, Cancel leaves it unchanged, Undo/Redo and save/reopen preserve the result and surrounding prose. Failed/stale edits retain the draft. Keep these actions contextual without growing the permanent toolbar.
+
+### F52-VISUAL-01 — finish the desktop presentation during the author task
+
+Capture each visited screen, pane, menu and dialog while performing the scenarios. Record its layout, spacing, content density, action hierarchy, discoverability, icon treatment and keyboard usability. Improve observed defects, then repeat the affected task and capture the changed compiled candidate. Evaluate coherent filled/custom desktop icons where recognition benefits. Independent visual review is a release requirement and does not stand in for functionality or unvisited-platform acceptance.
+
 ## Acceptance manuscript
 
 Use an original coherent story, **The Last Light / Последний огонь**, created for this acceptance without private user data: a coastal town prepares to decommission its lighthouse; restorer Asya, engineer Lev and archivist Nina disagree about a missing signal log. Four chapters, at least two meaningful scenes per chapter, and distinct character/reference branches provide actual motivation, conflicting knowledge and revisions to track. The prose, motivations and notes must connect across the story; placeholder strings, a control gallery or a collection of test cases cannot qualify it.

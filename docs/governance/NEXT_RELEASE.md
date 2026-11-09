@@ -6,6 +6,10 @@ Release a coherent engineering alpha.3 from the existing implementation plus a c
 
 The release agent must specify the actual bounded scope and its independent exact-candidate gate, retain truthful limitations and keep full-parity coverage pending. Do not close broad unfinished issues or relabel a partial gate `full-editor-parity`. Native installers, checks, source/build identity, data preservation and completed user scenarios remain required. Published alpha.1/alpha.2 and the running preview are unchanged.
 
+### Selected scope — structured-writing-alpha (F-50–F-52)
+
+The [structured writing plan](ALPHA3_STRUCTURED_WRITING_PLAN.md) selects full tree/document lifecycle, author-defined exact passage markup and reference consultation in a substantial coherent story, followed sequentially by #7 existing formula/Mermaid re-editing and #11 readable/canonical handoff. Project-kind taxonomy remains undecided. Actual native interaction and a capture-by-capture visual/usability review are required; compiler results or seeded projects cannot substitute. The current `UX_GATE.json` is the separate **pending** `structured-writing-alpha` gate. The alpha.3 full-parity gate is retained at `UX_GATE_ALPHA3_FULL_PARITY_PENDING.json`; its obligations are not removed or accepted.
+
 ## Historical full-parity alpha.3 boundary (superseded as release prerequisite)
 
 **Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. New #14 adds researched project profiles, connected board/document/character/lore scenarios and direct object sizing with backward-compatible Studio migration. Issue #15 restores direct in-card writing and its complete input/save/cancellation lifecycle. Published alpha.1/alpha.2 are immutable.

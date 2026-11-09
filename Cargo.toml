@@ -35,7 +35,7 @@ studio-core = { path = "crates/studio-core" }
 studio-transfer = { path = "crates/studio-transfer" }
 
 [workspace.metadata.writercraft]
-required-ux-scope = "full-editor-parity"
+required-ux-scope = "structured-writing-alpha"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
