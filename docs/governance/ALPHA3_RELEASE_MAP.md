@@ -21,7 +21,9 @@ Progress in the required order; #15 remains open:
 4. **Complete except one environment gap — native acceptance.** Established on the exact CI candidate by real Accessibility-tree/background-input driving: full create→type→finish journey with mixed Unicode, existing-card re-edit via real double-click, guarded save failure under a held SQLite write lock (attention status, retry/preservation actions, modal, blocked board), `kill -9` crash with intact durable state and clean restart, and the recovery-draft banner→recover→exact-restore→durable-revision cycle (evidence in [the input verification record](../verification/CANVAS_INPUT_ALPHA3.md)). The hosted capture matrix settled all eight locales across Light/Dark and compact/wide. Remaining: OS IME composition through a real input method — this machine has no IME-capable input source enabled; it needs one enabled in System Settings or owner-side testing. Engine-level composition behavior is covered by the qualified hosted engine tests.
 5. **Complete — independent compiled review.** Reviewer PASS on `c9a8d6e` (24/24 canvas tests, CJK regression, reveal-guard/culling equivalence, smoke-script contract, exact engine pin); required doc correction (eight locales, not ten) applied.
 
-### P1 — #12 media/diagram block-flow
+### P1 — active: #12 media/diagram block-flow
+
+Started per the blocked-issue rule: #15's only remaining item (OS IME through a real input method) is recorded as an environment/owner decision in its issue, so P1 proceeds explicitly instead of accumulating a hidden stream. #15 closure awaits only that decision.
 
 Pending-ready-error-retry flow under typography/viewport changes; matching paint/hit bounds, source/assets/anchors and Undo. Reassess against complete criteria after #15 acceptance.
 
