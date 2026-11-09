@@ -25,9 +25,9 @@ Closed 2026-11-09 under lean verification: shipped flow repair in pinned engine 
 
 Closed 2026-11-09 under lean verification: Balanced hierarchy and adaptive ≥984 pt surface implemented; real runs at exactly 1000×680 (full toolbar, Focus toggle hides/restores both panes) and 1440 wide; eight-locale capture matrix settled. Pixel-exact surface/scroll-retention regressions are usage-monitored separate-issue material.
 
-### P3 — #2 persistent marks and author notes
+### P3 — complete: #2 persistent marks and author notes
 
-Exact repeated/Unicode anchors; edit/delete/Undo/detachment; reopen/recovery/transfer; independent native review.
+Closed 2026-11-09 under lean verification: real native workflow verified end-to-end on the exact CI candidate (typing → bold mark with exact ranges in durable revision → note creation with exact-occurrence anchor incl. prefix disambiguation → quit/relaunch → mark and note restored and readable). Core preservation suites green (65 core tests + mapping/replay/recovery/portability). Gap: in-text mark pixel rendering usage-monitored.
 
 ### P4 — #8 real syntax highlighting
 
