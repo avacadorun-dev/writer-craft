@@ -41,3 +41,26 @@ Direct card editing is tracked in [#15](https://github.com/avacadorun-dev/writer
 The native project navigator now projects imported sections/parent/order and exact document identities, with bounded rows, current titles, ancestry-preserving search and trashed-node-safe fallback. Source-compatible hierarchy authoring, empty imported node initialization and custom-schema controls remain required; this is not complete project workflow parity. Research #14/F43 records the existing Studio link/promotion baseline and proposed PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02 with canonical/link/snapshot/independent-note hypotheses. No new synchronization model or professional project taxonomy has been selected.
 
 A separate independent designer is reviewing this slice and extending explicit synthetic hosted capture coverage. Existing rich-editor startup captures do not qualify Canvas input or imported nesting. Its `full-editor-parity` disposition stays pending. The owner's running e501837 development window remains untouched; new work is not silently substituted into that session.
+
+
+## Root takeover progress — 2026-11-09 (owner-directed, lean verification)
+
+The owner directed root (Kimi Code) to continue alpha.3 delivery and then approved a lean-verification mode: existing hosted checks plus targeted real/native checks per issue, honest gap records, and separate owner-filed issues for usage findings instead of exhaustive new test matrices.
+
+Closed under lean verification on the exact candidate line (`bcba6e8` runtime; package from Preview run 42570107425; executable SHA256 `6f9008f3…45d67`), each with exact evidence in its issue:
+
+- **#15** direct Canvas card writing: qualified engine `69f2382…`, hosted capture matrix (4 Canvas scenarios + eight locales), real-OS journey/failure-under-lock/`kill -9` crash/recovery-draft cycle, independent compiled review PASS. Caveat recorded: live OS-IME composition (engine-level IME covered by hosted tests).
+- **#12** media/diagram block-flow: shipped engine fix (`fd96a30`), existing separation tests + showcase captures + compiled showcase inspection clean. Transition-matrix/caption asserts usage-monitored.
+- **#6** workspace layout: Balanced hierarchy + adaptive ≥984 pt surface verified at 1000×680 (Focus toggle hides/restores panes) and 1440 wide; eight-locale captures settled. Pixel-exact surface/scroll regressions usage-monitored.
+- **#2** marks/notes: real workflow end-to-end — typed text, bold mark with exact ranges in a durable revision, note creation with exact-occurrence anchor (prefix disambiguation), quit/relaunch with mark and note restored. In-text mark pixels confirmed rendered on the compiled app after Screen Recording was granted.
+- **#8** syntax highlighting: engine suite 14/14 on the app-pinned source (every original named format resolves to a real grammar; `syntax.rs` identical between pin and test), palette-aware cached app integration with explicit unavailable-fallback. Token-color pixels in-app usage-monitored.
+- **#9** dialogs/input sizing: settings (7 palettes, Esc-clean), new-document (disabled empty submit → create), note form share metrics; eight-locale captures settled.
+- **#7** block authoring: every block command reachable in the grouped panel at 1000×680; create→configure→render→Undo→save→reopen covered by the green desktop/engine suites. Per-block automated click-through limited by automation input delivery; usage-monitored.
+
+Also this window:
+
+- **#11** paused-resume defect fixed in source (`fd15f3f`): a prepared transfer now arms and waits for an explicit confirmation; reopening the transfer window never starts an export/restore by itself. New regression test `reopening_armed_transfer_waits_for_explicit_confirmation`; hosted Verify green at `5b2560b`. Compiled export/restore pass with native dialogs remains before closure.
+- **#14** decision record (`5b2560b`): seven legacy kinds formalized as an import-compatibility inventory (native creation kindless, no export reclassification); baseline/requested/unselected classification; selected formatting scope = image exact-size with aspect lock + table column resize on existing `width`/`height`/`colwidth` attributes, no schema extension. Implementation parked at P10 per the map.
+- **#17** first implementation slice (card connections via the qualified engine's `InsertEdge`) in progress under the one-implementer rule.
+
+Remaining before the alpha.3 gate: #17 slices, #11 compiled pass, #10 synthetic-profile import round-trip (+ owner-side private-archive checks), #14 selected sizing implementation, and the two-axis `full-editor-parity` UX gate with a fresh independent review on the final candidate.
