@@ -1405,11 +1405,6 @@ mod tests {
                     egui::Pos2::ZERO,
                     egui::vec2(640.0, 480.0),
                 )),
-                modifiers: if frame == 1 {
-                    egui::Modifiers::SHIFT
-                } else {
-                    egui::Modifiers::NONE
-                },
                 events: if frame == 1 {
                     vec![egui::Event::Key {
                         key: egui::Key::F10,
