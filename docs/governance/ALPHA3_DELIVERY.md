@@ -56,3 +56,5 @@ Historical release evidence stays unchanged. Fresh alpha.3 evidence must name it
 ## Coverage audit correction — 2026-11-09
 
 The complete original Canvas obligation now has dedicated issue #17 and stable B01–B26 inventory. #15 remains active; #17 stays queued and cannot close from direct-text or import completion. The current inventory/capability/task ledger remains pending until exact native evidence and independent omission review exist. The pending-input engine candidate is now `73e4f9b7e3c3005d01db28fdac3fbf8d64162082` atop `df6405f`; it is not yet hosted-qualified or adopted. No application input behavior changed in this gate work.
+
+The independent engine source review found first-frame IME interruption and Escape-focus risks in73e4f9b. That candidate is blocked from publication/adoption pending a supported focus-handoff fix and platform-output regressions; the application remains on58ce123. This is required rework within active #15, not a reason to open another feature stream.

@@ -19,4 +19,4 @@ Source/lock/contract fingerprint reviewed: `43dddbd619b3af801989e5d9450c075ef069
 
 This approval does not populate `UX_GATE.json.coverage` or mark its pending inventories/capabilities/journeys accepted. Those require actual source-omission and native interaction evidence. The current catalog is an initial scaffold, not exhaustive product verification or a completion percentage. #17 records original Canvas authoring; #15 remains the single active product implementation. Candidate engine73e4f9b is not adopted or qualified by these checks.
 
-Hosted verification of the committed tooling change is recorded in GitHub and the linked issue update when available.
+Hosted [Verify WriterCraft run42557568070](https://github.com/avacadorun-dev/writer-craft/actions/runs/42557568070) passed for commit `f57071f6eef3ea97952c77d47aeb14b7eaca78a4`: macOS source/engineering checks, Linux shared core and Windows shared core all succeeded. The preview packaging job was skipped as configured; no new desktop build or product acceptance is claimed.

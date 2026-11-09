@@ -8,7 +8,7 @@
 - [x] Bind contracts and narrative evidence; reject missing/duplicate/unknown/stale/pending rows.
 - [x] Run focused Python regressions and verify current source PASS/release FAIL with pending native evidence.
 - [x] Independent final tooling/contract review at fingerprint43dddbd6; see `docs/verification/PARITY_GATE_TOOLING.md`.
-- [ ] Hosted exact-commit checks (record the run before checking this item).
+- [x] Hosted exact-commit checks: run42557568070 passed for f57071f6eef3ea97952c77d47aeb14b7eaca78a4; native product coverage remains pending.
 
 ## 3. Product acceptance remains separate
 - [ ] Complete independent source omission audits for every inventory.
