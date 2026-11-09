@@ -106,6 +106,7 @@ pub(super) struct CanvasState {
     failed: Option<PreparedChange>,
     failure: Option<String>,
     failed_preserved: bool,
+    reload_requested: bool,
     draft_preserved: bool,
     fit_on_open: bool,
     viewport_size: Vec2,
@@ -141,6 +142,7 @@ impl CanvasState {
             failed: None,
             failure: None,
             failed_preserved: false,
+            reload_requested: false,
             draft_preserved: false,
             fit_on_open: true,
             viewport_size: Vec2::new(800.0, 600.0),
@@ -551,6 +553,17 @@ impl CanvasState {
         blocked: bool,
     ) {
         let l = language;
+        // An export permission covers the previous input pass only. Even if clicking
+        // Reload moves focus first, same-batch native text must not disappear unnoticed.
+        let text_input_arrived = self.text_editor.is_some()
+            && ui.input(|input| {
+                input.events.iter().any(|event| {
+                    matches!(
+                        event,
+                        egui::Event::Text(_) | egui::Event::Paste(_) | egui::Event::Ime(_)
+                    )
+                })
+            });
         egui::Panel::top("canvas-heading")
             .exact_size(56.0)
             .resizable(false)
@@ -783,8 +796,7 @@ impl CanvasState {
                                 )
                                 .clicked()
                             {
-                                let result = self.reload_saved(database);
-                                self.set_failure(result);
+                                self.reload_requested = true;
                             }
                         });
                     }
@@ -853,6 +865,16 @@ impl CanvasState {
         if self.text_editor.is_some() {
             let result = self.drive_inline(database, ui.ctx());
             self.set_failure(result);
+        }
+        if std::mem::take(&mut self.reload_requested) {
+            let result = if text_input_arrived || self.text_composing {
+                self.failed_preserved = false;
+                Err(PendingCanvas.into())
+            } else {
+                self.reload_saved(database)
+            };
+            self.set_failure(result);
+            ui.ctx().request_repaint();
         }
         if super::capture_connected_writing::enabled(ui.ctx()) {
             let rect = |rect: egui::Rect| [rect.min.x, rect.min.y, rect.max.x, rect.max.y];
@@ -1096,7 +1118,7 @@ impl CanvasState {
         Ok(())
     }
     fn reload_saved(&mut self, database: &Path) -> AppResult<()> {
-        if !self.failed_preserved || self.pending.is_some() {
+        if !self.failed_preserved || self.pending.is_some() || self.text_composing {
             return Err(CanvasError::StaleBase.into());
         }
         *self = Self::open(
@@ -1672,7 +1694,6 @@ mod tests {
         events: Vec<egui::Event>,
         time: f64,
     ) -> egui::FullOutput {
-        let tokens = theme::resolve(&ThemeSettings::default(), false);
         let mut input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
@@ -1684,6 +1705,15 @@ mod tests {
             ..Default::default()
         };
         state.prepare_input(ctx, &mut input, false);
+        paint_card_input(state, database, ctx, input)
+    }
+    fn paint_card_input(
+        state: &mut CanvasState,
+        database: &Path,
+        ctx: &egui::Context,
+        input: egui::RawInput,
+    ) -> egui::FullOutput {
+        let tokens = theme::resolve(&ThemeSettings::default(), false);
         let mut output = ctx.run_ui(input, |root| {
             egui::CentralPanel::default().show(root, |ui| {
                 state.show(ui, database, Language::English, tokens, false);
@@ -1859,6 +1889,41 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn reload_after_export_should_wait_for_same_frame_native_input_and_recheck_preservation()
+    -> TestResult {
+        for event in [
+            egui::Event::Text(" later".into()),
+            egui::Event::Paste(" later".into()),
+            egui::Event::Ime(egui::ImeEvent::Preedit {
+                text: "にほん".into(),
+                active_range_chars: Some(0..3),
+            }),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let database = directory.path().join("reload-order.sqlite");
+            let workspace = Workspace::open(&database)?;
+            let project = workspace.create_project("Synthetic reload ordering")?;
+            let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+            let mut state = CanvasState::from_snapshot(&project.id, board)?;
+            let ctx = egui::Context::default();
+            activate_card(&mut state, &database, &ctx)?;
+            show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+            state.text_save_error = true;
+            state.failure = Some("synthetic refused save".into());
+            state.write_full_card_draft(&directory.path().join("recovery.json"))?;
+            assert!(state.failed_preserved);
+            // The toolbar queues this same request. Painting must process input before resolution.
+            state.reload_requested = true;
+            show_card_frame(&mut state, &database, &ctx, vec![event], 0.1);
+            assert!(state.text_editor.is_some());
+            assert!(!state.failed_preserved);
+            assert!(!state.reload_requested);
+            assert!(state.blocks_navigation());
+            assert_eq!(state.snapshot.revision.content, graph());
+        }
+        Ok(())
+    }
+    #[test]
     fn existing_card_recovery_should_keep_submitted_candidate_and_later_text_separate() -> TestResult
     {
         let directory = tempfile::tempdir()?;
@@ -1928,6 +1993,7 @@ mod tests {
                     text: "にほん".into(),
                     active_range_chars: Some(0..3),
                 }),
+                egui::Event::Ime(egui::ImeEvent::Commit("日本語".into())),
             ] {
                 let directory = tempfile::tempdir()?;
                 let database = directory.path().join("done-ack.sqlite");
@@ -1974,33 +2040,64 @@ mod tests {
                     state.snapshot.revision.clone(),
                     prepared,
                 );
-                // App order is raw input -> poll persistence -> paint/consume native input.
-                // Done must not remove the editor during that middle step.
-                deliver(&mut state, completion)?;
-                assert!(state.text_editor.is_some(), "creating={creating}");
+                // Exact app order: raw hook -> poll persistence -> native card paint.
                 let ime = matches!(event, egui::Event::Ime(_));
-                show_card_frame(&mut state, &database, &ctx, vec![event], 0.1);
+                let commit = matches!(event, egui::Event::Ime(egui::ImeEvent::Commit(_)));
+                let events = if commit {
+                    vec![
+                        egui::Event::Ime(egui::ImeEvent::Preedit {
+                            text: "にほん".into(),
+                            active_range_chars: Some(0..3),
+                        }),
+                        event,
+                    ]
+                } else {
+                    vec![event]
+                };
+                let mut input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(1000., 680.),
+                    )),
+                    events,
+                    time: Some(0.1),
+                    focused: true,
+                    ..Default::default()
+                };
+                state.prepare_input(&ctx, &mut input, false);
+                let (sender, receiver) = mpsc::channel();
+                sender
+                    .send(completion)
+                    .map_err(|_| "completion receiver closed")?;
+                state.pending = Some(receiver);
+                state.poll(&ctx)?;
+                assert!(state.text_editor.is_some(), "creating={creating}");
+                paint_card_input(&mut state, &database, &ctx, input);
                 let expected_prefix = if creating { "" } else { "Saved" };
                 let editor = state.text_editor.as_ref().ok_or("retained editor")?;
                 assert!(editor.text().starts_with(expected_prefix));
-                assert!(
-                    editor
-                        .text()
-                        .ends_with(if ime { "にほん" } else { " later" })
-                );
+                assert!(editor.text().ends_with(if commit {
+                    "日本語"
+                } else if ime {
+                    "にほん"
+                } else {
+                    " later"
+                }));
                 if ime {
                     assert!(state.text_composing);
                     assert!(
                         state.pending.is_none(),
                         "preedit must not be saved as committed text"
                     );
-                    show_card_frame(
-                        &mut state,
-                        &database,
-                        &ctx,
-                        vec![egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))],
-                        0.2,
-                    );
+                    if !commit {
+                        show_card_frame(
+                            &mut state,
+                            &database,
+                            &ctx,
+                            vec![egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))],
+                            0.2,
+                        );
+                    }
                     assert!(
                         state
                             .text_editor
