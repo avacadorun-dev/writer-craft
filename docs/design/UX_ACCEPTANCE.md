@@ -155,3 +155,14 @@ The current contract declares only `full-editor-parity`. Requesting `full-parity
 The earlier #7 insertion/model evidence does not qualify discoverable re-editing of existing rendered blocks. Independently exercise an existing Mermaid block and block/inline formula in the exact compiled candidate: double-click opens the captured current source, an object context-menu Edit action and keyboard path reach the same guarded editor without expanding the permanent toolbar; single-click still selects, Apply rerenders, Cancel/Escape changes nothing, Undo/Redo and save/reopen preserve identity and surrounding prose. Verify stale/failed edits preserve the draft. Do not accept only a toolbar-source reading or insert-dialog screenshot.
 
 For selected #14 sizing, make an already inserted image visibly smaller, retain aspect ratio when locked, Undo/Redo and reopen, and compare original asset bytes and stored dimensions. Workspace zoom alone fails this scenario. Canvas B01–B26 and its independent review remain mandatory and active under #17.
+
+
+## Correction F-47 — coherent native flow interaction
+
+Connection UX is rejected pending a source-backed library/reference decision and actual direct interaction. Review drag from a visible handle to a valid target, live preview/target affordance, release as one guarded operation, Escape/focus-loss/outside-target cancellation, endpoint drag to reconnect the same stable edge, direct edge selection and label editing. Embedded card input/media controls and camera gestures must own their events without accidental graph changes. Menu/property reachability and route screenshots alone do not pass.
+
+Compare the chosen native substrate with React Flow and the complete B01–B26 contract; record reused parts, missing behavior and maintenance responsibility. A library demo, popularity or recent commit date is not qualification. Preserve the existing model/persistence boundaries and exact-source hosted/native/independent gates. F-47 supersedes any implied acceptance of the current two-click/menu-first connection interaction.
+
+## F-48/F-49 — separate engine and scoped alpha.3 acceptance
+
+CraftCanvas has a source-backed standalone roadmap and an independent production gate. Its WriterCraft-ready handoff permits exact-qualified integration, not automatic B01–B26 acceptance. A separately authorized app agent may deliver a named non-Canvas alpha.3 workflow checkpoint before that handoff. Review the actual completed character/screenwriting task and unblocked fixes selected by that release; retain pending full Canvas/full-product coverage. Do not label a subset `full-editor-parity` or infer natural connection UX acceptance from retained scripted lifecycle captures.

@@ -27,7 +27,7 @@ Authors SHALL select existing board connections, edit Unicode labels, cancel uns
 
 ### Requirement: Source-compatible connection endpoints
 
-Connection creation SHALL expose the four side anchors of each connectable card. Authors SHALL be able to reconnect either end of an existing connection through a guarded native editor. An operation SHALL capture the exact prior node and optional side; changing one end SHALL preserve the connection identity, other end, label, colors, relation metadata and unknown fields. Same-card connections between different explicit side handles SHALL remain authorable. Cancelled and stale edits SHALL NOT mutate canonical content.
+Connection creation SHALL expose four side anchors and support distinct-side same-card loops. Reconnecting either end SHALL capture its exact prior node and optional side and preserve the edge identity, other end and unrelated data. Cancelled or stale operations SHALL NOT mutate canonical content.
 
 #### Scenario: Connect and reconnect explicit side handles
 - WHEN an author connects two chosen side handles, edits one endpoint, saves and uses Undo/Redo
@@ -36,6 +36,22 @@ Connection creation SHALL expose the four side anchors of each connectable card.
 #### Scenario: Same-card loop and stale endpoint
 - WHEN an author connects different handles of one card or edits an endpoint after its captured base is replaced
 - THEN the distinct-handle loop is valid, while the stale edit refuses without losing the copyable draft
+
+#### Scenario: Preserve unrelated connection data
+- WHEN an author changes one endpoint without editing its label or metadata
+- THEN the original label bytes, colors, relation metadata, unknown fields and opposite endpoint remain unchanged
+
+### Requirement: Direct connection gestures
+
+Primary connection creation and reconnection SHALL use handle and endpoint dragging with visible valid-target feedback. Release on a valid target SHALL request one guarded operation. Cancellation or an unchanged endpoint SHALL retain the original edge without a new revision. Secondary properties controls SHALL NOT replace these gestures.
+
+#### Scenario: Cancel a reconnect
+- WHEN an author drags an existing endpoint then presses Escape, loses focus or releases outside a valid target
+- THEN the original edge remains unchanged and the consumed gesture cannot create a card or activate a label
+
+#### Scenario: Embedded control owns input
+- WHEN a text, IME, media or overlay control owns an input sequence
+- THEN no connection gesture starts from or consumes that input
 
 ### Requirement: Reachable connection interaction and visual semantics
 

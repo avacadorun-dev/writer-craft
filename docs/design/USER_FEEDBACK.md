@@ -223,3 +223,34 @@ The user additionally reaffirmed that Canvas must be completed. #17 remains the 
 ### F-46 interaction clarification
 
 2026-11-09: the user found the existing Edit block command and confirmed that the main problem is its distant, undiscoverable location. Keep the main toolbar compact. Use double-click on an existing rendered formula or Mermaid diagram as the primary editing gesture, retaining single-click selection; provide Edit in the object context menu with a keyboard-accessible equivalent. Do not add a permanent row of block commands. This refines the earlier selected-block action requirement; it does not establish native acceptance of the proposed interaction.
+
+
+## F-47 — reject improvised connection UX; evaluate native React Flow behavior
+
+2026-11-09: exploration of the running preview68db76e found the connection interaction unacceptable. React Flow is the explicit interaction reference. Further menu/two-click mechanics and improved line geometry alone do not resolve this correction. Evaluate existing native Rust graph libraries first; if none fits, consider a deliberate native implementation of React Flow behavior in the separately maintained CraftCanvas engine. The user subsequently identified `avinkrisv/egui-xyflow` as a useful visual/technical reference while questioning maintenance activity and missing required capabilities; it is not an approved drop-in dependency or proof of complete Canvas parity.
+
+Keep #17 active. Compare actual candidate source against B01–B26 and the existing durable authority/embedded-input contracts, rather than asking for the requirements again or replacing them with a node-editor demonstration. Primary creation and reconnection must work directly by dragging handles/endpoints with clear target feedback and cancellation. Selection, labels, keyboard actions, camera behavior and embedded text/media controls must form a coherent native interaction. Secondary properties menus remain useful but cannot substitute for these primary gestures.
+
+Preserve current source, prepared drafts and exact verification history, including data-safety fixes, without treating them as independent UX acceptance. Native Rust, canonical JSON/IDs, unknown fields, media and history remain required. The running user preview stays untouched. Fresh independent compiled interaction review against this correction is required before accepting the connection workflow.
+
+### F-47 delivery clarification
+
+2026-11-09: waiting weeks for an upstream maintainer is unacceptable for this project. Upstream research informs implementation; delivery and fixes must remain under CraftCanvas maintenance. Do not make the schedule conditional on egui-xyflow releases or imply that upstream activity establishes readiness.
+
+## F-48 — production CraftCanvas and complete React Flow parity first
+
+2026-11-09: explicitly set other product work aside and focus on CraftCanvas as a standalone production-quality native Rust library with functional React Flow parity. Use that qualified library in WriterCraft to deliver complete original Writers Studio Canvas parity. This supersedes the immediate app connection-slice priority, not the retained B01–B26 scope or data-preservation contracts. Preserve unfinished work, existing public releases and the running preview.
+
+Prepare a source-backed full capability inventory, native equivalents, architecture and concrete acceptance before freezing a narrow interaction API. React component syntax and browser plumbing need native equivalents; their observable capabilities cannot disappear by categorization. Keep core functionality and official example/integration patterns visible with explicit dispositions. Generic library readiness and actual WriterCraft journeys are separate required outcomes; neither a node demo nor a polished connector establishes either outcome.
+
+CraftCanvas owns its maintenance and delivery. Reuse qualified open-source work with attribution when suitable, without waiting on another project's roadmap. Retain guarded canonical authority, stable identities, unknown data, original media, exact input ownership and recoverable history. Independently review inventory completeness and exact compiled interactions. The next app integration adopts only a hosted-qualified engine revision; no current production/full-parity claim is made.
+
+### F-48 roadmap and independent-library distribution
+
+The same instruction subsequently requests a published, strictly ordered issue roadmap with a first checkpoint covering current WriterCraft needs and the remaining full React Flow goal afterward. Close each library issue only for its verified scope. Expand the standalone README and repository description; prepare meaningful Cargo packages and a release/publication process with truthful prerelease status. Package registration is not production acceptance.
+
+## F-49 — independent non-Canvas alpha.3 delivery
+
+2026-11-09: prepare a handoff for another agent to assemble alpha.3 from the existing implementation, defer full Canvas, and complete a concrete user scenario such as character/profile and screenwriting work plus another unblocked issue. The Canvas agent continues standalone CraftCanvas; the WriterCraft agent resumes Canvas integration only after a qualified engine handoff.
+
+This explicitly supersedes the requirement that full Canvas or full-product parity block alpha.3. It does not close #17/#4, remove B01–B26, accept the rejected connection UX or authorize misleading parity claims. Define a named bounded engineering-release scope, complete its chosen end-to-end native workflow, and retain full parity inventories/gates for the later integration. Existing preview, alpha.1/alpha.2, private data and unfinished work remain protected. Parallel engine and app workstreams are now authorized, each with one active issue and separate file ownership.

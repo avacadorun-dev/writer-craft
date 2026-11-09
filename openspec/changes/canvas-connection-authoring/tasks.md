@@ -1,5 +1,7 @@
 # Issue #17 bounded connection slice
 
+Parked for the standalone CraftCanvas production roadmap under F-48. The latest instruction allows a separate WriterCraft agent to deliver a bounded non-Canvas alpha.3. No checkbox below establishes F-47 acceptance; resume integration only with an exact qualified engine handoff.
+
 - [x] Reconcile retained input corrections and add regression coverage for toolbar/outside/drag/topmost routing defects.
 - [x] Add reachable connection selection, Unicode label editing/cancel/delete and noncanonical preview on the existing qualified engine.
 - [ ] Run existing hosted formatting, tests and strict Clippy on the exact committed source.

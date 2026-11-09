@@ -1,5 +1,13 @@
 # Active release: 0.1.0-alpha.3
 
+## Latest authorized boundary — 2026-11-09 (F-49)
+
+Release a coherent engineering alpha.3 from the existing implementation plus a completed non-Canvas character/screenwriting workflow and other verified unblocked fixes. Full Canvas is deferred while a separate agent develops production CraftCanvas. The [handoff](../verification/ALPHA3_NON_CANVAS_HANDOFF.md) and [current release map override](ALPHA3_RELEASE_MAP.md) supersede the historical all-parity requirements below as release prerequisites, while preserving them as eventual product obligations.
+
+The release agent must specify the actual bounded scope and its independent exact-candidate gate, retain truthful limitations and keep full-parity coverage pending. Do not close broad unfinished issues or relabel a partial gate `full-editor-parity`. Native installers, checks, source/build identity, data preservation and completed user scenarios remain required. Published alpha.1/alpha.2 and the running preview are unchanged.
+
+## Historical full-parity alpha.3 boundary (superseded as release prerequisite)
+
 **Owner authorization, 2026-11-08:** alpha.2 was tested and confirmed functional on macOS. Close issues fully satisfied by that release and implement the remaining source-backed scope for alpha.3. Installer issue #3 is completed; issues #2, #4, #6–#12 remain under their precise acceptance criteria. New #14 adds researched project profiles, connected board/document/character/lore scenarios and direct object sizing with backward-compatible Studio migration. Issue #15 restores direct in-card writing and its complete input/save/cancellation lifecycle. Published alpha.1/alpha.2 are immutable.
 
 ## Execution and acceptance

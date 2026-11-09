@@ -2,6 +2,18 @@
 
 Owner-approved 2026-11-09. This is the single authoritative sequence for closing milestone `0.1.0-alpha.3` (issues #2, #4, #6, #7, #8, #9, #10, #11, #12, #14, #15, #17). It refines the queue in `ALPHA3_DELIVERY.md` with an explicit, non-contradictory order so no issue starves and no issue is closed before its complete criteria.
 
+## Current priority override — production CraftCanvas (F-48)
+
+The explicit 2026-11-09 instruction sets other product implementation aside: first bring the standalone CraftCanvas library to production readiness with complete functional React Flow parity, then integrate it to complete original Studio Canvas B01–B26 in #17. The library plan and source inventory live in `craft-canvas/docs/PRODUCTION_PLAN.md` and `craft-canvas/docs/REACT_FLOW_PARITY.md`. CraftCanvas owns its maintenance; upstream fixes/releases are not a delivery dependency.
+
+This is an authorized foundation-first dependency of P7, not closure or abandonment of #17. Exact engine qualification precedes app adoption; actual WriterCraft acceptance remains required after library qualification. Preserved #10 tests, research and capture drafts stay separate.
+
+## Latest release override — independent non-Canvas alpha.3 (F-49)
+
+The subsequent explicit instruction authorizes another agent to complete a coherent character/screenwriting user scenario and other unblocked work, then ship the current implementation as a bounded alpha.3 without waiting for full Canvas. See [the execution handoff](../verification/ALPHA3_NON_CANVAS_HANDOFF.md). This supersedes the old all-parity alpha.3 release boundary and the prohibition on advancing past #17; it does not waive unfinished issue criteria or close #17/#4.
+
+Two separate workstreams are authorized: CraftCanvas follows its own sequential issues; the WriterCraft agent owns application integration and release with one active app issue at a time. The historical P0–P11 inventory below remains required eventual parity, not the new alpha.3 release checklist. Choose and document a named bounded alpha.3 scope/gate with exact native evidence; do not mark `full-editor-parity` accepted to release a subset. Resume Canvas integration only after the engine handoff. Preserve alpha.1/alpha.2 and the running preview.
+
 ## Standing rules
 
 - **Owner decision 2026-11-09 — lean verification:** stop building exhaustive new test matrices. Verify each issue with the existing hosted checks, targeted real/native checks and quick compiled inspection; record honest evidence and remaining gaps in the issue. Defects found later are handled as separate issues (owner-filed), not as release blockers. Deep engine/app test suites are added only when a real defect needs a regression.
@@ -48,6 +60,8 @@ Closed 2026-11-09 under lean verification: all block commands reachable in the g
 Inventory B01–B26. Builds on the qualified #15 input engine but requires its own exact native evidence and independent omission review of the inventory. #15 or #10 completion does not accept #17.
 
 Current bounded progress (2026-11-09): input routing and compiled Canvas inline/cancel/clipped captures pass at68ddfd8; connection selection/label/delete integration6832125 is under hosted/native review. Endpoint/anchor/marker behavior and the remaining B01–B26 scope are still pending. See the latest alpha.3 progress record; this is not issue acceptance.
+
+F-47 correction: the current connection UX is explicitly rejected. #17 stays active while native graph-library/reference suitability is reconciled against React Flow interaction and B01–B26. No current connection slice is accepted merely from source/tests/geometry. Preserve useful implementation and data-safety work; update primary drag/reconnect behavior before reacceptance.
 
 ### P8 — #11 portable exports with assets
 
