@@ -3167,15 +3167,23 @@ mod tests {
 
     #[test]
     fn pointer_on_note_text_quote_or_preview_chip_activates_the_exact_note() -> TestResult {
-        fn painted_text_center(shape: &egui::epaint::Shape, text: &str) -> Option<egui::Pos2> {
+        fn collect_painted_text(
+            shape: &egui::epaint::Shape,
+            texts: &mut Vec<(String, egui::Pos2)>,
+        ) {
             match shape {
-                egui::epaint::Shape::Text(shape) if shape.galley.job.text == text => {
-                    Some(shape.visual_bounding_rect().center())
+                egui::epaint::Shape::Text(shape) => {
+                    texts.push((
+                        shape.galley.job.text.clone(),
+                        shape.visual_bounding_rect().center(),
+                    ));
                 }
-                egui::epaint::Shape::Vec(shapes) => shapes
-                    .iter()
-                    .find_map(|shape| painted_text_center(shape, text)),
-                _ => None,
+                egui::epaint::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect_painted_text(shape, texts);
+                    }
+                }
+                _ => {}
             }
         }
         fn frame(
@@ -3199,18 +3207,30 @@ mod tests {
                 },
                 |root| {
                     egui::CentralPanel::default().show(root, |ui| {
-                        ui.set_max_width(340.0);
-                        ui.style_mut().interaction.selectable_labels = true;
-                        clicked |= note_row(
-                            ui,
-                            note,
-                            "echo",
-                            app.notes.selected.as_deref() == Some(note.id.as_str()),
-                            app.notes.labels.catalog.as_ref(),
-                            Language::English,
-                            theme::tokens(ctx),
-                        )
-                        .clicked();
+                        // CentralPanel has already expanded its minimum width to the viewport;
+                        // set_max_width cannot shrink it. A child models the actual bounded pane.
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(340.0, 72.0),
+                            Layout::top_down(Align::Min),
+                            |ui| {
+                                ui.style_mut().interaction.selectable_labels = true;
+                                let row = note_row(
+                                    ui,
+                                    note,
+                                    "echo",
+                                    app.notes.selected.as_deref() == Some(note.id.as_str()),
+                                    app.notes.labels.catalog.as_ref(),
+                                    Language::English,
+                                    theme::tokens(ctx),
+                                );
+                                assert!(
+                                    (row.rect.width() - 340.0).abs() < 0.1,
+                                    "The row must use the inspector width, got {:?}",
+                                    row.rect
+                                );
+                                clicked |= row.clicked();
+                            },
+                        );
                     });
                 },
             );
@@ -3233,7 +3253,12 @@ mod tests {
             ]),
         )?;
         fixture.app.refresh_notes()?;
-        for target in [note.note.as_str(), "echo", "Motivation", "+2"] {
+        for (name, target) in [
+            ("authored note", note.note.as_str()),
+            ("source quote", "echo"),
+            ("label chip", "Motivation"),
+            ("label overflow", "+2"),
+        ] {
             let ctx = egui::Context::default();
             fixture.app.notes.selected = None;
             let rich = fixture.app.rich.as_mut().ok_or("missing rich session")?;
@@ -3248,12 +3273,20 @@ mod tests {
                 },
             };
             rich.session.set_selection(caret.clone())?;
-            let output = frame(&ctx, &mut fixture.app, &note, vec![], 0.0)?;
-            let point = output
-                .shapes
+            frame(&ctx, &mut fixture.app, &note, vec![], 0.0)?;
+            let output = frame(&ctx, &mut fixture.app, &note, vec![], 0.05)?;
+            let mut painted = Vec::new();
+            for shape in &output.shapes {
+                collect_painted_text(&shape.shape, &mut painted);
+            }
+            let point = painted
                 .iter()
-                .find_map(|shape| painted_text_center(&shape.shape, target))
-                .ok_or("missing painted click target")?;
+                .find_map(|(text, center)| (text == target).then_some(*center))
+                .ok_or_else(|| {
+                    format!(
+                        "Missing painted {name} target {target:?}; observed text/centers: {painted:?}"
+                    )
+                })?;
             frame(
                 &ctx,
                 &mut fixture.app,
