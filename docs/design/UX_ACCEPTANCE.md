@@ -148,3 +148,10 @@ Every accepted record names the exact source/lock/contract fingerprint, independ
 Reviewed Markdown evidence begins with a `writercraft-evidence` HTML-comment JSON receipt declaring `source_fingerprint`, `build_ref`, `platform` and explicit `observations` with `kind`/`id` (and all `paths` for a journey). The validator checks the report's own candidate and observation claims, not only a hash copied onto a coverage row. The remainder records the actual steps/results, test/build URLs and limitations. A report can cover multiple IDs only by explicitly listing and substantiating them; this is not permission to fabricate observations.
 
 The current contract declares only `full-editor-parity`. Requesting `full-parity` fails until an expanded full-product catalog and its independent coverage are authored; changing the label to1.0 cannot reuse the narrower alpha.3 inventory.
+
+
+## Correction F-46 — existing-block editing and image reduction
+
+The earlier #7 insertion/model evidence does not qualify discoverable re-editing of existing rendered blocks. Independently exercise an existing Mermaid block and block/inline formula in the exact compiled candidate: double-click opens the captured current source, a visible selected-block Edit action and keyboard path reach the same guarded editor, Apply rerenders, Cancel/Escape changes nothing, Undo/Redo and save/reopen preserve identity and surrounding prose. Verify stale/failed edits preserve the draft. Do not accept only a toolbar-source reading or insert-dialog screenshot.
+
+For selected #14 sizing, make an already inserted image visibly smaller, retain aspect ratio when locked, Undo/Redo and reopen, and compare original asset bytes and stored dimensions. Workspace zoom alone fails this scenario. Canvas B01–B26 and its independent review remain mandatory and active under #17.
