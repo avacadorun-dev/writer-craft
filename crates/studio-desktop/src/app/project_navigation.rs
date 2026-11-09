@@ -1,4 +1,5 @@
 //! Presentation-only imported hierarchy; canonical structure stays in shared core storage.
+use super::project_tree::TreeAction;
 use super::*;
 use std::collections::{HashMap, HashSet};
 use studio_core::ProjectTreeNode;
@@ -12,6 +13,7 @@ struct OutlineNode {
     ordinal: u64,
     parent: Option<usize>,
     children: Vec<usize>,
+    mapped: bool,
 }
 
 #[derive(Default)]
@@ -38,14 +40,29 @@ impl ProjectOutline {
         };
         let mut by_id = HashMap::new();
         let mut parents = Vec::new();
+        let mut hidden = HashSet::new();
+        let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+        let mut pending = Vec::new();
+        for item in source {
+            if super::project_tree::trashed(item) {
+                pending.push(item.logical_id.as_str());
+            }
+            if let Some(parent) = item.metadata["parentId"].as_str() {
+                children.entry(parent).or_default().push(&item.logical_id);
+            }
+        }
+        while let Some(id) = pending.pop() {
+            if hidden.insert(id)
+                && let Some(descendants) = children.get(id)
+            {
+                pending.extend(descendants.iter().copied());
+            }
+        }
         for item in source {
             if let Some(document) = &item.document_id {
                 outline.mapped_documents.insert(document.clone());
             }
-            if item.metadata["trashedAt"]
-                .as_str()
-                .is_some_and(|s| !s.is_empty())
-            {
+            if hidden.contains(item.logical_id.as_str()) {
                 continue;
             }
             let index = outline.nodes.len();
@@ -76,6 +93,7 @@ impl ProjectOutline {
                 ordinal: item.ordinal,
                 parent: None,
                 children: Vec::new(),
+                mapped: true,
             });
             if let Some(document) = &item.document_id {
                 outline.document_rows.insert(document.clone(), index);
@@ -124,6 +142,40 @@ impl ProjectOutline {
         Ok(outline)
     }
 
+    pub(super) fn refresh(&mut self, project: &str, source: &[ProjectTreeNode]) -> AppResult<()> {
+        let collapsed: HashSet<_> = self
+            .collapsed
+            .iter()
+            .map(|&index| self.nodes[index].logical_id.clone())
+            .collect();
+        let search_collapsed: HashSet<_> = self
+            .search_collapsed
+            .iter()
+            .map(|&index| self.nodes[index].logical_id.clone())
+            .collect();
+        let mut next = Self::prepare(project, source)?;
+        if self.project_id == project {
+            next.collapsed = next
+                .nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| collapsed.contains(&node.logical_id).then_some(index))
+                .collect();
+            next.search_collapsed = next
+                .nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| {
+                    search_collapsed.contains(&node.logical_id).then_some(index)
+                })
+                .collect();
+            next.query.clone_from(&self.query);
+            next.selected_document.clone_from(&self.selected_document);
+        }
+        *self = next;
+        Ok(())
+    }
+
     fn synchronize(&mut self, documents: &[Document], selected: Option<&str>, query: &str) {
         for document in documents
             .iter()
@@ -145,6 +197,7 @@ impl ProjectOutline {
                     ordinal: 0,
                     parent: None,
                     children: Vec::new(),
+                    mapped: false,
                 });
                 self.order.push((index, 0));
                 self.document_rows.insert(document.id.clone(), index);
@@ -236,10 +289,11 @@ impl ProjectOutline {
         ui: &mut egui::Ui,
         documents: &[Document],
         selected: Option<&str>,
+        selected_node: Option<&str>,
         query: &str,
         language: Language,
         t: Tokens,
-    ) -> Option<String> {
+    ) -> Option<TreeAction> {
         self.synchronize(documents, selected, query);
         let mut chosen = None;
         let mut toggle = None;
@@ -252,7 +306,7 @@ impl ProjectOutline {
         egui::ScrollArea::vertical()
             .id_salt(("project-hierarchy", &self.project_id))
             .auto_shrink([false, false])
-            .max_height((ui.available_height() - 90.0).max(80.0))
+            .max_height((ui.available_height() - 140.0).max(80.0))
             .show_rows(ui, 44.0, count, |ui, range| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for ordinal in range {
@@ -314,21 +368,43 @@ impl ProjectOutline {
                                 }
                                 response.on_hover_text(label);
                             }
-                            let active = node
-                                .document_id
-                                .as_deref()
-                                .is_some_and(|id| Some(id) == selected);
-                            let response = nav_row(
-                                ui,
-                                if node.document_id.is_some() {
-                                    Icon::Document
-                                } else {
-                                    Icon::Folder
-                                },
-                                &node.title,
-                                active,
-                                t,
-                            );
+                            let active = selected_node == Some(node.logical_id.as_str())
+                                || (selected_node.is_none()
+                                    && node
+                                        .document_id
+                                        .as_deref()
+                                        .is_some_and(|id| Some(id) == selected));
+                            let response = ui
+                                .allocate_ui_with_layout(
+                                    egui::vec2((ui.available_width() - 32.0).max(40.0), 44.0),
+                                    Layout::left_to_right(Align::Center),
+                                    |ui| {
+                                        nav_row(
+                                            ui,
+                                            if node.document_id.is_some() {
+                                                Icon::Document
+                                            } else {
+                                                Icon::Folder
+                                            },
+                                            &node.title,
+                                            active,
+                                            t,
+                                        )
+                                    },
+                                )
+                                .inner;
+                            response.context_menu(|ui| {
+                                if let Some(action) = item_menu(ui, node, language) {
+                                    chosen = Some(action);
+                                }
+                            });
+                            let more =
+                                icons::icon_button(ui, Icon::More, language.text("Item actions"));
+                            egui::Popup::menu(&more).show(|ui| {
+                                if let Some(action) = item_menu(ui, node, language) {
+                                    chosen = Some(action);
+                                }
+                            });
                             #[cfg(feature = "editor-preview")]
                             if let Some(document) = &node.document_id
                                 && super::capture_connected_writing::enabled(ui.ctx())
@@ -355,11 +431,23 @@ impl ProjectOutline {
                                 toggle = Some(index);
                             }
                             if response.clicked() {
-                                if let Some(document) = &node.document_id {
-                                    chosen = Some(document.clone());
-                                } else if !node.children.is_empty() {
-                                    toggle = Some(index);
-                                }
+                                chosen = Some(if node.mapped {
+                                    TreeAction::Open(node.logical_id.clone())
+                                } else {
+                                    TreeAction::OpenDocument(node.logical_id.clone(), false)
+                                });
+                            }
+                            if node.mapped
+                                && response.has_focus()
+                                && ui.input(|input| input.key_pressed(egui::Key::F2))
+                            {
+                                chosen = Some(TreeAction::Rename(node.logical_id.clone()));
+                            }
+                            if node.mapped
+                                && response.has_focus()
+                                && ui.input(|input| input.key_pressed(egui::Key::Delete))
+                            {
+                                chosen = Some(TreeAction::Trash(node.logical_id.clone()));
                             }
                             let response = if node.document_id.is_none() && node.children.is_empty()
                             {
@@ -398,6 +486,48 @@ impl ProjectOutline {
         }
         chosen
     }
+}
+
+fn item_menu(ui: &mut egui::Ui, node: &OutlineNode, l: Language) -> Option<TreeAction> {
+    let mut chosen = None;
+    if ui.button(l.text("Open")).clicked() {
+        chosen = Some(if node.mapped {
+            TreeAction::Open(node.logical_id.clone())
+        } else {
+            TreeAction::OpenDocument(node.logical_id.clone(), false)
+        });
+    }
+    if node.document_id.is_some() && ui.button(l.text("Consult and return")).clicked() {
+        chosen = Some(if node.mapped {
+            TreeAction::Reference(node.logical_id.clone())
+        } else {
+            TreeAction::OpenDocument(node.logical_id.clone(), true)
+        });
+    }
+    if !node.mapped {
+        ui.label(l.text("Open this retained document to edit its text or title. Its tree placement is not yet mapped."));
+        if chosen.is_some() {
+            ui.close();
+        }
+        return chosen;
+    }
+    if ui.button(l.text("Add inside…")).clicked() {
+        chosen = Some(TreeAction::Create(Some(node.logical_id.clone())));
+    }
+    ui.separator();
+    if ui.button(l.text("Rename…")).clicked() {
+        chosen = Some(TreeAction::Rename(node.logical_id.clone()));
+    }
+    if ui.button(l.text("Move or reorder…")).clicked() {
+        chosen = Some(TreeAction::Move(node.logical_id.clone()));
+    }
+    if ui.button(l.text("Move to Trash")).clicked() {
+        chosen = Some(TreeAction::Trash(node.logical_id.clone()));
+    }
+    if chosen.is_some() {
+        ui.close();
+    }
+    chosen
 }
 
 #[cfg(test)]
@@ -473,20 +603,22 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn trashed_mappings_never_leak_through_native_fallback_and_active_orphans_remain_visible()
+    fn trashed_branches_never_leak_through_native_fallback_and_missing_parent_orphans_remain_visible()
     -> TestResult {
         let source = vec![
             node("trashed", None, 0.0, Some("trashed-doc"), true),
             node("child", Some("trashed"), 1.0, Some("child-doc"), false),
+            node("orphan", Some("missing"), 2.0, Some("orphan-doc"), false),
         ];
         let mut outline = ProjectOutline::prepare("project", &source)?;
         let documents = [
             document("trashed-doc", "Hidden"),
             document("child-doc", "Child"),
+            document("orphan-doc", "Orphan"),
             document("new-doc", "New native"),
         ];
         outline.synchronize(&documents, None, "");
-        assert_eq!(labels(&outline), vec!["Child", "New native"]);
+        assert_eq!(labels(&outline), vec!["Orphan", "New native"]);
         assert_eq!(outline.visible[0].1, 0);
         outline.synchronize(&documents, None, "");
         assert_eq!(outline.visible.len(), 2);

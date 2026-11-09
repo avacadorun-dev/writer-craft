@@ -90,6 +90,7 @@ impl StudioApp {
                                 let result = (|| -> AppResult<()> {
                                     self.documents =
                                         self.workspace.list_documents(&document.project_id)?;
+                                    self.refresh_project_tree()?;
                                     self.open_document(document)
                                 })();
                                 self.record_error(result);
@@ -156,23 +157,41 @@ impl StudioApp {
                 "Choose a project before creating a manuscript".into(),
             )
         })?;
-        self.create_empty_manuscript(&project.id, self.document_name.trim())
-    }
-
-    fn create_empty_manuscript(&self, project_id: &str, title: &str) -> AppResult<Document> {
-        #[cfg(feature = "editor-preview")]
-        {
-            let content =
-                craft_editor_model::Document::plain(uuid::Uuid::new_v4().to_string(), "")?
-                    .to_json()?;
-            Ok(self
-                .workspace
-                .create_rich_document(project_id, title, content)?)
-        }
-        #[cfg(not(feature = "editor-preview"))]
-        {
-            Ok(self.workspace.create_document(project_id, title, "")?)
-        }
+        let project_id = project.id.clone();
+        self.workspace.initialize_project_tree(&project_id)?;
+        let structure = self.workspace.project_structure(&project_id)?;
+        let kind = structure.schema["nodeTypes"]
+            .as_array()
+            .and_then(|types| {
+                types.iter().find(|kind| {
+                    kind["canBeRoot"].as_bool() == Some(true)
+                        && kind["contentBearing"].as_bool() == Some(true)
+                })
+            })
+            .and_then(|kind| kind["key"].as_str())
+            .ok_or("project_has_no_root_manuscript_type")?;
+        let format = if cfg!(feature = "editor-preview") {
+            studio_core::InitialManuscript::Structured
+        } else {
+            studio_core::InitialManuscript::Plain
+        };
+        let node = self.workspace.create_project_tree_node_with_format(
+            &project_id,
+            structure.revision,
+            None,
+            kind,
+            self.document_name.trim(),
+            format,
+        )?;
+        // Creation has committed. Close the form before any fallible view acquisition so a
+        // refresh failure cannot invite a second creation of the same authored item.
+        self.document_dialog = false;
+        self.document_name.clear();
+        Ok(self.workspace.document(
+            node.document_id
+                .as_deref()
+                .ok_or("created_manuscript_missing")?,
+        )?)
     }
 }
 

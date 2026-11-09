@@ -253,10 +253,17 @@ impl StudioApp {
             .cloned()
             .ok_or("missing_recovery_project")?;
         let documents = self.workspace.list_documents(&project.id)?;
-        let outline = super::project_navigation::ProjectOutline::prepare(
-            &project.id,
-            &self.workspace.project_tree(&project.id)?,
-        )?;
+        let nodes = self.workspace.initialize_project_tree(&project.id)?;
+        if !super::project_tree::document_is_active(&nodes, &document.id) {
+            return Err(super::project_tree::TrashedDocument.into());
+        }
+        let outline = super::project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
+        let mut tree_ui = super::project_tree::TreeUi::with_nodes(nodes);
+        tree_ui.selected = tree_ui
+            .nodes
+            .iter()
+            .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            .map(|node| node.logical_id.clone());
         let proposals = self.workspace.proposals(&document.id)?;
         let mut rich = RichState::open_saved_read_only(&document)?;
         rich.session.set_clipboard_provider(self.clipboard.clone());
@@ -273,6 +280,7 @@ impl StudioApp {
         self.project = Some(project);
         self.documents = documents;
         self.project_outline = outline;
+        self.tree_ui = tree_ui;
         self.proposals = proposals;
         self.dirty = None;
         self.autosave_paused = false;

@@ -18,6 +18,7 @@ use studio_core::{
 struct NoteDraft {
     original: PassageAnnotation,
     body: String,
+    tags: String,
 }
 struct NoteComposer {
     id: String,
@@ -25,7 +26,45 @@ struct NoteComposer {
     base_revision: i64,
     anchor: AnnotationAnchor,
     body: String,
+    tags: String,
     focus: bool,
+    dismissed: bool,
+}
+impl NoteDraft {
+    fn changed(&self) -> bool {
+        self.body.trim() != self.original.note.trim() || self.tags != self.original.tags.join("\n")
+    }
+}
+impl NoteComposer {
+    fn has_content(&self) -> bool {
+        !self.body.trim().is_empty() || !self.tags.trim().is_empty()
+    }
+}
+
+struct ProjectMarksBrowser {
+    project_id: String,
+    records: Vec<studio_core::ProjectAnnotationSummary>,
+    available_tags: Vec<String>,
+    visible: Vec<usize>,
+    filter_key: Option<(String, Option<String>, bool)>,
+    paths: HashMap<String, String>,
+    trashed: std::collections::HashSet<String>,
+    query: String,
+    tag: Option<String>,
+    deleted: bool,
+    open: bool,
+    tag_action: Option<TagAction>,
+}
+struct TagAction {
+    snapshot: studio_core::ProjectTagSnapshot,
+    replacement: String,
+    remove: bool,
+    focus: bool,
+    pending_drafts: Vec<(String, String)>,
+}
+enum ProjectMarkupAction {
+    Open,
+    Restore,
 }
 
 #[derive(Default)]
@@ -45,6 +84,7 @@ pub(super) struct NotesState {
     reveal_row: bool,
     last_error: Option<Box<dyn std::error::Error + Send + Sync>>,
     reported_error_epoch: Option<u64>,
+    project_browser: Option<ProjectMarksBrowser>,
 }
 impl NotesState {
     pub(super) fn clear(&mut self) {
@@ -53,41 +93,42 @@ impl NotesState {
             paused_composers.insert(composer.document_id.clone(), composer);
         }
         let mut drafts = std::mem::take(&mut self.drafts);
-        drafts.retain(|_, draft| draft.body.trim() != draft.original.note.trim());
+        drafts.retain(|_, draft| draft.changed());
         *self = Self {
             drafts,
             paused_composers,
+            project_browser: self.project_browser.take(),
             ..Self::default()
         };
     }
     pub(super) fn modal_open(&self) -> bool {
-        self.composer.is_some() || self.delete_confirmation.is_some() || self.close_confirmation
+        self.composer.is_some()
+            || self.delete_confirmation.is_some()
+            || self.close_confirmation
+            || self
+                .project_browser
+                .as_ref()
+                .is_some_and(|browser| browser.open)
     }
     pub(super) fn has_unsaved_drafts(&self) -> bool {
-        self.drafts
-            .values()
-            .any(|draft| draft.body.trim() != draft.original.note.trim())
+        self.drafts.values().any(|draft| draft.changed())
             || self
                 .composer
                 .as_ref()
-                .is_some_and(|composer| !composer.body.trim().is_empty())
+                .is_some_and(|composer| composer.has_content())
             || self
                 .paused_composers
                 .values()
-                .any(|composer| !composer.body.trim().is_empty())
+                .any(|composer| composer.has_content())
     }
     /// Return only document identities, never note bodies, for an explicit save/review prerequisite.
     pub(super) fn pending_documents(&self) -> Vec<String> {
         let mut documents = std::collections::BTreeSet::new();
-        for draft in self
-            .drafts
-            .values()
-            .filter(|draft| draft.body.trim() != draft.original.note.trim())
-        {
+        for draft in self.drafts.values().filter(|draft| draft.changed()) {
             documents.insert(draft.original.document_id.clone());
         }
         for composer in self.composer.iter().chain(self.paused_composers.values()) {
-            if !composer.body.trim().is_empty() {
+            if composer.has_content() {
                 documents.insert(composer.document_id.clone());
             }
         }
@@ -95,13 +136,17 @@ impl NotesState {
     }
 
     pub(super) fn select_pending_draft(&mut self, document_id: &str) {
+        if self.composer.is_none()
+            && let Some(mut composer) = self.paused_composers.remove(document_id)
+        {
+            composer.dismissed = false;
+            composer.focus = true;
+            self.composer = Some(composer);
+        }
         self.selected = self
             .drafts
             .iter()
-            .find(|(_, draft)| {
-                draft.original.document_id == document_id
-                    && draft.body.trim() != draft.original.note.trim()
-            })
+            .find(|(_, draft)| draft.original.document_id == document_id && draft.changed())
             .map(|(id, _)| id.clone());
         self.reveal_row = self.selected.is_some();
     }
@@ -170,8 +215,27 @@ impl NotesState {
                 return Err(error.into());
             }
         };
-        if self.composer.is_none() {
+        if self.composer.is_none()
+            && self
+                .paused_composers
+                .get(&document.id)
+                .is_some_and(|composer| !composer.dismissed)
+        {
             self.composer = self.paused_composers.remove(&document.id);
+        }
+        self.drafts.retain(|id, draft| {
+            draft.original.document_id != document.id
+                || draft.changed()
+                || snapshot.stored_notes().iter().any(|note| &note.id == id)
+        });
+        for note in snapshot.stored_notes() {
+            if let Some(draft) = self.drafts.get_mut(&note.id)
+                && !draft.changed()
+            {
+                draft.original = note.clone();
+                draft.body.clone_from(&note.note);
+                draft.tags = note.tags.join("\n");
+            }
         }
         // A guarded local canonical save advances every note once. Rebase the
         // editor's metadata guard only when authored fields stayed identical.
@@ -181,6 +245,7 @@ impl NotesState {
                 if let Some(draft) = self.drafts.get_mut(&note.id)
                     && draft.original.revision.checked_add(1) == Some(note.revision)
                     && draft.original.note == note.note
+                    && draft.original.tags == note.tags
                     && draft.original.status == note.status
                 {
                     draft.original = note.clone();
@@ -219,6 +284,7 @@ impl NotesState {
     fn acknowledge(&mut self, note: &PassageAnnotation) {
         if let Some(draft) = self.drafts.get_mut(&note.id)
             && draft.original.note == note.note
+            && draft.original.tags == note.tags
         {
             draft.original = note.clone();
         }
@@ -293,9 +359,10 @@ impl DecorationSource for NotesFrame<'_> {
                     range: selection_for(note, document)
                         .map_err(|_| craft_editor_egui::Error::InvalidDecoration)?,
                     color: self.tokens.warning,
-                    label: self
-                        .language
-                        .format("Author note: {note}", &[("note", excerpt(&note.note, 240))]),
+                    label: self.language.format(
+                        "Passage markup: {markup}",
+                        &[("markup", markup_summary(note, 240))],
+                    ),
                 })
             })
             .collect::<craft_editor_egui::Result<Vec<_>>>()
@@ -387,9 +454,9 @@ fn note_row(
                         .truncate(),
                 );
                 let body = if note.status == AnnotationStatus::Resolved {
-                    format!("{} · {}", l.text("Resolved"), excerpt(&note.note, 80))
+                    format!("{} · {}", l.text("Resolved"), markup_summary(note, 80))
                 } else {
-                    excerpt(&note.note, 80)
+                    markup_summary(note, 80)
                 };
                 ui.add(egui::Label::new(RichText::new(body).size(12.0).color(t.muted)).truncate());
             });
@@ -400,10 +467,102 @@ fn note_row(
             egui::WidgetType::SelectableLabel,
             ui.is_enabled(),
             selected,
-            format!("{}: {}", quote, note.note),
+            format!("{}: {}", quote, markup_summary(note, 240)),
         )
     });
-    response.on_hover_text(format!("{}\n{}", quote, note.note))
+    response.on_hover_text(format!(
+        "{}\n{}\n{}",
+        quote,
+        note.tags.join(" · "),
+        note.note
+    ))
+}
+fn markup_summary(note: &PassageAnnotation, limit: usize) -> String {
+    let tags = note.tags.join(" · ");
+    if note.note.is_empty() {
+        tags
+    } else if tags.is_empty() {
+        excerpt(&note.note, limit)
+    } else {
+        format!("{} · {}", tags, excerpt(&note.note, limit))
+    }
+}
+fn project_markup_row(
+    ui: &mut egui::Ui,
+    row: &studio_core::ProjectAnnotationSummary,
+    path: &str,
+    trashed: bool,
+    l: Language,
+    t: Tokens,
+) -> Option<ProjectMarkupAction> {
+    let note = &row.annotation;
+    let mut action = None;
+    let button_width = (ui.available_width() * 0.34).clamp(110.0, 200.0);
+    let body_width = (ui.available_width() - button_width - ui.spacing().item_spacing.x).max(1.0);
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(body_width, 96.0),
+            Layout::top_down(Align::Min),
+            |ui| {
+                ui.add(egui::Label::new(RichText::new(path).strong()).truncate())
+                    .on_hover_text(path);
+                ui.add(
+                    egui::Label::new(excerpt(&displayed_quote(&note.anchor, None, l), 100))
+                        .truncate(),
+                );
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(markup_summary(note, 90))
+                            .size(12.0)
+                            .color(t.muted),
+                    )
+                    .truncate(),
+                );
+                let warning = if trashed {
+                    Some("Restore this document from Trash to open its markup.")
+                } else if note.anchor_status == AnchorStatus::Detached {
+                    Some("Detached passage — original quote retained")
+                } else {
+                    None
+                };
+                if let Some(warning) = warning {
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(l.text(warning)).size(12.0).color(t.warning),
+                        )
+                        .truncate(),
+                    )
+                    .on_hover_text(l.text(warning));
+                }
+            },
+        );
+        ui.vertical(|ui| {
+            ui.add_space(24.0);
+            let label = l.text(if note.deleted {
+                "Restore markup"
+            } else if note.anchor_status == AnchorStatus::Attached {
+                "Show passage"
+            } else {
+                "Open note"
+            });
+            let clicked = ui
+                .add_enabled_ui(!trashed, |ui| {
+                    ui.add_sized([button_width, 40.0], egui::Button::new(label).truncate())
+                        .on_hover_text(label)
+                        .clicked()
+                })
+                .inner;
+            if clicked {
+                action = Some(if note.deleted {
+                    ProjectMarkupAction::Restore
+                } else {
+                    ProjectMarkupAction::Open
+                });
+            }
+        });
+    });
+    ui.separator();
+    action
 }
 fn visible_menu_anchor(visible: egui::Rect, caret: Option<egui::Rect>) -> egui::Pos2 {
     let inset = 4.0_f32
@@ -417,6 +576,64 @@ fn visible_menu_anchor(visible: egui::Rect, caret: Option<egui::Rect>) -> egui::
 fn valid_note_body(body: &str) -> bool {
     !body.trim().is_empty()
         && body.trim().chars().count() <= studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
+}
+fn parsed_tags(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+fn valid_tags(tags: &[String]) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    tags.len() <= 32
+        && tags.iter().all(|tag| {
+            !tag.trim().is_empty()
+                && tag.chars().count() <= 80
+                && !tag.chars().any(char::is_control)
+                && seen.insert(tag)
+        })
+}
+fn valid_markup(body: &str, source: &str) -> bool {
+    let tags = parsed_tags(source);
+    valid_tags(&tags)
+        && if tags.is_empty() {
+            valid_note_body(body)
+        } else {
+            body.trim().chars().count() <= studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
+        }
+}
+fn tag_input(
+    ui: &mut egui::Ui,
+    source: &mut String,
+    id: egui::Id,
+    l: Language,
+    t: Tokens,
+    read_only: bool,
+) {
+    ui.label(RichText::new(l.text("Tags")).strong());
+    ui.add_enabled_ui(!read_only, |ui| {
+        ui.add(
+            egui::TextEdit::multiline(source)
+                .id(id)
+                .desired_rows(2)
+                .desired_width(f32::INFINITY)
+                .margin(12),
+        );
+    });
+    ui.label(
+        RichText::new(l.text("One tag per line. Tags keep your spelling and case."))
+            .size(12.0)
+            .color(t.muted),
+    );
+    if !valid_tags(&parsed_tags(source)) {
+        ui.colored_label(
+            t.warning,
+            l.text(
+                "Use up to 32 different tags, each with 1–80 characters and no control characters.",
+            ),
+        );
+    }
 }
 fn note_length(ui: &mut egui::Ui, body: &str, l: Language, t: Tokens) {
     let count = body.trim().chars().count();
@@ -511,8 +728,18 @@ impl StudioApp {
         if self.notes.invalid {
             return Err("annotation_preview_unverified".into());
         }
+        if let Some(composer) = &mut self.notes.composer {
+            composer.focus = true;
+            return Ok(());
+        }
         self.save()?;
         let document = self.document.as_ref().ok_or("missing_note_document")?;
+        if let Some(mut composer) = self.notes.paused_composers.remove(&document.id) {
+            composer.dismissed = false;
+            composer.focus = true;
+            self.notes.composer = Some(composer);
+            return Ok(());
+        }
         let session = &self.rich.as_ref().ok_or("missing_note_editor")?.session;
         let (id, start, end, quote) = captured_selection(session)?;
         let anchor = self.workspace.capture_annotation_anchor(
@@ -529,7 +756,9 @@ impl StudioApp {
             base_revision: document.revision,
             anchor,
             body: String::new(),
+            tags: String::new(),
             focus: true,
+            dismissed: false,
         });
         Ok(())
     }
@@ -549,7 +778,10 @@ impl StudioApp {
             .notes
             .drafts
             .keys()
-            .find(|id| focused == Some(egui::Id::new(("author-note-body", *id))))?
+            .find(|id| {
+                focused == Some(egui::Id::new(("author-note-body", *id)))
+                    || focused == Some(egui::Id::new(("author-note-tags", *id)))
+            })?
             .clone();
         Some(self.save_note_draft(&id))
     }
@@ -590,7 +822,7 @@ impl StudioApp {
             .notes
             .drafts
             .iter()
-            .filter(|(_, draft)| draft.body.trim() != draft.original.note.trim())
+            .filter(|(_, draft)| draft.changed())
             .map(|(id, draft)| (id.clone(), draft.clone()))
             .collect();
         self.notes.invalidate();
@@ -600,7 +832,7 @@ impl StudioApp {
                 continue;
             }
             let document = self.workspace.document(&draft.original.document_id)?;
-            self.workspace.update_annotation(
+            self.workspace.update_annotation_markup(
                 &id,
                 document.revision,
                 draft.original.revision,
@@ -608,6 +840,7 @@ impl StudioApp {
                     note: Some(draft.body),
                     status: None,
                 },
+                Some(parsed_tags(&draft.tags)),
             )?;
             self.notes.drafts.remove(&id);
         }
@@ -615,21 +848,22 @@ impl StudioApp {
             .notes
             .composer
             .as_ref()
-            .filter(|composer| !composer.body.trim().is_empty())
+            .filter(|composer| composer.has_content())
             .map(|composer| {
                 (
                     composer.document_id.clone(),
                     composer.base_revision,
                     composer.anchor.clone(),
                     composer.body.clone(),
+                    parsed_tags(&composer.tags),
                 )
             });
-        if let Some((id, revision, anchor, body)) = active {
+        if let Some((id, revision, anchor, body, tags)) = active {
             if blocked_document.as_ref() == Some(&id) {
                 blocked = true;
             } else {
                 self.workspace
-                    .create_annotation(&id, revision, anchor, &body)?;
+                    .create_tagged_annotation(&id, revision, anchor, &body, &tags)?;
                 self.notes.composer = None;
             }
         }
@@ -637,7 +871,7 @@ impl StudioApp {
             .notes
             .paused_composers
             .iter()
-            .filter(|(_, composer)| !composer.body.trim().is_empty())
+            .filter(|(_, composer)| composer.has_content())
             .map(|(key, composer)| {
                 (
                     key.clone(),
@@ -645,16 +879,17 @@ impl StudioApp {
                     composer.base_revision,
                     composer.anchor.clone(),
                     composer.body.clone(),
+                    parsed_tags(&composer.tags),
                 )
             })
             .collect();
-        for (key, id, revision, anchor, body) in paused {
+        for (key, id, revision, anchor, body, tags) in paused {
             if blocked_document.as_ref() == Some(&id) {
                 blocked = true;
                 continue;
             }
             self.workspace
-                .create_annotation(&id, revision, anchor, &body)?;
+                .create_tagged_annotation(&id, revision, anchor, &body, &tags)?;
             self.notes.paused_composers.remove(&key);
         }
         if self
@@ -674,14 +909,20 @@ impl StudioApp {
         for id in self.notes.drafts.keys() {
             egui::text_edit::TextEditState::default()
                 .store(ctx, egui::Id::new(("author-note-body", id)));
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("author-note-tags", id)));
         }
         if let Some(composer) = &self.notes.composer {
             egui::text_edit::TextEditState::default()
                 .store(ctx, egui::Id::new(("note-composer-body", &composer.id)));
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("note-composer-tags", &composer.id)));
         }
         for composer in self.notes.paused_composers.values() {
             egui::text_edit::TextEditState::default()
                 .store(ctx, egui::Id::new(("note-composer-body", &composer.id)));
+            egui::text_edit::TextEditState::default()
+                .store(ctx, egui::Id::new(("note-composer-tags", &composer.id)));
         }
         self.notes.drafts.clear();
         self.notes.composer = None;
@@ -751,6 +992,20 @@ impl StudioApp {
             .revision
             .checked_add(steps)
             .ok_or("annotation_revision_overflow")?;
+        let stored = self.workspace.annotation(&before.id)?;
+        if stored.revision != expected {
+            return Err(studio_core::StudioError::AnnotationConflict {
+                expected,
+                actual: stored.revision,
+            }
+            .into());
+        }
+        if stored.note != before.note
+            || stored.tags != before.tags
+            || stored.status != before.status
+        {
+            return Err("annotation_authored_metadata_changed".into());
+        }
         Ok((current.revision, expected))
     }
     fn refresh_notes(&mut self) -> AppResult<()> {
@@ -766,7 +1021,7 @@ impl StudioApp {
             .cloned()
             .ok_or("missing_note_draft")?;
         let (doc_revision, note_revision) = self.note_guard_after_flush(&draft.original)?;
-        let note = self.workspace.update_annotation(
+        let note = self.workspace.update_annotation_markup(
             id,
             doc_revision,
             note_revision,
@@ -774,6 +1029,7 @@ impl StudioApp {
                 note: Some(draft.body),
                 status: None,
             },
+            Some(parsed_tags(&draft.tags)),
         )?;
         self.notes.drafts.remove(id);
         self.notes.acknowledge(&note);
@@ -887,7 +1143,7 @@ impl StudioApp {
                 ui.close();
             }
             if ui
-                .add_enabled(allowed, egui::Button::new(l.text("Add note")))
+                .add_enabled(allowed, egui::Button::new(l.text("Annotate passage…")))
                 .on_disabled_hover_text(l.text(reason.unwrap_or("Add note")))
                 .clicked()
             {
@@ -928,7 +1184,7 @@ impl StudioApp {
         }
         let reason = self.note_action_unavailable_reason();
         ui.horizontal(|ui| {
-            if components::action(ui, l.text("Add note"), reason.is_none(), Some(t))
+            if components::action(ui, l.text("Annotate passage…"), reason.is_none(), Some(t))
                 .on_disabled_hover_text(l.text(reason.unwrap_or("Add note")))
                 .clicked()
             {
@@ -940,6 +1196,26 @@ impl StudioApp {
                 self.record_error(result);
             }
         });
+        if ui.button(l.text("Project markup…")).clicked() {
+            let result = self.open_project_marks();
+            self.record_error(result);
+        }
+        let pending = self
+            .document
+            .as_ref()
+            .is_some_and(|document| self.notes.paused_composers.contains_key(&document.id));
+        if pending
+            && components::action(
+                ui,
+                l.text("Resume markup draft"),
+                writable && !self.notes.invalid,
+                None,
+            )
+            .clicked()
+        {
+            let result = self.begin_note();
+            self.record_error(result);
+        }
         if let Some(reason) = reason {
             ui.add(
                 egui::Label::new(RichText::new(l.text(reason)).size(13.0).color(t.muted)).wrap(),
@@ -1056,14 +1332,14 @@ impl StudioApp {
                 }
                 ui.label(RichText::new(l.text("Author note")).strong());
                 let draft = self.notes.drafts.entry(note.id.clone()).or_insert_with(|| NoteDraft {
-                    original: note.clone(), body: note.note.clone(),
+                    original: note.clone(), body: note.note.clone(), tags: note.tags.join("\n"),
                 });
                 let conflicted = draft.original.revision != note.revision;
                 if conflicted {
                     ui.colored_label(t.warning, l.text("This note changed elsewhere. Your draft is preserved."));
                     ui.horizontal_wrapped(|ui| {
                         if components::action(ui, l.text("Copy draft"), true, None).clicked() {
-                            ui.ctx().copy_text(draft.body.clone());
+                            ui.ctx().copy_text(format!("{}\n\n{}", draft.tags, draft.body));
                         }
                         reload_draft = components::action(ui, l.text("Discard draft and reload"), true, None).clicked();
                     });
@@ -1071,23 +1347,28 @@ impl StudioApp {
                 }
                 note_input(ui, &mut draft.body, egui::Id::new(("author-note-body", &note.id)), l, t, !writable);
                 ui.add_space(12.0);
+                tag_input(ui, &mut draft.tags, egui::Id::new(("author-note-tags", &note.id)), l, t, !writable);
+                ui.add_space(12.0);
                 ui.horizontal_wrapped(|ui| {
-                    if draft.body.trim() != note.note.trim() {
-                        save = components::action(ui, l.text("Save note"), valid_note_body(&draft.body) && !conflicted && !self.notes.invalid && writable, Some(t)).clicked();
+                    if draft.changed() {
+                        save = components::action(ui, l.text("Save markup"), valid_markup(&draft.body, &draft.tags) && !conflicted && !self.notes.invalid && writable, Some(t)).clicked();
                     }
                     toggle = components::action(ui, l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}), !self.notes.invalid && writable, None).clicked();
                     reveal = components::action(ui, l.text("Show passage"), note.anchor_status == AnchorStatus::Attached && !self.notes.invalid, None).clicked();
-                    remove = components::action(ui, l.text("Delete note"), !self.notes.invalid && writable, None).clicked();
+                    remove = components::action(ui, l.text("Delete markup"), !self.notes.invalid && writable, None).clicked();
                 });
             });
         if reload_draft {
             let id = egui::Id::new(("author-note-body", &note.id));
             egui::text_edit::TextEditState::default().store(ui.ctx(), id);
+            egui::text_edit::TextEditState::default()
+                .store(ui.ctx(), egui::Id::new(("author-note-tags", &note.id)));
             self.notes.drafts.insert(
                 note.id.clone(),
                 NoteDraft {
                     original: note.clone(),
                     body: note.note.clone(),
+                    tags: note.tags.join("\n"),
                 },
             );
         }
@@ -1126,14 +1407,24 @@ impl StudioApp {
             self.confirm_notes_close(ctx, t);
             return;
         }
+        self.project_marks_dialog(ctx, t);
+        if self
+            .notes
+            .project_browser
+            .as_ref()
+            .is_some_and(|browser| browser.open)
+        {
+            return;
+        }
         if let Some(mut composer) = self.notes.composer.take() {
             let mut save = false;
             let mut cancel = false;
+            let mut discard = false;
             let response = components::modal(
                 ctx,
                 l,
                 "new-passage-note",
-                l.text("Add note"),
+                l.text("Passage markup"),
                 540.0,
                 |ui| {
                     egui::ScrollArea::vertical()
@@ -1151,6 +1442,8 @@ impl StudioApp {
                                 480,
                             ));
                             ui.add_space(16.0);
+                            ui.label(l.text("Add a note, tags, or both."));
+                            ui.add_space(8.0);
                             ui.label(l.text("Author note"));
                             let field = note_input(
                                 ui,
@@ -1164,51 +1457,78 @@ impl StudioApp {
                                 field.request_focus();
                                 composer.focus = false;
                             }
+                            ui.add_space(12.0);
+                            tag_input(
+                                ui,
+                                &mut composer.tags,
+                                egui::Id::new(("note-composer-tags", &composer.id)),
+                                l,
+                                t,
+                                !writable,
+                            );
+                            ui.add_space(12.0);
+                            ui.label(l.text("Cancel keeps this draft available in Notes."));
                         });
                     components::footer(ui, |ui| {
                         save = components::action(
                             ui,
-                            l.text("Add note"),
-                            valid_note_body(&composer.body) && !self.notes.invalid && writable,
+                            l.text("Save markup"),
+                            valid_markup(&composer.body, &composer.tags)
+                                && !self.notes.invalid
+                                && writable,
                             Some(t),
                         )
                         .clicked();
                         cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
+                        if composer.has_content() {
+                            discard = components::action(ui, l.text("Discard draft"), true, None)
+                                .clicked();
+                        }
                     });
                 },
             );
             if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
-                && valid_note_body(&composer.body)
+                && valid_markup(&composer.body, &composer.tags)
                 && !self.notes.invalid
                 && writable
             {
                 save = true;
             }
             if save {
-                let result = self
-                    .workspace
-                    .create_annotation(
-                        &composer.document_id,
-                        composer.base_revision,
-                        composer.anchor.clone(),
-                        &composer.body,
-                    )
-                    .map_err(Into::into)
-                    .and_then(|note| {
+                let created = self.workspace.create_tagged_annotation(
+                    &composer.document_id,
+                    composer.base_revision,
+                    composer.anchor.clone(),
+                    &composer.body,
+                    &parsed_tags(&composer.tags),
+                );
+                let result = match created {
+                    Ok(note) => {
                         self.notes.activate(&note.id);
                         self.inspector = Inspector::Notes;
                         self.inspector_visible = true;
                         self.prefer_inspector = true;
                         self.focus_mode = false;
                         self.refresh_notes()
-                    });
-                if result.is_err() {
-                    self.notes.composer = Some(composer);
-                }
+                    }
+                    Err(error) => {
+                        self.notes.composer = Some(composer);
+                        Err(error.into())
+                    }
+                };
                 self.record_error(result);
-            } else if !cancel && !response.should_close() {
+            } else if !cancel && !discard && !response.should_close() {
                 self.notes.composer = Some(composer);
             } else {
+                if composer.has_content() && !discard {
+                    composer.dismissed = true;
+                    self.notes
+                        .paused_composers
+                        .insert(composer.document_id.clone(), composer);
+                    self.inspector = Inspector::Notes;
+                    self.inspector_visible = true;
+                    self.prefer_inspector = true;
+                }
                 self.focus_manuscript = true;
             }
         }
@@ -1219,7 +1539,7 @@ impl StudioApp {
                 ctx,
                 l,
                 "delete-passage-note",
-                l.text("Delete note?"),
+                l.text("Delete markup?"),
                 440.0,
                 |ui| {
                     ui.label(
@@ -1236,10 +1556,11 @@ impl StudioApp {
                     ui.label(excerpt(&note.note, 180));
                     ui.add_space(12.0);
                     ui.label(l.text("The manuscript text will stay unchanged."));
+                    ui.label(l.text("You can restore deleted markup from Project markup."));
                     components::footer(ui, |ui| {
                         confirm = components::action(
                             ui,
-                            l.text("Delete note"),
+                            l.text("Delete markup"),
                             !self.notes.invalid && writable,
                             Some(t),
                         )
@@ -1269,6 +1590,482 @@ impl StudioApp {
                 self.notes.delete_confirmation = Some(note);
             }
         }
+    }
+}
+
+impl ProjectMarksBrowser {
+    fn refresh(&mut self, workspace: &Workspace) -> AppResult<()> {
+        self.records = workspace.project_annotations(&self.project_id, true)?;
+        self.available_tags = self
+            .records
+            .iter()
+            .filter(|row| !row.annotation.deleted)
+            .flat_map(|row| row.annotation.tags.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        self.filter_key = None;
+        let tree = workspace.project_tree(&self.project_id)?;
+        let by_id: HashMap<_, _> = tree
+            .iter()
+            .map(|node| (node.logical_id.as_str(), node))
+            .collect();
+        self.paths.clear();
+        self.trashed.clear();
+        for node in &tree {
+            let Some(document) = &node.document_id else {
+                continue;
+            };
+            let mut titles = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            let mut current = Some(node);
+            while let Some(item) = current {
+                if !seen.insert(item.logical_id.as_str()) {
+                    break;
+                }
+                if item.metadata["trashedAt"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty())
+                {
+                    self.trashed.insert(document.clone());
+                }
+                titles.push(item.metadata["title"].as_str().unwrap_or_default());
+                current = item.metadata["parentId"]
+                    .as_str()
+                    .and_then(|id| by_id.get(id).copied());
+            }
+            titles.reverse();
+            self.paths.insert(document.clone(), titles.join(" / "));
+        }
+        Ok(())
+    }
+    fn filter(&mut self) {
+        let key = (self.query.clone(), self.tag.clone(), self.deleted);
+        if self.filter_key.as_ref() == Some(&key) {
+            return;
+        }
+        let query = self.query.to_lowercase();
+        self.visible = self
+            .records
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| {
+                (row.annotation.deleted == self.deleted
+                    && self
+                        .tag
+                        .as_ref()
+                        .is_none_or(|tag| row.annotation.tags.contains(tag))
+                    && (query.is_empty()
+                        || row.document_title.to_lowercase().contains(&query)
+                        || row.annotation.note.to_lowercase().contains(&query)
+                        || row
+                            .annotation
+                            .anchor
+                            .exact_text
+                            .to_lowercase()
+                            .contains(&query)
+                        || row
+                            .annotation
+                            .tags
+                            .iter()
+                            .any(|tag| tag.to_lowercase().contains(&query))))
+                .then_some(index)
+            })
+            .collect();
+        self.filter_key = Some(key);
+    }
+}
+
+impl StudioApp {
+    fn pending_project_markup_drafts(&self, project_id: &str) -> AppResult<Vec<(String, String)>> {
+        let mut pending = Vec::new();
+        for id in self.notes.pending_documents() {
+            let document = self.workspace.document(&id)?;
+            if document.project_id == project_id {
+                pending.push((document.id, document.title));
+            }
+        }
+        Ok(pending)
+    }
+
+    fn review_project_markup_drafts(&mut self, document_id: &str) -> AppResult<()> {
+        let document = self.workspace.document(document_id)?;
+        self.begin_reference_excursion(document)?;
+        self.notes.select_pending_draft(document_id);
+        self.inspector = Inspector::Notes;
+        self.inspector_visible = true;
+        self.prefer_inspector = true;
+        self.focus_mode = false;
+        Ok(())
+    }
+
+    /// Never let a bulk edit hide an unsaved draft by deleting its canonical mark.
+    fn apply_project_tag_action(
+        &mut self,
+        project_id: &str,
+        action: &mut TagAction,
+    ) -> AppResult<bool> {
+        action.pending_drafts = self.pending_project_markup_drafts(project_id)?;
+        if !action.pending_drafts.is_empty() {
+            return Ok(false);
+        }
+        if action.remove {
+            self.workspace.remove_project_tag(&action.snapshot)?;
+        } else {
+            self.workspace
+                .rename_project_tag(&action.snapshot, &action.replacement)?;
+        }
+        Ok(true)
+    }
+
+    /// Open the project-scoped manual markup browser after acknowledging current writing.
+    pub(super) fn open_project_marks(&mut self) -> AppResult<()> {
+        self.save_explicit()?;
+        let project_id = self
+            .project
+            .as_ref()
+            .ok_or("missing_markup_project")?
+            .id
+            .clone();
+        if let Some(mut composer) = self.notes.composer.take() {
+            composer.dismissed = true;
+            self.notes
+                .paused_composers
+                .insert(composer.document_id.clone(), composer);
+        }
+        let mut browser = self
+            .notes
+            .project_browser
+            .take()
+            .filter(|browser| browser.project_id == project_id)
+            .unwrap_or_else(|| ProjectMarksBrowser {
+                project_id,
+                records: Vec::new(),
+                available_tags: Vec::new(),
+                visible: Vec::new(),
+                filter_key: None,
+                paths: HashMap::new(),
+                trashed: Default::default(),
+                query: String::new(),
+                tag: None,
+                deleted: false,
+                open: false,
+                tag_action: None,
+            });
+        let result = browser.refresh(&self.workspace);
+        browser.open = result.is_ok();
+        self.notes.project_browser = Some(browser);
+        result
+    }
+
+    fn project_marks_dialog(&mut self, ctx: &egui::Context, t: Tokens) {
+        let Some(mut browser) = self.notes.project_browser.take() else {
+            return;
+        };
+        if !browser.open {
+            self.notes.project_browser = Some(browser);
+            return;
+        }
+        let l = self.language;
+        if let Some(mut action) = browser.tag_action.take() {
+            if !action.pending_drafts.is_empty() {
+                let mut review = None;
+                let mut cancel = false;
+                let response = components::modal(
+                    ctx,
+                    l,
+                    "project-tag-draft-preflight",
+                    l.text("Review drafts"),
+                    540.0,
+                    |ui| {
+                        ui.label(l.text("Save or discard the project's markup drafts before changing a project tag."));
+                        egui::ScrollArea::vertical()
+                            .max_height((ctx.content_rect().height() - 280.0).clamp(80.0, 320.0))
+                            .show(ui, |ui| {
+                                for (id, title) in &action.pending_drafts {
+                                    ui.horizontal(|ui| {
+                                        ui.add_sized(
+                                            [ui.available_width() - 160.0, 40.0],
+                                            egui::Label::new(title).truncate(),
+                                        )
+                                        .on_hover_text(title);
+                                        if components::action(
+                                            ui,
+                                            l.text("Review drafts"),
+                                            true,
+                                            None,
+                                        )
+                                        .clicked()
+                                        {
+                                            review = Some(id.clone());
+                                        }
+                                    });
+                                }
+                            });
+                        components::footer(ui, |ui| {
+                            cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
+                        });
+                    },
+                );
+                if let Some(id) = review {
+                    let result = self.review_project_markup_drafts(&id);
+                    if result.is_ok() {
+                        browser.open = false;
+                    } else {
+                        browser.tag_action = Some(action);
+                    }
+                    self.record_error(result);
+                } else if !cancel && !response.should_close() {
+                    browser.tag_action = Some(action);
+                }
+                self.notes.project_browser = Some(browser);
+                return;
+            }
+            let mut apply = false;
+            let mut cancel = false;
+            let response = components::modal(
+                ctx,
+                l,
+                "project-tag-action",
+                l.text(if action.remove {
+                    "Remove project tag?"
+                } else {
+                    "Rename project tag"
+                }),
+                540.0,
+                |ui| {
+                    ui.label(RichText::new(action.snapshot.tag()).strong());
+                    ui.label(l.format(
+                        "This changes {count} passages in this project.",
+                        &[("count", action.snapshot.count().to_string())],
+                    ));
+                    ui.label(l.text("This includes markup in documents in Trash."));
+                    if action.remove {
+                        ui.label(l.format("{count} passages have only this tag; their empty markup will move to deleted markup.", &[("count", action.snapshot.tag_only_count().to_string())]));
+                    } else {
+                        ui.add_space(12.0);
+                        ui.label(l.text("New tag name"));
+                        let field = components::singleline(
+                            ui,
+                            &mut action.replacement,
+                            l.text("New tag name"),
+                        );
+                        if action.focus {
+                            field.request_focus();
+                            action.focus = false;
+                        }
+                        ui.label(l.text("Existing tag names cannot be merged by renaming."));
+                    }
+                    components::footer(ui, |ui| {
+                        let valid = action.remove
+                            || (action.replacement != action.snapshot.tag()
+                                && valid_tags(&[action.replacement.clone()]));
+                        apply = components::action(
+                            ui,
+                            l.text(if action.remove {
+                                "Remove tag"
+                            } else {
+                                "Rename tag"
+                            }),
+                            valid,
+                            Some(t),
+                        )
+                        .clicked();
+                        cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
+                    });
+                },
+            );
+            if apply {
+                match self.apply_project_tag_action(&browser.project_id, &mut action) {
+                    Ok(true) => {
+                        browser.tag = if action.remove {
+                            None
+                        } else {
+                            Some(action.replacement.clone())
+                        };
+                        browser.records.clear();
+                        browser.visible.clear();
+                        browser.available_tags.clear();
+                        browser.filter_key = None;
+                        let result = browser.refresh(&self.workspace);
+                        self.record_error(result);
+                        if self.document.is_some() {
+                            let result = self.refresh_notes();
+                            self.record_error(result);
+                        }
+                    }
+                    Ok(false) => browser.tag_action = Some(action),
+                    Err(error) => {
+                        browser.tag_action = Some(action);
+                        self.record_error(Err(error));
+                    }
+                }
+            } else if !cancel && !response.should_close() {
+                browser.tag_action = Some(action);
+            }
+            self.notes.project_browser = Some(browser);
+            return;
+        }
+        let mut chosen = None;
+        let mut restore = None;
+        let mut refresh = false;
+        let mut tag_action = None;
+        let mut close = false;
+        let response = components::modal(
+            ctx,
+            l,
+            "project-markup",
+            l.text("Project markup"),
+            740.0,
+            |ui| {
+                if let Some(project) = &self.project {
+                    ui.label(RichText::new(&project.title).strong());
+                    ui.add_space(12.0);
+                }
+                components::singleline(
+                    ui,
+                    &mut browser.query,
+                    l.text("Find in passages, notes and titles…"),
+                );
+                ui.add_space(12.0);
+                ui.horizontal_wrapped(|ui| {
+                    egui::ComboBox::from_id_salt("project-markup-tag")
+                        .selected_text(browser.tag.as_deref().unwrap_or(l.text("All tags")))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut browser.tag, None, l.text("All tags"));
+                            for tag in &browser.available_tags {
+                                ui.selectable_value(&mut browser.tag, Some(tag.clone()), tag);
+                            }
+                        });
+                    ui.checkbox(&mut browser.deleted, l.text("Deleted markup"));
+                    refresh = ui.button(l.text("Refresh markup")).clicked();
+                    if browser.tag.is_some() && !browser.deleted {
+                        if ui.button(l.text("Rename tag…")).clicked() {
+                            tag_action = Some(false);
+                        }
+                        if ui.button(l.text("Remove tag…")).clicked() {
+                            tag_action = Some(true);
+                        }
+                    }
+                });
+                ui.add_space(12.0);
+                browser.filter();
+                let rows = &browser.visible;
+                ui.label(l.format("Passages: {count}", &[("count", rows.len().to_string())]));
+                egui::ScrollArea::vertical()
+                    .id_salt("project-markup-results")
+                    .max_height((ctx.content_rect().height() - 340.0).clamp(100.0, 440.0))
+                    .auto_shrink([false, true])
+                    .show_rows(ui, 104.0, rows.len(), |ui, range| {
+                        for index in range {
+                            let row = &browser.records[rows[index]];
+                            let document_id = &row.annotation.document_id;
+                            let path = browser
+                                .paths
+                                .get(document_id)
+                                .map(String::as_str)
+                                .unwrap_or(&row.document_title);
+                            let action = ui
+                                .push_id(&row.annotation.id, |ui| {
+                                    project_markup_row(
+                                        ui,
+                                        row,
+                                        path,
+                                        browser.trashed.contains(document_id),
+                                        l,
+                                        t,
+                                    )
+                                })
+                                .inner;
+                            match action {
+                                Some(ProjectMarkupAction::Open) => chosen = Some(row.clone()),
+                                Some(ProjectMarkupAction::Restore) => restore = Some(row.clone()),
+                                None => {}
+                            }
+                        }
+                    });
+                if rows.is_empty() {
+                    ui.label(l.text("No matching markup in this project."));
+                }
+                components::footer(ui, |ui| {
+                    close = components::action(ui, l.text("Done"), true, Some(t)).clicked();
+                });
+            },
+        );
+        if close || response.should_close() {
+            browser.open = false;
+            self.focus_manuscript = true;
+        }
+        if refresh {
+            let result = browser.refresh(&self.workspace);
+            self.record_error(result);
+        }
+        if let Some(remove) = tag_action
+            && let Some(tag) = &browser.tag
+        {
+            match self
+                .workspace
+                .project_tag_snapshot(&browser.project_id, tag)
+            {
+                Ok(snapshot) => match self.pending_project_markup_drafts(&browser.project_id) {
+                    Ok(pending_drafts) => {
+                        browser.tag_action = Some(TagAction {
+                            replacement: tag.clone(),
+                            snapshot,
+                            remove,
+                            focus: true,
+                            pending_drafts,
+                        })
+                    }
+                    Err(error) => self.record_error(Err(error)),
+                },
+                Err(error) => self.record_error(Err(error.into())),
+            }
+        }
+        if let Some(row) = restore {
+            let restored = self.workspace.restore_annotation(
+                &row.annotation.id,
+                row.document_revision,
+                row.annotation.revision,
+            );
+            match restored {
+                Ok(note) => {
+                    if let Some(record) = browser
+                        .records
+                        .iter_mut()
+                        .find(|record| record.annotation.id == note.id)
+                    {
+                        record.document_revision = note.base_revision;
+                        record.annotation = note;
+                    }
+                    browser.filter_key = None;
+                    let result = browser.refresh(&self.workspace);
+                    self.record_error(result);
+                    if self.document.is_some() {
+                        let result = self.refresh_notes();
+                        self.record_error(result);
+                    }
+                }
+                Err(error) => self.record_error(Err(error.into())),
+            }
+        }
+        if let Some(row) = chosen {
+            let result = (|| -> AppResult<()> {
+                let current = self.workspace.annotation(&row.annotation.id)?;
+                let document = self.workspace.document(&current.document_id)?;
+                if document.project_id != browser.project_id {
+                    return Err("markup_project_changed".into());
+                }
+                self.begin_reference_excursion(document)?;
+                self.activate_note(&current.id)?;
+                Ok(())
+            })();
+            if result.is_ok() {
+                browser.open = false;
+            }
+            self.record_error(result);
+        }
+        self.notes.project_browser = Some(browser);
     }
 }
 
@@ -1340,6 +2137,7 @@ mod tests {
             first_note.id.clone(),
             NoteDraft {
                 original: first_note.clone(),
+                tags: String::new(),
                 body: "Edited first note 😀".into(),
             },
         );
@@ -1351,7 +2149,9 @@ mod tests {
                 base_revision: second.revision,
                 anchor: second_anchor,
                 body: "Parked new note 中".into(),
+                tags: String::new(),
                 focus: false,
+                dismissed: false,
             },
         );
         Ok(BackupNotesFixture {
@@ -1439,12 +2239,270 @@ mod tests {
     }
 
     #[test]
+    fn tag_only_drafts_survive_context_clear_backup_cancel_and_explicit_save() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        let draft = fixture
+            .app
+            .notes
+            .drafts
+            .get_mut(&fixture.first_note.id)
+            .ok_or("missing draft")?;
+        draft.body.clone_from(&fixture.first_note.note);
+        draft.tags = "  Ася  \nmotivation 😀".into();
+        let composer = fixture
+            .app
+            .notes
+            .paused_composers
+            .get_mut(&fixture.second.id)
+            .ok_or("missing composer")?;
+        composer.body.clear();
+        composer.tags = "Question".into();
+        composer.dismissed = true;
+        fixture.app.notes.clear();
+        assert_eq!(fixture.app.notes.pending_documents().len(), 2);
+        assert!(!fixture.app.prepare_workspace_backup()?);
+        fixture.app.cancel_workspace_backup_preflight();
+        assert!(fixture.app.notes.has_unsaved_drafts());
+        assert_eq!(
+            fixture.app.workspace.annotation(&fixture.first_note.id)?,
+            fixture.first_note
+        );
+        fixture.app.save_note_drafts()?;
+        assert!(!fixture.app.notes.has_unsaved_drafts());
+        assert_eq!(
+            fixture
+                .app
+                .workspace
+                .annotation(&fixture.first_note.id)?
+                .tags,
+            ["  Ася  ", "motivation 😀"]
+        );
+        assert!(
+            fixture
+                .app
+                .workspace
+                .annotations(&fixture.second.id)?
+                .iter()
+                .any(|note| note.note.is_empty() && note.tags == ["Question"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn concurrent_tag_edit_refuses_save_and_preserves_exact_tag_draft() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        let draft = fixture
+            .app
+            .notes
+            .drafts
+            .get_mut(&fixture.first_note.id)
+            .ok_or("missing draft")?;
+        draft.body.clone_from(&fixture.first_note.note);
+        draft.tags = "Ася / motive 😀".into();
+        let external = fixture.app.workspace.update_annotation_markup(
+            &fixture.first_note.id,
+            fixture.first.revision,
+            fixture.first_note.revision,
+            AnnotationPatch::default(),
+            Some(vec!["Changed elsewhere".into()]),
+        )?;
+        assert!(fixture.app.save_note_draft(&fixture.first_note.id).is_err());
+        assert_eq!(
+            fixture.app.workspace.annotation(&fixture.first_note.id)?,
+            external
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .drafts
+                .get(&fixture.first_note.id)
+                .ok_or("draft was lost")?
+                .tags,
+            "Ася / motive 😀"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn clean_viewed_markup_adopts_project_tag_rename_without_a_false_conflict() -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        fixture.app.notes.drafts.clear();
+        let saved = fixture.app.workspace.update_annotation_markup(
+            &fixture.first_note.id,
+            fixture.first.revision,
+            fixture.first_note.revision,
+            AnnotationPatch {
+                note: Some(String::new()),
+                status: None,
+            },
+            Some(vec!["A".into()]),
+        )?;
+        fixture.app.refresh_notes()?;
+        fixture.app.notes.drafts.insert(
+            saved.id.clone(),
+            NoteDraft {
+                original: saved.clone(),
+                body: String::new(),
+                tags: "A".into(),
+            },
+        );
+        let mut action = TagAction {
+            snapshot: fixture
+                .app
+                .workspace
+                .project_tag_snapshot(&fixture.first.project_id, "A")?,
+            replacement: "B".into(),
+            remove: false,
+            focus: false,
+            pending_drafts: Vec::new(),
+        };
+        assert!(
+            fixture
+                .app
+                .apply_project_tag_action(&fixture.first.project_id, &mut action)?
+        );
+        fixture.app.refresh_notes()?;
+        let draft = fixture
+            .app
+            .notes
+            .drafts
+            .get(&saved.id)
+            .ok_or("missing viewed draft")?;
+        assert_eq!(draft.tags, "B");
+        assert_eq!(draft.original, fixture.app.workspace.annotation(&saved.id)?);
+        assert!(!draft.changed());
+        Ok(())
+    }
+
+    #[test]
+    fn project_tag_removal_requires_review_of_unsaved_tag_only_markup_before_mutation() -> TestResult
+    {
+        let mut fixture = backup_notes_fixture()?;
+        let saved = fixture.app.workspace.update_annotation_markup(
+            &fixture.first_note.id,
+            fixture.first.revision,
+            fixture.first_note.revision,
+            AnnotationPatch {
+                note: Some(String::new()),
+                status: None,
+            },
+            Some(vec!["A".into()]),
+        )?;
+        fixture.app.refresh_notes()?;
+        fixture.app.notes.drafts.insert(
+            saved.id.clone(),
+            NoteDraft {
+                original: saved.clone(),
+                body: "Her unfinished motive 😀".into(),
+                tags: "A".into(),
+            },
+        );
+        let mut action = TagAction {
+            snapshot: fixture
+                .app
+                .workspace
+                .project_tag_snapshot(&fixture.first.project_id, "A")?,
+            replacement: String::new(),
+            remove: true,
+            focus: false,
+            pending_drafts: Vec::new(),
+        };
+        assert!(
+            !fixture
+                .app
+                .apply_project_tag_action(&fixture.first.project_id, &mut action)?
+        );
+        assert_eq!(
+            action.pending_drafts,
+            [(fixture.first.id.clone(), fixture.first.title.clone())]
+        );
+        assert_eq!(fixture.app.workspace.annotation(&saved.id)?, saved);
+        fixture
+            .app
+            .review_project_markup_drafts(&fixture.first.id)?;
+        assert_eq!(
+            fixture.app.notes.selected.as_deref(),
+            Some(saved.id.as_str())
+        );
+        assert!(
+            fixture
+                .app
+                .notes
+                .preview
+                .iter()
+                .any(|note| note.id == saved.id)
+        );
+        assert_eq!(
+            fixture
+                .app
+                .notes
+                .drafts
+                .get(&saved.id)
+                .ok_or("missing local draft")?
+                .body,
+            "Her unfinished motive 😀"
+        );
+        fixture.app.save_note_draft(&saved.id)?;
+        let mut reviewed = TagAction {
+            snapshot: fixture
+                .app
+                .workspace
+                .project_tag_snapshot(&fixture.first.project_id, "A")?,
+            ..action
+        };
+        assert!(
+            fixture
+                .app
+                .apply_project_tag_action(&fixture.first.project_id, &mut reviewed)?
+        );
+        let remaining = fixture.app.workspace.annotation(&saved.id)?;
+        assert!(!remaining.deleted && remaining.tags.is_empty());
+        assert_eq!(remaining.note, "Her unfinished motive 😀");
+        Ok(())
+    }
+
+    #[test]
+    fn dismissed_markup_draft_is_available_for_explicit_resume_without_a_new_selection()
+    -> TestResult {
+        let mut fixture = backup_notes_fixture()?;
+        let mut composer = fixture
+            .app
+            .notes
+            .paused_composers
+            .remove(&fixture.second.id)
+            .ok_or("missing composer")?;
+        composer.dismissed = true;
+        composer.tags = "Last light 😀".into();
+        let composer_id = composer.id.clone();
+        fixture
+            .app
+            .notes
+            .paused_composers
+            .insert(fixture.second.id.clone(), composer);
+        fixture.app.open_document(fixture.second.clone())?;
+        assert!(fixture.app.notes.composer.is_none());
+        fixture.app.begin_note()?;
+        let resumed = fixture
+            .app
+            .notes
+            .composer
+            .as_ref()
+            .ok_or("draft was not resumed")?;
+        assert_eq!(resumed.id, composer_id);
+        assert_eq!(resumed.tags, "Last light 😀");
+        assert!(!resumed.dismissed);
+        Ok(())
+    }
+
+    #[test]
     fn failed_backup_note_save_keeps_exact_conflicting_body_and_preflight() -> TestResult {
         let mut fixture = backup_notes_fixture()?;
         fixture.app.notes.drafts.insert(
             fixture.second_note.id.clone(),
             NoteDraft {
                 original: fixture.second_note.clone(),
+                tags: String::new(),
                 body: "Keep my conflicting draft 😀".into(),
             },
         );
@@ -1640,6 +2698,7 @@ mod tests {
             note.id.clone(),
             NoteDraft {
                 original: note.clone(),
+                tags: String::new(),
                 body: "My unsaved draft".into(),
             },
         );
@@ -1677,6 +2736,7 @@ mod tests {
             note.id.clone(),
             NoteDraft {
                 original: note,
+                tags: String::new(),
                 body: "Private draft".into(),
             },
         );
@@ -1952,6 +3012,7 @@ mod tests {
             an.id.clone(),
             NoteDraft {
                 original: an.clone(),
+                tags: String::new(),
                 body: "Preserved local note".into(),
             },
         );
@@ -1959,6 +3020,7 @@ mod tests {
             bn.id.clone(),
             NoteDraft {
                 original: bn.clone(),
+                tags: String::new(),
                 body: "Saved parked note".into(),
             },
         );

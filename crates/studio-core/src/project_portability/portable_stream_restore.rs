@@ -679,6 +679,7 @@ fn validated_note(
     current: bool,
 ) -> Result<crate::PassageAnnotation> {
     let mut state: crate::PassageAnnotation = serde_json::from_value(value.clone())?;
+    crate::annotations::validate_annotation_tags(&state.tags)?;
     if state.id != old_note
         || state.document_id != old_document
         || state.revision <= 0
@@ -1296,6 +1297,7 @@ fn preserve_note_extensions(
             "base_revision",
             "anchor",
             "note",
+            "tags",
             "status",
             "anchor_status",
             "deleted",

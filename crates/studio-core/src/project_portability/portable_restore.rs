@@ -307,6 +307,7 @@ fn validate_state(
     current_state: bool,
 ) -> Result<PassageAnnotation> {
     let mut state: PassageAnnotation = serde_json::from_value(value.clone())?;
+    crate::annotations::validate_annotation_tags(&state.tags)?;
     if state.id != old_id
         || state.document_id != old_document
         || state.revision <= 0

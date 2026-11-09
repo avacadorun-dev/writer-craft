@@ -33,7 +33,7 @@ impl StudioApp {
                             if self.library {
                                 l.text("Create project")
                             } else {
-                                l.text("Add document")
+                                l.text("New item")
                             },
                         )
                         .clicked()
@@ -41,7 +41,10 @@ impl StudioApp {
                             if self.library {
                                 self.project_dialog = true;
                             } else {
-                                self.document_dialog = true;
+                                let result = self.tree_action(project_tree::TreeAction::Create(
+                                    self.tree_ui.selected.clone(),
+                                ));
+                                self.record_error(result);
                             }
                         }
                     });
@@ -69,10 +72,11 @@ impl StudioApp {
                         .color(t.muted),
                     );
                 } else {
+                    self.reference_return_control(ui);
                     #[cfg(feature = "editor-preview")]
                     self.canvas_navigation(ui, t);
                     let search =
-                        components::singleline(ui, &mut self.search, l.text("Find a document…"));
+                        components::singleline(ui, &mut self.search, l.text("Find in the tree…"));
                     #[cfg(feature = "editor-preview")]
                     super::capture_connected_writing::control(
                         ui.ctx(),
@@ -85,7 +89,11 @@ impl StudioApp {
                     ui.horizontal(|ui| {
                         ui.add_space(8.0);
                         icons::icon(ui, Icon::Folder, 20.0, t.muted);
-                        ui.label(RichText::new(l.text("Manuscript")).size(13.0).strong());
+                        ui.label(
+                            RichText::new(l.text("Project contents"))
+                                .size(13.0)
+                                .strong(),
+                        );
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             ui.label(
                                 RichText::new(self.documents.len().to_string())
@@ -99,25 +107,46 @@ impl StudioApp {
                         });
                     });
                     ui.add_space(6.0);
-                    if let Some(id) = self.project_outline.show(
+                    if let Some(action) = self.project_outline.show(
                         ui,
                         &self.documents,
                         self.document.as_ref().map(|document| document.id.as_str()),
+                        self.tree_ui.selected.as_deref(),
                         &self.search,
                         l,
                         t,
-                    ) && let Some(document) = self
-                        .documents
-                        .iter()
-                        .find(|document| document.id == id)
-                        .cloned()
-                    {
-                        let result = self.open_document(document);
+                    ) {
+                        let result = self.tree_action(action);
                         self.record_error(result);
                     }
                     ui.add_space(14.0);
                     ui.separator();
                     ui.add_space(10.0);
+                    ui.menu_button(l.text("Organize project"), |ui| {
+                        if ui.button(l.text("Add at root…")).clicked() {
+                            let result = self.tree_action(project_tree::TreeAction::Create(None));
+                            self.record_error(result);
+                            ui.close();
+                        }
+                        if ui.button(l.text("Trash")).clicked() {
+                            let result = self.refresh_project_tree();
+                            if result.is_ok() {
+                                self.tree_ui.trash_open = true;
+                            }
+                            self.record_error(result);
+                            ui.close();
+                        }
+                        if ui.button(l.text("Refresh project")).clicked() {
+                            let result = self.refresh_project_tree();
+                            self.record_error(result);
+                            ui.close();
+                        }
+                    });
+                    #[cfg(feature = "editor-preview")]
+                    if nav_row(ui, Icon::Search, l.text("Project markup"), false, t).clicked() {
+                        let result = self.open_project_marks();
+                        self.record_error(result);
+                    }
                     if nav_row(
                         ui,
                         Icon::History,

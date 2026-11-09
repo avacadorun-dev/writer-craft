@@ -83,7 +83,7 @@ fn upgrading_schema_seven_should_preserve_rich_notes_canvas_and_both_draft_versi
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
     for table in ["project_evidence_objects", "project_evidence_references"] {
         let present: i64 = connection
             .query_row(

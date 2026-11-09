@@ -27,10 +27,12 @@ mod project_clipboard;
 mod project_import;
 mod project_navigation;
 mod project_transfer;
+mod project_tree;
 #[cfg(feature = "editor-preview")]
 mod proofing;
 #[cfg(feature = "editor-preview")]
 mod recovery;
+mod reference_navigation;
 #[cfg(feature = "editor-preview")]
 mod rendering;
 mod review;
@@ -85,6 +87,9 @@ pub struct StudioApp {
     projects: Vec<Project>,
     project: Option<Project>,
     project_outline: project_navigation::ProjectOutline,
+    tree_ui: project_tree::TreeUi,
+    reference_return: Option<navigation_return::NavigationReturn>,
+    reference_origin_title: String,
     documents: Vec<Document>,
     document: Option<Document>,
     body: String,
@@ -226,6 +231,9 @@ impl StudioApp {
             projects: vec![],
             project: None,
             project_outline: project_navigation::ProjectOutline::default(),
+            tree_ui: project_tree::TreeUi::default(),
+            reference_return: None,
+            reference_origin_title: String::new(),
             documents: vec![],
             document: None,
             body: String::new(),
@@ -393,11 +401,13 @@ impl StudioApp {
         self.cancel_clipboard_work();
         self.save()?;
         let documents = self.workspace.list_documents(&project.id)?;
-        let outline = project_navigation::ProjectOutline::prepare(
-            &project.id,
-            &self.workspace.project_tree(&project.id)?,
-        )?;
-        if let Some(document) = documents.first().cloned() {
+        let nodes = self.workspace.initialize_project_tree(&project.id)?;
+        let outline = project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
+        let first = documents
+            .iter()
+            .find(|document| project_tree::document_is_active(&nodes, &document.id))
+            .cloned();
+        if let Some(document) = first {
             // The old project/context remains intact if opening needs an explicit
             // recovery choice. Never display an empty project after a guarded refusal.
             self.open_document(document)?;
@@ -421,12 +431,29 @@ impl StudioApp {
         }
         self.documents = documents;
         self.project_outline = outline;
+        self.tree_ui = project_tree::TreeUi::with_nodes(nodes);
+        self.tree_ui.selected = self
+            .document
+            .as_ref()
+            .and_then(|document| {
+                self.tree_ui
+                    .nodes
+                    .iter()
+                    .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            })
+            .map(|node| node.logical_id.clone());
         self.project = Some(project);
         self.library = false;
         Ok(())
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        if !project_tree::document_is_active(
+            &self.workspace.project_tree(&document.project_id)?,
+            &document.id,
+        ) {
+            return Err(project_tree::TrashedDocument.into());
+        }
         #[cfg(feature = "editor-preview")]
         self.ensure_canvas_navigation()?;
         self.commit_title_edit()?;
@@ -507,6 +534,16 @@ impl StudioApp {
         }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
+        self.tree_ui.selected = self
+            .document
+            .as_ref()
+            .and_then(|document| {
+                self.tree_ui
+                    .nodes
+                    .iter()
+                    .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            })
+            .map(|node| node.logical_id.clone());
         self.daily_controls.document_changed();
         #[cfg(feature = "editor-preview")]
         if recovered_checkpoint {
@@ -734,6 +771,7 @@ impl StudioApp {
             || self.rich_modal_open()
             || self.daily_controls.modal_open()
             || self.storage.modal_open()
+            || self.tree_ui.modal_open()
     }
 }
 
@@ -846,6 +884,7 @@ impl eframe::App for StudioApp {
         self.rich_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
+        self.tree_dialogs(&ctx, t);
         self.storage_dialog(&ctx, t);
         self.project_transfer_dialog(&ctx, t);
         #[cfg(feature = "editor-preview")]
@@ -871,6 +910,9 @@ impl eframe::App for StudioApp {
 }
 
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    if error.is::<project_tree::TrashedDocument>() {
+        return "This document is in Trash. Restore its branch before opening it.";
+    }
     #[cfg(feature = "editor-preview")]
     if error.is::<canvas::PendingCanvas>() {
         return "Finish or preserve the pending board operation before leaving.";

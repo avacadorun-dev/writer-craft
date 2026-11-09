@@ -578,6 +578,7 @@ fn import_notes(
                 })?,
                 anchor: anchor.clone(),
                 note: validation::string(original, "note")?.to_owned(),
+                tags: Vec::new(),
                 status,
                 anchor_status: if attached {
                     super::AnchorStatus::Attached

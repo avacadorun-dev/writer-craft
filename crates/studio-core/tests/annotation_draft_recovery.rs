@@ -356,7 +356,7 @@ fn schema_five_migrates_without_recreating_existing_asset_tables() {
     let version: i64 = raw
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
     let tables:i64=raw.query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('project_assets','rich_draft_annotations')",[],|row|row.get(0)).unwrap();
     assert_eq!(tables, 2);
 }

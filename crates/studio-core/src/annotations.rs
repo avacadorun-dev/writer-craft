@@ -137,6 +137,9 @@ pub struct PassageAnnotation {
     pub anchor: AnnotationAnchor,
     /// Author-written note, never manuscript content.
     pub note: String,
+    /// Author-defined, case-sensitive labels. Older records have no labels.
+    #[serde(default)]
+    pub tags: Vec<String>,
     /// Independent author lifecycle.
     pub status: AnnotationStatus,
     /// Independent attachment validity.
@@ -167,6 +170,43 @@ pub struct AnnotationEvent {
     pub before: Option<PassageAnnotation>,
     /// Complete resulting state, including deletion tombstones.
     pub after: PassageAnnotation,
+}
+
+/// A project-scoped markup result, without loading its manuscript body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectAnnotationSummary {
+    /// Current manuscript title; identities, not this label, drive navigation.
+    pub document_title: String,
+    /// Current document revision captured with the metadata.
+    pub document_revision: i64,
+    /// Current author metadata, including tombstones when explicitly requested.
+    pub annotation: PassageAnnotation,
+}
+
+/// Exact project-wide tag edit captured for explicit review before committing.
+/// Private targets prevent a caller from forging or omitting an affected occurrence.
+#[derive(Debug, Clone)]
+pub struct ProjectTagSnapshot {
+    project_id: String,
+    tag: String,
+    targets: Vec<ProjectAnnotationSummary>,
+}
+impl ProjectTagSnapshot {
+    /// Exact case-sensitive label being changed.
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+    /// Number of active passage records that the operation will change.
+    pub fn count(&self) -> usize {
+        self.targets.len()
+    }
+    /// Records that would become empty and therefore move to deleted markup.
+    pub fn tag_only_count(&self) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| target.annotation.tags.len() == 1 && target.annotation.note.is_empty())
+            .count()
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,7 +419,20 @@ impl Workspace {
         anchor: AnnotationAnchor,
         note: &str,
     ) -> Result<PassageAnnotation> {
-        let note = normalize_note(note)?;
+        self.create_tagged_annotation(document_id, expected_revision, anchor, note, &[])
+    }
+
+    /// Create exact passage markup with a note, author labels, or both.
+    pub fn create_tagged_annotation(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+        anchor: AnnotationAnchor,
+        note: &str,
+        tags: &[String],
+    ) -> Result<PassageAnnotation> {
+        validate_tags(tags)?;
+        let note = normalize_markup_note(note, tags)?;
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let document = read_document(&transaction, document_id)?;
@@ -392,6 +445,7 @@ impl Workspace {
             base_revision: expected_revision,
             anchor,
             note,
+            tags: tags.to_vec(),
             status: AnnotationStatus::Open,
             anchor_status: AnchorStatus::Attached,
             deleted: false,
@@ -416,6 +470,18 @@ impl Workspace {
         list_annotations(&connection, document_id)
     }
 
+    /// Read markup for exactly one project, optionally including deleted records.
+    /// Results contain no full manuscript bodies and retain stable document/note identities.
+    pub fn project_annotations(
+        &self,
+        project_id: &str,
+        include_deleted: bool,
+    ) -> Result<Vec<ProjectAnnotationSummary>> {
+        let connection = self.connection()?;
+        super::require_project(&connection, project_id)?;
+        project_annotations(&connection, project_id, include_deleted)
+    }
+
     /// Update authored text/lifecycle with both document and note guards.
     pub fn update_annotation(
         &self,
@@ -424,7 +490,25 @@ impl Workspace {
         expected_annotation_revision: i64,
         patch: AnnotationPatch,
     ) -> Result<PassageAnnotation> {
-        if patch.note.is_none() && patch.status.is_none() {
+        self.update_annotation_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            patch,
+            None,
+        )
+    }
+
+    /// Edit note text and/or labels atomically under the same exact metadata guards.
+    pub fn update_annotation_markup(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        patch: AnnotationPatch,
+        tags: Option<Vec<String>>,
+    ) -> Result<PassageAnnotation> {
+        if patch.note.is_none() && patch.status.is_none() && tags.is_none() {
             return Err(StudioError::Validation("Annotation update is empty".into()));
         }
         self.change_annotation(
@@ -433,9 +517,14 @@ impl Workspace {
             expected_annotation_revision,
             "update",
             |_, annotation| {
-                if let Some(note) = patch.note {
-                    annotation.note = normalize_note(&note)?;
+                if let Some(tags) = tags {
+                    validate_tags(&tags)?;
+                    annotation.tags = tags;
                 }
+                if let Some(note) = patch.note {
+                    annotation.note = normalize_markup_note(&note, &annotation.tags)?;
+                }
+                normalize_markup_note(&annotation.note, &annotation.tags)?;
                 if let Some(status) = patch.status {
                     annotation.status = status;
                 }
@@ -484,6 +573,138 @@ impl Workspace {
             },
         )?;
         Ok(())
+    }
+
+    /// Restore a deleted mark by identity. Changed manuscript content keeps its old quote
+    /// detached until the author explicitly selects a current range for reattachment.
+    pub fn restore_annotation(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+    ) -> Result<PassageAnnotation> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let before = read_annotation(&transaction, id, true)?;
+        if !before.deleted {
+            return Err(StudioError::Validation("This markup is not deleted".into()));
+        }
+        let document = read_document(&transaction, &before.document_id)?;
+        require_revision(&document, expected_document_revision)?;
+        let tree = rich_tree(&document)?;
+        if before.revision != expected_annotation_revision {
+            return Err(StudioError::AnnotationConflict {
+                expected: expected_annotation_revision,
+                actual: before.revision,
+            });
+        }
+        let mut after = before.clone();
+        after.deleted = false;
+        if before.base_revision != document.revision
+            || verified_anchor(&tree, &before.anchor).is_err()
+        {
+            after.anchor_status = AnchorStatus::Detached;
+        }
+        after.revision = next_revision(before.revision)?;
+        after.base_revision = document.revision;
+        store_annotation(&transaction, &before, &after, "restore")?;
+        save_attachment(&transaction, &after, document.revision)?;
+        transaction.commit()?;
+        Ok(after)
+    }
+
+    /// Capture every current occurrence of one exact label for a whole-project edit.
+    pub fn project_tag_snapshot(&self, project_id: &str, tag: &str) -> Result<ProjectTagSnapshot> {
+        validate_tags(&[tag.to_owned()])?;
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Deferred)?;
+        super::require_project(&transaction, project_id)?;
+        let targets = tag_targets(&transaction, project_id, tag)?;
+        if targets.is_empty() {
+            return Err(StudioError::Validation(
+                "This tag has no current passages".into(),
+            ));
+        }
+        transaction.commit()?;
+        Ok(ProjectTagSnapshot {
+            project_id: project_id.into(),
+            tag: tag.into(),
+            targets,
+        })
+    }
+
+    /// Rename one label across its exact reviewed set, without implicitly merging labels.
+    pub fn rename_project_tag(
+        &self,
+        snapshot: &ProjectTagSnapshot,
+        replacement: &str,
+    ) -> Result<usize> {
+        validate_tags(&[replacement.to_owned()])?;
+        if replacement == snapshot.tag {
+            return Ok(0);
+        }
+        self.change_project_tag(snapshot, Some(replacement))
+    }
+
+    /// Remove one label across its exact reviewed set. Marks with no remaining note or label
+    /// become recoverable tombstones; the caller must disclose that count before confirmation.
+    pub fn remove_project_tag(&self, snapshot: &ProjectTagSnapshot) -> Result<usize> {
+        self.change_project_tag(snapshot, None)
+    }
+
+    fn change_project_tag(
+        &self,
+        snapshot: &ProjectTagSnapshot,
+        replacement: Option<&str>,
+    ) -> Result<usize> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        super::require_project(&transaction, &snapshot.project_id)?;
+        if tag_targets(&transaction, &snapshot.project_id, &snapshot.tag)? != snapshot.targets {
+            return Err(StudioError::Validation(
+                "The tagged passages changed; review the project tag again".into(),
+            ));
+        }
+        if let Some(replacement) = replacement
+            && !tag_targets(&transaction, &snapshot.project_id, replacement)?.is_empty()
+        {
+            return Err(StudioError::Validation(
+                "That tag already exists; choose a distinct name".into(),
+            ));
+        }
+        for target in &snapshot.targets {
+            let before = &target.annotation;
+            let document = read_document(&transaction, &before.document_id)?;
+            require_revision(&document, target.document_revision)?;
+            rich_tree(&document)?;
+            let mut after = before.clone();
+            if let Some(replacement) = replacement {
+                for tag in &mut after.tags {
+                    if tag == &snapshot.tag {
+                        *tag = replacement.into();
+                    }
+                }
+            } else {
+                after.tags.retain(|tag| tag != &snapshot.tag);
+                after.deleted = after.tags.is_empty() && after.note.is_empty();
+                if after.deleted {
+                    // A recoverable deletion retains the last authored label with its quote;
+                    // it no longer participates in active tag queries until explicit restore.
+                    after.tags.clone_from(&before.tags);
+                }
+            }
+            after.revision = next_revision(before.revision)?;
+            after.base_revision = document.revision;
+            store_annotation(
+                &transaction,
+                before,
+                &after,
+                if after.deleted { "delete" } else { "update" },
+            )?;
+            save_attachment(&transaction, &after, document.revision)?;
+        }
+        transaction.commit()?;
+        Ok(snapshot.targets.len())
     }
 
     /// Read append-only history, including the history of explicitly deleted notes.
@@ -686,15 +907,80 @@ fn attachment_states(notes: &[PassageAnnotation]) -> HashMap<String, AttachmentS
         .collect()
 }
 
-fn normalize_note(note: &str) -> Result<String> {
+fn normalize_markup_note(note: &str, tags: &[String]) -> Result<String> {
     let note = note.trim();
-    if note.is_empty() || note.chars().count() > crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS {
+    if (note.is_empty() && tags.is_empty())
+        || note.chars().count() > crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
+    {
         return Err(StudioError::Validation(format!(
-            "Annotation note must contain 1–{} characters",
+            "Add a note or at least one tag; notes can contain at most {} characters",
             crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS
         )));
     }
     Ok(note.into())
+}
+
+pub(crate) fn validate_annotation_tags(tags: &[String]) -> Result<()> {
+    if tags.len() > 32 {
+        return Err(StudioError::Validation(
+            "Use at most 32 tags on one passage".into(),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for tag in tags {
+        if tag.trim().is_empty() || tag.chars().count() > 80 || tag.chars().any(char::is_control) {
+            return Err(StudioError::Validation(
+                "Each tag needs 1–80 characters without line breaks".into(),
+            ));
+        }
+        if !seen.insert(tag) {
+            return Err(StudioError::Validation(
+                "Each tag can occur only once on a passage".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_tags(tags: &[String]) -> Result<()> {
+    validate_annotation_tags(tags)
+}
+
+fn project_annotations(
+    connection: &Connection,
+    project_id: &str,
+    include_deleted: bool,
+) -> Result<Vec<ProjectAnnotationSummary>> {
+    let mut statement = connection.prepare("SELECT d.title,d.revision,a.annotation_json FROM document_annotations a JOIN documents d ON d.id=a.document_id WHERE d.project_id=?1 AND (a.deleted=0 OR ?2) ORDER BY d.title,d.id,a.id")?;
+    let rows = statement
+        .query_map(params![project_id, include_deleted], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    rows.into_iter()
+        .map(|(document_title, document_revision, raw)| {
+            Ok(ProjectAnnotationSummary {
+                document_title,
+                document_revision,
+                annotation: serde_json::from_str(&raw)?,
+            })
+        })
+        .collect()
+}
+
+fn tag_targets(
+    connection: &Connection,
+    project_id: &str,
+    tag: &str,
+) -> Result<Vec<ProjectAnnotationSummary>> {
+    Ok(project_annotations(connection, project_id, false)?
+        .into_iter()
+        .filter(|item| item.annotation.tags.iter().any(|label| label == tag))
+        .collect())
 }
 
 fn rich_tree(document: &Document) -> Result<RichTree> {

@@ -2,9 +2,9 @@
 
 - [x] Reconcile handoff, source/dirty state, live issues and hosted run identities.
 - [x] Record F-50/F-51, the concrete author scenarios and honest release boundary before implementation.
-- [ ] Implement native structure initialization and guarded folder/document CRUD using source rules.
-- [ ] Mount accessible hierarchy actions and exact reference consultation/return with eight locales.
-- [ ] Implement compatible author-defined passage tags and project result lifecycle.
+- [x] Implement native structure initialization and guarded folder/document CRUD using source rules.
+- [x] Mount accessible hierarchy actions and exact reference consultation/return with eight locales.
+- [x] Implement compatible author-defined passage tags and project result lifecycle.
 - [ ] Verify targeted semantic preservation/refusal checks on GitHub without including the retained #10 diff.
 - [ ] Perform A3-WRITE-01/A3-MARK-01 through the native interface on the substantial acceptance manuscript.
 - [ ] Obtain independent same-issue exact-candidate acceptance and audit #14/#10 remaining scope.

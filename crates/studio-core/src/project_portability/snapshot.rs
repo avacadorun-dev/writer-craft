@@ -475,7 +475,7 @@ impl Workspace {
     }
 }
 pub(super) fn native_manifest(project: &str, title: &str) -> Value {
-    json!({"format":"writers-studio-project","formatVersion":8,"exportedAt":"0001-01-01T00:00:00Z","project":{"id":project,"title":title,"kind":"free","language":"ru","synopsis":"","structureRevision":1,"structure":{"schemaVersion":1,"template":"free","rootLabel":"Manuscript","nodeTypes":[{"key":"document","label":"Document","pluralLabel":"Documents","icon":"file-text","contentBearing":true,"allowedChildren":["document"],"canBeRoot":true}]},"createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"},"nodes":[],"documentRevisions":[],"namedVersions":[],"dictionaryTerms":[],"documentAnnotations":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[]})
+    json!({"format":"writers-studio-project","formatVersion":8,"exportedAt":"0001-01-01T00:00:00Z","project":{"id":project,"title":title,"kind":"free","language":"ru","synopsis":"","structureRevision":1,"structure":crate::project_structure::native_free_structure(),"createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"},"nodes":[],"documentRevisions":[],"namedVersions":[],"dictionaryTerms":[],"documentAnnotations":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[]})
 }
 fn capture_assets(
     connection: &Connection,

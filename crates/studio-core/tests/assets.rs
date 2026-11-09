@@ -433,7 +433,7 @@ fn schema_four_migration_preserves_existing_rich_notes_drafts_and_history() {
     assert_eq!(
         raw.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        9
+        10
     );
 }
 
