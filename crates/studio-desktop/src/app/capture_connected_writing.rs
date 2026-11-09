@@ -95,6 +95,12 @@ fn click_at(pos: Pos2) -> Vec<Event> {
 fn empty_canvas_point(state: &Value) -> Option<Pos2> {
     let viewport = value_rect(&state["viewport"])?;
     let candidates = [
+        // Fit-to-board can leave only a narrow outer margin around the seed card.
+        // Interior fractions alone then provide no placement target.
+        viewport.left_top() + vec2(16.0, 16.0),
+        viewport.right_top() + vec2(-16.0, 16.0),
+        viewport.left_bottom() + vec2(16.0, -16.0),
+        viewport.right_bottom() - vec2(16.0, 16.0),
         viewport.center(),
         viewport.left_center() + vec2(viewport.width() * 0.25, 0.0),
         viewport.right_center() - vec2(viewport.width() * 0.25, 0.0),
@@ -105,11 +111,12 @@ fn empty_canvas_point(state: &Value) -> Option<Pos2> {
     ];
     let visible = state["visible_nodes"].as_array();
     candidates.into_iter().find(|point| {
-        !visible.is_some_and(|nodes| {
-            nodes
-                .iter()
-                .any(|node| value_rect(&node["reserved"]).is_some_and(|rect| rect.contains(*point)))
-        })
+        viewport.contains(*point)
+            && !visible.is_some_and(|nodes| {
+                nodes.iter().any(|node| {
+                    value_rect(&node["reserved"]).is_some_and(|rect| rect.contains(*point))
+                })
+            })
     })
 }
 fn rect_value(rect: Rect) -> Value {
@@ -683,6 +690,19 @@ impl ConnectedCapture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fitted_seed_should_leave_an_observed_empty_margin_for_placement() -> AppResult<()> {
+        let viewport = Rect::from_min_max(egui::pos2(264.0, 144.0), egui::pos2(1000.0, 663.0));
+        let card = Rect::from_min_max(egui::pos2(296.0, 201.9), egui::pos2(968.0, 605.1));
+        let point = empty_canvas_point(&json!({
+            "viewport":rect_value(viewport),
+            "visible_nodes":[{"reserved":rect_value(card)}]
+        }))
+        .ok_or("auto-fit seed has an available empty margin")?;
+        assert!(viewport.contains(point) && !card.contains(point));
+        Ok(())
+    }
     #[test]
     fn connected_observation_is_inert_until_explicitly_armed() {
         let ctx = egui::Context::default();
