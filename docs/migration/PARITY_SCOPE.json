@@ -1405,6 +1405,7 @@
     "full-editor-parity"
   ],
   "contract_inputs": [
+    "docs/governance/ALPHA3_RELEASE_MAP.md",
     "docs/research/PROJECT_TYPES_AND_FORMATTING.md",
     "docs/design/EDITOR_UX_PARITY.md",
     "docs/PRD.md",

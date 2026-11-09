@@ -1,6 +1,6 @@
 # Alpha.3 delivery queue
 
-Updated 2026-11-09. This active plan supersedes the overnight pause in `docs/verification/PAUSED_2026_11_09.md`. It changes execution order, not the accepted alpha.3 scope.
+Updated 2026-11-09. The [alpha.3 release work map](ALPHA3_RELEASE_MAP.md) is authoritative for the P0–P11 execution order, WIP limit and deferral policy. This document records delivery evidence and historical checkpoints. Together they supersede the overnight pause in `docs/verification/PAUSED_2026_11_09.md` without reducing the accepted alpha.3 scope.
 
 ## One integrated issue at a time
 
@@ -8,7 +8,7 @@ Updated 2026-11-09. This active plan supersedes the overnight pause in `docs/ver
 
 **Active next: [#15 — direct Canvas card writing](https://github.com/avacadorun-dev/writer-craft/issues/15).** Root integrates and accepts; one implementation agent owns the bounded pending-creation/input lifecycle, with a separate independent reviewer. Finish creation, immediate typing, acknowledged persistence, retry/cancel, selection/Undo, clipping/zoom, reopen and transfer as one user journey. Review the existing generic-engine draft before publication or adoption. No new table or portability dependency pin belongs in this slice.
 
-After #15 acceptance, reassess the bounded #12 block-flow and #6 layout issues against their complete criteria. All other issues remain queued. If the active issue is blocked, record the exact blocker and explicitly select the next issue rather than accumulating hidden streams.
+After #15 acceptance, follow P1 (#12 block-flow), P2 (#6 layout), then the remaining release-map sequence against each issue's complete criteria. All other issues remain queued. If the active issue is blocked, record and resolve the exact blocker; advancing or deferring it requires an explicit user decision recorded in the issue. This supersedes the earlier discretion to switch the queue when blocked.
 
 ## Delegation contract
 
