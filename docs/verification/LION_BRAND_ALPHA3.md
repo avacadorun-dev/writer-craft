@@ -27,3 +27,19 @@ Regenerate assets with `./scripts/make-icon.sh`; an optional staging directory p
 - Existing packaging contract tests: 11 passed, including preservation of the original 256 px Windows ICO payload.
 - OpenSpec strict validation: 19/19 contracts passed; the unrelated pre-existing table capture heading remains an informational notice.
 - Direct rustfmt and `git diff --check` passed. Rust compilation, native captures, actual packaged icon and final independent integration review remain pending until the exact hosted candidate is recorded below.
+
+## Exact-source compiled integration
+
+Candidate: `c4e33025ec9f14b6736b46e20eb3523a033c430f` (asset commit `6944915`, native/banner commit `63b605b`). [Verify42550104096](https://github.com/avacadorun-dev/writer-craft/actions/runs/42550104096) passed macOS workspace/all-feature tests, Clippy, compatibility/spec/release tooling and Windows/Linux shared-core checks. [Preview42550098189](https://github.com/avacadorun-dev/writer-craft/actions/runs/42550098189) passed and produced the signed native package and capture artifacts.
+
+Downloaded package SHA-256: `0f2aaaea4c3f76a518623064e937aaa39a374df00cdd5ef2733d30e00dfdad3d`. Its ICNS is byte-identical to the new repository ICNS. The binary contains the exact current runtime PNG and all three header renditions. The actual Windows packager produced an ICO whose PNG payload is byte-identical to the approved `ic08` rendition; this is icon-path verification, not Windows interaction qualification.
+
+Four [native captures](../images/alpha3/README.md) from the original signed executable verify Light/Dark at 1000×680 and 1440×923 points, DPR 2. The independent designer accepted the actual 32-point header, 8-point wordmark gap, vertical centering, native-control clearance and shared navigator boundary, without clipping or overlap. The source/banner/asset review also passed.
+
+A separately identified preview opened with an isolated synthetic workspace. macOS returned the approved lion from `NSRunningApplication.icon`; the [actual OS icon](../images/alpha3/running-os-icon.png) and [sanitized receipt](../images/alpha3/branding-evidence.json) are retained. Local re-signing changed embedded signature bytes, while all 13 native code/data sections remained identical. The four manuscript captures used the original, unmodified signed executable. Dock pixels themselves were not observed; no Dock screenshot or whole-alpha.3 acceptance is claimed.
+
+The subsequent README/evidence commit is documentation-only. Historical alpha.2 images and published release artifacts remain unchanged. Existing live development/user workspaces were not changed or restarted.
+
+## Final independent disposition
+
+Accepted on 2026-11-09 by the separate `alpha3_independent_designer` reviewer for the exact issue #16 branding scope at `c4e33025ec9f14b6736b46e20eb3523a033c430f`. Assets, banner, all four compiled headers, packaged icon sources and the actual macOS-resolved running-application icon satisfy the stated criteria. No branding blocker remains. Direct Dock pixels were not observed and are not a criterion in issue #16. The full alpha.3 release gate remains pending.

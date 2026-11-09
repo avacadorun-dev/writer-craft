@@ -4,9 +4,9 @@ Updated 2026-11-09. This active plan supersedes the overnight pause in `docs/ver
 
 ## One integrated issue at a time
 
-**Active: [#16 — lion identity](https://github.com/avacadorun-dev/writer-craft/issues/16).** Root integrates Rust/UI, README, specifications, checks and issue evidence. One asset implementer owns only brand inputs/exports and the existing icon-generation scripts. The independent designer reviews those same surfaces. A separate read-only issue audit is complete; it does not authorize parallel implementation.
+**Delivered: [#16 — lion identity](https://github.com/avacadorun-dev/writer-craft/issues/16).** Source `c4e33025ec9f14b6736b46e20eb3523a033c430f` passed hosted checks, actual compiled Light/Dark verification, package/runtime icon checks and independent named branding acceptance. [Final evidence](../verification/LION_BRAND_ALPHA3.md). Published releases remain unchanged.
 
-**Next: [#15 — direct Canvas card writing](https://github.com/avacadorun-dev/writer-craft/issues/15).** Finish creation, immediate typing, acknowledged persistence, retry/cancel, selection/Undo, clipping/zoom, reopen and transfer as one user journey. Review the existing generic-engine draft before publication or adoption. No new table or portability dependency pin belongs in this slice.
+**Active next: [#15 — direct Canvas card writing](https://github.com/avacadorun-dev/writer-craft/issues/15).** Root integrates and accepts; one implementation agent owns the bounded pending-creation/input lifecycle, with a separate independent reviewer. Finish creation, immediate typing, acknowledged persistence, retry/cancel, selection/Undo, clipping/zoom, reopen and transfer as one user journey. Review the existing generic-engine draft before publication or adoption. No new table or portability dependency pin belongs in this slice.
 
 After #15 acceptance, reassess the bounded #12 block-flow and #6 layout issues against their complete criteria. All other issues remain queued. If the active issue is blocked, record the exact blocker and explicitly select the next issue rather than accumulating hidden streams.
 
@@ -27,7 +27,7 @@ An agent returns a commit or explicit uncommitted diff, check results, limitatio
 
 ## Audit snapshot
 
-No currently open product issue had complete closure evidence at this audit. Existing passing tests and implementations remain useful, but are not silently promoted to end-to-end acceptance.
+Before the branding work, no open product issue had complete closure evidence at this audit. Issue #16 now has the complete named evidence above; other rows retain their outstanding criteria. Existing passing tests and implementations remain useful, but are not silently promoted to end-to-end acceptance.
 
 | Issue | Remaining acceptance boundary |
 |---|---|
@@ -42,7 +42,7 @@ No currently open product issue had complete closure evidence at this audit. Exi
 | #12 | Media/diagram pending-ready-error-retry flow under typography/viewport changes; matching paint/hit bounds, source/assets/anchors and Undo. |
 | #14 | Researched project profiles and board/document/entity relationship authority; selected workflow and object-sizing implementation with Studio compatibility. |
 | #15 | Immediate new-card input through pending/failed save, exact draft preservation and retry; native IME/clipboard/Undo/zoom/clipping/cancel/reopen/transfer. |
-| #16 | Unified supplied lion assets, native header and platform icon integration, centered current README/banner, exact-source visual/independent acceptance. |
+| #16 | Complete for the named branding scope; final evidence is linked above. |
 
 ## Parked work
 

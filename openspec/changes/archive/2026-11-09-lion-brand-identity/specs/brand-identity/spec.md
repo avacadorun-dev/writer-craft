@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Consistent approved lion identity
-All active application and repository brand surfaces SHALL display the supplied lion writer from one preserved source. The full rounded tile SHALL remain opaque inside its silhouette; transparency SHALL be confined to its exterior. Native header presentation SHALL remain readable at32logical pixels in Light and Dark without changing toolbar/pane boundaries.
+All active application and repository brand surfaces SHALL display the supplied lion writer from one preserved source. The full rounded tile SHALL remain opaque inside its silhouette; transparency SHALL be confined to its exterior. Native header presentation SHALL remain readable at 32 logical pixels in Light and Dark without changing toolbar/pane boundaries.
 
 #### Scenario: Switching appearance or packaging platform
 - **WHEN** an author switches appearance or installs a supported native package

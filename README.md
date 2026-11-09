@@ -33,6 +33,21 @@ The macOS app is ad-hoc signed and **not notarized**; Windows packages are unsig
 
 ## The workspace
 
+Actual compiled **alpha.3 development** captures with synthetic demo content and the new lion identity. This is an unreleased development build; downloadable alpha.2 remains linked above. [Exact source and capture evidence](docs/images/alpha3/README.md).
+
+<p align="center">
+  <img src="docs/images/alpha3/workspace-dark-wide.png" alt="WriterCraft alpha.3 development workspace with the lion writer identity, bounded manuscript and native dark interface" width="100%" />
+  <sub>The current native workspace in Dark.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/alpha3/workspace-light-wide.png" alt="The same compiled WriterCraft workspace in Light with the approved lion header" width="100%" />
+  <sub>The same writing surface in Light.</sub>
+</p>
+
+<details>
+<summary>Released alpha.2 screenshots (historical)</summary>
+
 The following are historical **alpha.2** macOS captures with synthetic demo content. They show the released version, including its former monk identity; alpha.3 introduces the lion writer shown above. These are application screenshots, not design mockups.
 
 <p align="center">
@@ -50,6 +65,9 @@ The following are historical **alpha.2** macOS captures with synthetic demo cont
     <td width="50%"><img src="docs/images/alpha2/settings-light.png" alt="Categorized native preferences with independent appearance modes and palette preview cards" /><br /><sub>Native preferences and palette previews</sub></td>
   </tr>
 </table>
+
+
+</details>
 
 ## What works today
 
