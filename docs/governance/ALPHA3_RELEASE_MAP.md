@@ -33,9 +33,9 @@ Closed 2026-11-09 under lean verification: real native workflow verified end-to-
 
 Closed 2026-11-09 under lean verification: engine syntax suite 14/14 on the app-pinned source (every original named format has a real grammar and colored sample; syntax.rs identical between pin and test), palette-aware cached app integration with explicit unavailable-fallback, source preservation via canonical JSON in green Verify. Gap: pixel-level token colors in the compiled app usage-monitored.
 
-### P5 — #9 dialogs and input sizing
+### P5 — complete: #9 dialogs and input sizing
 
-Focus/keyboard/error/disabled/minimum-size/localization matrix, including transfer dialogs; independent review.
+Closed 2026-11-09 under lean verification: settings dialog (7 palettes, modes, Esc-clean close, no phantom edits), new-document dialog (disabled empty submit → validation → create), note form and transfer dialogs share metrics; eight-locale captures settled. Pixel metrics usage-monitored.
 
 ### P6 — #7 complete block authoring
 
