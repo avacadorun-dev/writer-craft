@@ -23,6 +23,10 @@ Independent source review identified and required these corrections before accep
 
 The final bounded source re-review found no remaining blocker in these changes. It did not execute Cargo or native UI.
 
+## Integrated checkpoint evidence
+
+Application `a55f35939a07bf0b217b67bea7bea056aaab6b2f` passed the complete default/editor-enabled workspace tests, strict Clippy, isolated editor compatibility, OpenSpec and release-metadata checks on macOS, plus shared core/transfer/CLI tests and Clippy on Windows/Linux in [run42561067882](https://github.com/avacadorun-dev/writer-craft/actions/runs/42561067882). The independently reviewed Reload ordering and exact raw→poll→paint regressions in851ea42, and compiled probe sequencing in d2b4ed3, require the next exact integrated run; the earlier success is not silently reused for that delta.
+
 ## Required evidence still pending
 
 - Exact integrated application tests, Clippy and complete OpenSpec checks.
