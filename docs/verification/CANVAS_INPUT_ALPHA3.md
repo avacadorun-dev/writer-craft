@@ -60,3 +60,28 @@ The app's reviewed host integration additionally reveals an active existing or p
 
 
 The final generic revision `b59aefafe64a7e8bbc3d39cda44983223e0fc534` passed the locked model/native tests, formatting and strict Clippy on macOS, Linux and Windows in [run42565855041](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42565855041). The application now adopts this qualified revision together with the reviewed host reveal guard, existing CJK fallback and corrected clipping fixture. The final integrated app tests, package, capture diagnostics and repeated real macOS crash scenario are still pending; this dependency qualification does not close #15.
+
+
+## Exact candidate c9cb895 — bounded compiled and native outcomes
+
+App `c9cb895955e92232e0331feeba08de240cc4edd8` passed [Verify 42566781842](https://github.com/avacadorun-dev/writer-craft/actions/runs/42566781842). [Preview 42566799984](https://github.com/avacadorun-dev/writer-craft/actions/runs/42566799984) produced the checksum-verified, ad-hoc-signed bundle. Original executable SHA256: `217e20ae3d0a55b635af57c169fcef041fb10a19749cd604a2e7610dc4f0bbdc`; lock SHA256: `aff965a09d65dc83e273bc8d179c00da1357f9e4b755becb23ebce65d03a0fe1`.
+
+Independent review of its actual compiled captures confirmed readable Japanese glyphs. The corrected 200% fixture exposed a real invisible-caret defect: viewport right edge 1000, visible card body x=560..1000, native caret x=1059.4062..1062.4062. Text was durable, but its insertion point was outside the visible area. This is failed acceptance, not a fixture exception. The two previously recorded rich-editor target-kind failures also remain queued; informational capture failure is not erased by overall packaging success.
+
+Real macOS interaction used synthetic data and a temporary uniquely identified test wrapper because older preview bundles shared a launch identifier. Only its bundle name/identifier and ad-hoc signing metadata changed. The original and wrapper Mach-O payloads match after normalizing LC_CODE_SIGNATURE and signature-related LINKEDIT sizes (SHA256 `19cf575e9695a4b85c7640aca8799dbf714a34f628f67d48807b51725788989a`); wrapper executable SHA256 `fde2e1b8a9a06f588dfa98eacf19e67e97e1430e9672109d7fdcda20ffcb7c74`. This establishes bounded application-code observations, not acceptance of original-package distribution.
+
+Observed native paths:
+- Pointer creation followed immediately by OS paste retained the first text; double-click editing, multiline Cyrillic/combining-mark/Japanese paste, local Undo/Redo, exact selected-fragment replacement and Cmd-Enter worked without the earlier AccessKit crash.
+- A real SQLite write lock on the isolated test database caused an explicit save error. Exact text remained editable; later typing survived; navigation refused to discard it. After unlocking, Retry saved the original and later text at revision 12 and cleared the recovery draft; Done completed normally. A retained read-only post-Retry receipt has SHA256 `85c348b3ed4de333e24edac1122f64c8f4285deb96bb2fca630fbc5691dbedd8`.
+- After saved status, Cmd-Q exited cleanly with code 0. Restarting the same executable/database and reopening the board showed all authored texts. This is clean-restart evidence, not crash-recovery acceptance.
+- An earlier batched accessibility activation followed by paste produced an empty card. Its native event ordering was not established; it remains unresolved. Subsequent observed activation and immediate physical-pointer/paste paths passed, without retroactively accepting the earlier batch.
+
+The local partial interaction record has SHA256 `95a1ad9af8e86bf42d21dbcb57ddb1d97ca50ee08618044e5e40897deaae0f19`; it is a controller-observed record rather than an independently replayed whole-issue acceptance. OS IME composition, the complete layout/locale matrix, delayed/stale insertion and save, crash recovery, transfer and the final exact-candidate journey remain pending. Private workspaces and raw UI artifacts are not committed.
+
+## Qualified keyboard entry and clipped-input correction
+
+Independent source review found the missing existing-card keyboard entry. The selected fix emits the same exact-base EditText intent on unmodified non-repeating Enter for one editable selected text card with actual Canvas/node focus; other fields, inline text, composition, locks, gestures and blocked UI keep ownership. The app maps its hover hint through all eight catalogs.
+
+The clipped-input correction mounts the actual intersected local viewport with two-axis native scrolling while retaining full-card wrapping, geometry and editor identity. Public native caret reveal handles geometry changes; stable manual scrolling remains possible. No IME-output clamp, synthetic focus or camera movement is used.
+
+The combined engine revision `69f23820b4f0f6a463944afc590a11caf1b0f864` passed locked tests, formatting and strict Clippy on Linux/macOS/Windows in [run 42569601695](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42569601695). The failed Enter checkpoint 89e511b used a raw repeat flag without a held key; the reviewed 7e40838 fixture uses real key-down/repeat/release and retains its assertions. Clipping tests cover four edges, initial/changed clipping, long/wrapped text, selection, IME, Undo and manual scroll. The app adopts only the qualified exact revision. Fresh app CI, clipped captures and native keyboard/geometry review remain required; #15 is open.

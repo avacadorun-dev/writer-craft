@@ -71,3 +71,15 @@ Cancel SHALL immediately stop accepting further edits into the cancelled draft a
 #### Scenario: Done acknowledgement shares a frame with new input
 - **WHEN** a save or insertion acknowledgement arrives before the current frame's native text or IME is processed
 - **THEN** Done SHALL retain the same editor until the input pass completes and the latest committed text is acknowledged
+
+#### Scenario: Keyboard entry respects the active input owner
+- **WHEN** exactly one unlocked text card is selected and that card or the Canvas viewport owns focus
+- **THEN** an unmodified, non-repeating Enter SHALL activate the same guarded inline editing path as double-click
+- **AND** a localized hover hint SHALL expose both entry methods in every supported interface language
+- **AND** inline text, another field, IME, blocked/unfocused UI, gestures and multi-selection SHALL retain their own Enter behavior
+
+#### Scenario: A partly visible card retains a usable insertion point
+- **WHEN** a card extends beyond any Canvas viewport edge, including at 200% zoom
+- **THEN** its native editor SHALL scroll inside the actual visible intersection to reveal the caret after typing, selection navigation or geometry changes
+- **AND** full-card text wrapping, canonical geometry, board camera, widget identity, selection, composition and local history SHALL remain intact
+- **AND** stable geometry SHALL permit deliberate manual scrolling without continuously snapping back to the caret

@@ -1219,6 +1219,7 @@ fn write_board_copy(language: Language, filename: &str, content: &str) -> AppRes
 fn labels(language: Language) -> CanvasViewLabels {
     CanvasViewLabels {
         canvas: language.text("Canvas").into(),
+        edit_text_hint: language.text("Double-click or press Enter to edit").into(),
         save: language.text("Save").into(),
         cancel: language.text("Cancel").into(),
         text_source: language.text("Markdown source").into(),

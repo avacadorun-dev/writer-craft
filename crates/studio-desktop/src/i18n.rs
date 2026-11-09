@@ -722,6 +722,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Double-click or press Enter to edit",
+        [
+            "Дважды нажмите или нажмите Enter для редактирования",
+            "Double-click or press Enter to edit",
+            "Zum Bearbeiten doppelklicken oder die Eingabetaste drücken",
+            "Double-cliquez ou appuyez sur Entrée pour modifier",
+            "Haz doble clic o pulsa Intro para editar",
+            "Clique duas vezes ou prima Enter para editar",
+            "双击或按 Enter 键编辑",
+            "ダブルクリックまたは Enter キーで編集",
+        ],
+    ),
+    (
         "Double-click to write a note…",
         [
             "Дважды нажмите, чтобы написать заметку…",

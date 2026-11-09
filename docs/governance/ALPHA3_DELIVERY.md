@@ -70,3 +70,8 @@ The exact app Verify and preview packaging passed, but the native gate did not. 
 
 
 The focus-lifecycle correction is now qualified at generic revision `b59aefafe64a7e8bbc3d39cda44983223e0fc534` ([all-platform run42565855041](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42565855041)). The app adopts that exact revision with a reviewed reveal-before-paint guard for fully culled active cards; partial camera position, zoom and canonical data remain unchanged. CJK font and genuine clipped-card capture corrections join this one #15 candidate. Integrated app/native acceptance remains next; other product streams remain parked.
+
+
+## Active #15 — qualified keyboard and clipping follow-up
+
+The c9cb895 candidate passed app CI and established bounded real macOS paste/selection/local Undo, explicit failed-save Retry and clean-restart observations. Its corrected clipping fixture revealed an actual invisible caret; existing-card keyboard entry was also missing. Both are within #15. CraftCanvas `69f23820b4f0f6a463944afc590a11caf1b0f864` now passes all-platform hosted qualification ([run 42569601695](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42569601695)); the app adopts this exact revision with localized entry hints. [Evidence and remaining limits](../verification/CANVAS_INPUT_ALPHA3.md). Fresh integrated/native acceptance is still required, and the release-map queue remains at P0.
