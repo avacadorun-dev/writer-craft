@@ -25,7 +25,7 @@ A debounced edit SHALL be checkpointed and saved against the exact acknowledged 
 
 ### Requirement: DCT-3 exact pending creation and input ownership
 
-The same native editor SHALL retain text, selection, composition and local Undo across the exact insertion acknowledgement. The host SHALL acquire focus at creation and route owned lifecycle keys before generic focus navigation, using supported public APIs without masking platform IME output or requiring a hidden warmup frame.
+The same native editor SHALL retain text, selection, composition and local Undo across the exact insertion acknowledgement. The host SHALL arm focus at creation, acquire it before the next native input batch without waiting for insertion acknowledgement, and route owned lifecycle keys before generic focus navigation, using supported public APIs without masking platform IME output or requiring a hidden warmup frame.
 
 #### Scenario: First input precedes insertion acknowledgement
 - **WHEN** the first mounted frame receives Unicode text or IME preedit while insertion remains pending
@@ -41,6 +41,12 @@ The same native editor SHALL retain text, selection, composition and local Undo 
 - **WHEN** insertion fails with or without a prepared recovery candidate, including an empty provisional card
 - **THEN** navigation/close SHALL not silently discard the pending record or draft
 - **AND** Retry SHALL use the original insertion against its exact base, while preservation SHALL retain the original node plus latest text atomically
+
+#### Scenario: Activation follows the board paint pass
+- **WHEN** an existing card or a new-card intent is activated after the board body has been painted
+- **THEN** the emitted accessibility tree SHALL contain its focused node and SHALL remain valid for the native accessibility consumer
+- **AND** the next native Text/Paste/IME batch SHALL reach the intended mounted input without a persistence wait, synthetic replay or loss of another field's deliberate focus
+- **AND** an absent, culled or blocked input SHALL not produce a dangling accessibility focus ID
 
 ### Requirement: DCT-4 explicit cancellation during persistence
 

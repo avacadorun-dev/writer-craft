@@ -63,3 +63,10 @@ The independent engine source review found first-frame IME interruption and Esca
 ## Active #15 input correction — hosted engine qualified
 
 The supported input-handoff fix `4be05e9430639d1c666e416ad96d5f668686d48b` passed all-platform generic tests/fmt/strict Clippy in [run42560855344](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42560855344). The app now adopts that exact revision with immediate provisional creation, retained input/acknowledgement, exact retry, frozen Cancel and lossless manual recovery for unpreparable drafts. Host source review additionally found a Done/poll ordering race; finishing now occurs after current-frame input. New host regressions and native qualification remain under review; #15 is open, and all other feature streams remain parked. This updates the older unpublished-candidate notes above without turning source progress into product acceptance.
+
+## Active #15 compiled-review correction — de161c43
+
+The exact app Verify and preview packaging passed, but the native gate did not. Independent compiled review found missing CJK glyphs and an invalid clipping fixture; actual macOS interaction additionally exposed an AccessKit focused-node crash. See [current evidence](../verification/CANVAS_INPUT_ALPHA3.md). Fix and qualify these within #15 before moving the queue. The two-axis gate also requires successful observations and operation-level coverage so partial #15 input evidence cannot accept complete #17 board behavior. No issue is closed and no alpha.3 release is authorized by this checkpoint alone.
+
+
+The focus-lifecycle correction is now qualified at generic revision `b59aefafe64a7e8bbc3d39cda44983223e0fc534` ([all-platform run42565855041](https://github.com/avacadorun-dev/craft-canvas/actions/runs/42565855041)). The app adopts that exact revision with a reviewed reveal-before-paint guard for fully culled active cards; partial camera position, zoom and canonical data remain unchanged. CJK font and genuine clipped-card capture corrections join this one #15 candidate. Integrated app/native acceptance remains next; other product streams remain parked.

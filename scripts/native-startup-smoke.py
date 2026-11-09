@@ -130,7 +130,11 @@ def validate_clipped_caret(probe: dict, final: dict) -> None:
     if len(clip) != 4 or len(cursor) != 4 or not all(isinstance(value, (int, float)) for value in clip + cursor):
         raise ValueError("The actual clipped-card native caret geometry is missing")
     caret_center = [(cursor[0] + cursor[2]) / 2, (cursor[1] + cursor[3]) / 2]
-    if not (clip[0] <= caret_center[0] <= clip[2] and clip[1] <= caret_center[1] <= clip[3]) or diagnostic.get("actual_zoom") != 2 or (final.get("camera") or {}).get("zoom") != 2 or diagnostic.get("card_is_clipped") is not True or diagnostic.get("native_caret_visible") is not True or diagnostic.get("status") != "passed":
+    if diagnostic.get("actual_zoom") != 2 or (final.get("camera") or {}).get("zoom") != 2:
+        raise ValueError("The clipped-card fixture did not use the required actual 2x zoom")
+    if diagnostic.get("card_is_clipped") is not True:
+        raise ValueError("The clipped-card fixture did not cross the viewport boundary; no clipping acceptance is possible")
+    if not (clip[0] <= caret_center[0] <= clip[2] and clip[1] <= caret_center[1] <= clip[3]) or diagnostic.get("native_caret_visible") is not True or diagnostic.get("status") != "passed":
         raise ValueError("The actual 2x clipped-card native caret is not visible; inspect retained diagnostic PNG and sidecar")
 
 
@@ -391,6 +395,9 @@ def self_test() -> None:
             probe["diagnostic"]["cursor"] = [20, 20, 22, 40]
             validate_clipped_caret(probe, final)
             with self.assertRaises(ValueError): validate_clipped_caret(probe, {"camera": {"zoom": 1}})
+            probe["diagnostic"]["card_is_clipped"] = False
+            with self.assertRaisesRegex(ValueError, "fixture did not cross the viewport boundary"):
+                validate_clipped_caret(probe, final)
         def test_child_exit_and_timeout_are_recorded(self):
             with tempfile.TemporaryDirectory(prefix="writercraft-smoke-test-") as directory:
                 output = Path(directory)

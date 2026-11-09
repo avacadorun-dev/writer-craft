@@ -127,6 +127,7 @@ pub(super) struct ConnectedCapture {
     card: Option<String>,
     seed: Value,
     phase: usize,
+    clipped_camera_positioned: bool,
     events: Vec<Event>,
     steps: Vec<Value>,
     final_state: Value,
@@ -227,6 +228,7 @@ impl ConnectedCapture {
             card: None,
             seed,
             phase: 0,
+            clipped_camera_positioned: false,
             events: Vec::new(),
             steps: Vec::new(),
             final_state: Value::Null,
@@ -349,6 +351,58 @@ impl ConnectedCapture {
         self.preservation_verified = true;
         Ok(())
     }
+    /// Move the already mounted card across the viewport before testing its input.
+    /// Moving before creation is ineffective because Add centers a new card there.
+    fn position_clipped_camera(
+        &mut self,
+        app: &mut StudioApp,
+        ctx: &egui::Context,
+        state: &Value,
+    ) -> AppResult<()> {
+        let Some(id) = state["editor"]["node_id"].as_str() else {
+            return Ok(());
+        };
+        let Some(reserved) = state["visible_nodes"]
+            .as_array()
+            .and_then(|nodes| nodes.iter().find(|node| node["node_id"] == id))
+            .and_then(|node| value_rect(&node["reserved"]))
+        else {
+            return Ok(());
+        };
+        let viewport = value_rect(&state["viewport"]).ok_or("capture_viewport_missing")?;
+        let center_x = state["camera"]["center"][0]
+            .as_f64()
+            .ok_or("capture_camera_center_missing")?;
+        let center_y = state["camera"]["center"][1]
+            .as_f64()
+            .ok_or("capture_camera_center_missing")?;
+        let zoom = state["camera"]["zoom"]
+            .as_f64()
+            .filter(|zoom| zoom.is_finite() && *zoom > 0.0)
+            .ok_or("capture_camera_zoom_invalid")?;
+        let screen_shift = viewport.right() + reserved.width() * 0.25 - reserved.right();
+        app.canvas
+            .as_mut()
+            .ok_or("capture_canvas_missing")?
+            .set_capture_camera(
+                ctx,
+                craft_canvas_model::WorldPoint {
+                    x: center_x - f64::from(screen_shift) / zoom,
+                    y: center_y,
+                },
+                zoom,
+            )?;
+        self.steps.push(json!({
+            "step":"position-existing-card-across-viewport",
+            "observed_state_sha256":digest(state),
+            "phase":self.phase,
+            "observed_native_state":state,
+            "input_provenance":"capture-only camera placement after actual card creation; not OS input"
+        }));
+        self.clipped_camera_positioned = true;
+        ctx.request_repaint();
+        Ok(())
+    }
     fn drive_canvas(&mut self, observation: &Observation, state: &Value) {
         match self.phase {
             0 => self.click_control(observation, "click-new-card", state, "canvas.add_text"),
@@ -462,7 +516,7 @@ impl ConnectedCapture {
     }
     pub(super) fn readiness(
         &mut self,
-        app: &StudioApp,
+        app: &mut StudioApp,
         ctx: &egui::Context,
     ) -> super::native_capture::CaptureReadiness {
         let observation = frame(ctx);
@@ -488,7 +542,14 @@ impl ConnectedCapture {
         }
         let previous_steps = self.steps.len();
         if state["project_id"] == self.project && self.failure.is_none() {
-            if self.scenario.starts_with("canvas-") {
+            if self.scenario == "canvas-clipped-2x"
+                && self.phase == 1
+                && !self.clipped_camera_positioned
+            {
+                if let Err(error) = self.position_clipped_camera(app, ctx, &state) {
+                    self.failure = Some(error.to_string());
+                }
+            } else if self.scenario.starts_with("canvas-") {
                 self.drive_canvas(&observation, &state);
             } else {
                 self.drive_hierarchy(&observation, &state);

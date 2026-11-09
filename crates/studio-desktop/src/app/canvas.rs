@@ -205,6 +205,40 @@ impl CanvasState {
             editor.prepare_inline_input(ctx, input, blocked);
         }
     }
+    /// Keep an active input mountable after a resize without changing its data or zoom.
+    fn reveal_inline_input(&mut self) -> AppResult<()> {
+        let Some(editor) = self.text_editor.as_ref() else {
+            return Ok(());
+        };
+        if self.viewport_size.x <= 0.0 || self.viewport_size.y <= 0.0 {
+            return Ok(());
+        }
+        let pending = editor.pending_node(&self.session);
+        let node = pending
+            .as_deref()
+            .or_else(|| self.session.document().node(editor.node_id()))
+            .ok_or_else(|| CanvasError::NotFound(editor.node_id().into()))?;
+        let center = node.bounds().center();
+        let camera = self.view.camera();
+        let size = WorldPoint {
+            x: f64::from(self.viewport_size.x),
+            y: f64::from(self.viewport_size.y),
+        };
+        let minimum = camera.view_to_world(WorldPoint { x: 0.0, y: 0.0 }, size);
+        let maximum = camera.view_to_world(size, size);
+        let visible_world = WorldRect {
+            x: minimum.x,
+            y: minimum.y,
+            width: maximum.x - minimum.x,
+            height: maximum.y - minimum.y,
+        };
+        // Match CanvasView's culling boundary; partially visible cards keep their camera.
+        if !node.bounds().intersects(visible_world) {
+            self.view
+                .set_camera(craft_canvas_model::Camera::new(center, camera.zoom())?);
+        }
+        Ok(())
+    }
     /// Dirty or unacknowledged native input cannot silently disappear through navigation.
     pub(super) fn blocks_navigation(&self) -> bool {
         self.pending.is_some()
@@ -828,6 +862,10 @@ impl CanvasState {
             self.fit_on_open = false;
             self.set_failure(result);
         }
+        // The pre-input hook can grant focus before this pass's viewport is known.
+        // Reveal an offscreen active card now so resizing cannot omit its real widget.
+        let reveal = self.reveal_inline_input();
+        self.set_failure(reveal);
         let media = self
             .media
             .get_or_insert_with(|| MediaCache::new(database.to_owned()));
@@ -1650,6 +1688,124 @@ mod tests {
         assert_eq!(reopened.snapshot.revision.info.revision, 3);
         Ok(())
     }
+    #[test]
+    fn resized_board_should_mount_armed_input_and_preserve_zoom_and_first_text() -> TestResult {
+        for provisional in [false, true] {
+            let directory = tempfile::tempdir()?;
+            let database = directory.path().join("resized-input.sqlite");
+            let workspace = Workspace::open(&database)?;
+            let project = workspace.create_project("Synthetic resized input")?;
+            let mut original = graph();
+            original["nodes"][0]["x"] = json!(900);
+            let board = workspace.create_project_canvas(&project.id, "Board", original.clone())?;
+            let mut state = CanvasState::from_snapshot(&project.id, board)?;
+            state.view.set_camera(craft_canvas_model::Camera::new(
+                WorldPoint { x: 0.0, y: 0.0 },
+                1.5,
+            )?);
+            state.fit_on_open = false;
+            // This card was visible on the wide board, but the next native pass is narrow.
+            state.viewport_size = Vec2::new(4000.0, 1000.0);
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut activation = Ok(());
+            let mut full = ctx.run_ui(egui::RawInput::default(), |ui| {
+                ui.label("Board already painted");
+                activation = (|| -> AppResult<()> {
+                    if provisional {
+                        // Exercise the host's pending projection before durable submission.
+                        let mut raw = original["nodes"][0].clone();
+                        raw["id"] = json!("provisional");
+                        let node = NodeRecord::parse(&raw.to_string(), state.session.limits())?;
+                        let mut editor = TextCardEditor::pending_insertion(&state.session, node)?;
+                        editor.begin_inline(ui.ctx())?;
+                        state.text_editor = Some(editor);
+                        Ok(())
+                    } else {
+                        state.intent(
+                            &database,
+                            ui.ctx(),
+                            CanvasIntent::EditText {
+                                base: state.session.identity(),
+                                node_id: "card".into(),
+                            },
+                        )
+                    }
+                })();
+            });
+            full.textures_delta.clear();
+            full.platform_output.commands.clear();
+            activation?;
+            let before = state.session.document().raw_json().to_owned();
+            let full = show_card_frame(
+                &mut state,
+                &database,
+                &ctx,
+                vec![egui::Event::Text(" — retained first input".into())],
+                1.0,
+            );
+            assert!(
+                state
+                    .text_editor
+                    .as_ref()
+                    .ok_or("editor")?
+                    .text()
+                    .contains("retained first input")
+            );
+            assert_eq!(state.view.camera().zoom(), 1.5);
+            assert_eq!(
+                state.view.camera().center(),
+                state
+                    .session
+                    .document()
+                    .node("card")
+                    .ok_or("card")?
+                    .bounds()
+                    .center()
+            );
+            assert_eq!(state.session.document().raw_json(), before);
+            assert_eq!(
+                workspace
+                    .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                    .revision
+                    .content,
+                original
+            );
+            let update = full
+                .platform_output
+                .accesskit_update
+                .as_ref()
+                .ok_or("native accessibility update")?;
+            assert!(update.nodes.iter().any(|(id, node)| *id == update.focus
+                && node.role() == egui::accesskit::Role::MultilineTextInput));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn partially_clipped_active_card_should_keep_its_camera_position() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let workspace = Workspace::open(directory.path().join("clipped-input.sqlite"))?;
+        let project = workspace.create_project("Synthetic clipped input")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.text_editor = Some(TextCardEditor::new(&state.session, "card")?);
+        state.viewport_size = Vec2::new(736.0, 500.0);
+        for center_x in [40.0, -50.0] {
+            let camera = craft_canvas_model::Camera::new(
+                WorldPoint {
+                    x: center_x,
+                    y: 90.0,
+                },
+                2.0,
+            )?;
+            state.view.set_camera(camera);
+            state.reveal_inline_input()?;
+            assert_eq!(state.view.camera(), camera);
+        }
+        Ok(())
+    }
+
     #[test]
     fn composing_card_should_not_autosave_and_explicit_cancel_should_keep_canonical_source()
     -> TestResult {

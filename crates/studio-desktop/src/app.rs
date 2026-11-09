@@ -1046,6 +1046,12 @@ fn install_fonts(ctx: &egui::Context) {
         .entry(FontFamily::Proportional)
         .or_default()
         .push("Noto CJK".into());
+    // Native card/source editors use Monospace; keep its Latin faces ahead of CJK.
+    fonts
+        .families
+        .entry(FontFamily::Monospace)
+        .or_default()
+        .push("Noto CJK".into());
     let mut manuscript_faces = vec!["Source Serif".into()];
     manuscript_faces.extend(
         fonts
@@ -1175,6 +1181,35 @@ mod tests {
             });
         });
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn monospace_card_input_resolves_cjk_glyphs_without_changing_latin_metrics() {
+        let context = egui::Context::default();
+        install_fonts(&context);
+        let mut output = context.run_ui(egui::RawInput::default(), |ui| {
+            ui.ctx().fonts_mut(|fonts| {
+                let font = FontId::monospace(13.0);
+                // Resolve actual glyphs through the same family as native card input.
+                // These fallback glyphs are distinct from epaint's replacement face.
+                for character in "日本語にほんカタカナ简体中文漢字".chars() {
+                    assert!(
+                        fonts.has_glyph(&font, character),
+                        "Missing native Monospace glyph for {character:?}",
+                    );
+                }
+                let advance = fonts.glyph_width(&font, 'i');
+                assert!(advance > 0.0);
+                for character in "Wm0{}".chars() {
+                    assert!(
+                        (fonts.glyph_width(&font, character) - advance).abs() < 0.001,
+                        "Latin monospace advance changed for {character:?}",
+                    );
+                }
+            });
+        });
+        output.textures_delta.clear();
+        output.platform_output.commands.clear();
     }
 
     #[test]
