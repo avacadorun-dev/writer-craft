@@ -441,8 +441,13 @@ class ReleaseChecks(unittest.TestCase):
         report = root / record["interaction_evidence"]
         record["scope"] = "full-editor-parity"
         receipt = {"source_fingerprint": "a" * 64, "build_ref": "https://example.invalid/synthetic-build", "platform": "synthetic fixture",
-                   "observations": [{"kind": "inventory-audit", "id": "editor"}, {"kind": "semantic", "id": "E01"},
-                                    {"kind": "native", "id": "E01"}, {"kind": "native-journey", "id": "PT-NOV-01", "paths": ["main", "cancel", "save-reopen"]}]}
+                   "observations": [{"kind": "inventory-audit", "id": "editor", "outcome": "passed", "provenance": "source-audit"},
+                                    {"kind": "semantic", "id": "E01", "outcome": "passed", "provenance": "automated-test"},
+                                    {"kind": "native", "id": "E01", "outcome": "passed", "provenance": "native-os"},
+                                    {"kind": "native-journey", "id": "PT-NOV-01", "outcome": "passed", "provenance": "native-os",
+                                     "paths": ["main", "cancel", "save-reopen"],
+                                     "path_results": [{"id": id_, "outcome": "passed", "provenance": "native-os"}
+                                                      for id_ in ["main", "cancel", "save-reopen"]]}]}
         report.write_text("<!-- writercraft-evidence\n" + json.dumps(receipt) + "\n-->\n" + report.read_text())
         checksum = hashlib.sha256(report.read_bytes()).hexdigest()
         record["interaction_evidence_sha256"] = checksum
@@ -592,6 +597,187 @@ class ReleaseChecks(unittest.TestCase):
                     row[key] = value
                     self.assertTrue(PARITY.issues(root, record, "a" * 64))
                 row[key] = original
+
+
+    def receipt(self, root, record):
+        text = (root / record["interaction_evidence"]).read_text()
+        return json.loads(text.split("\n", 1)[1].split("\n-->\n", 1)[0])
+
+    def replace_receipt(self, root, record, receipt):
+        report = root / record["interaction_evidence"]
+        narrative = report.read_text().split("\n-->\n", 1)[1]
+        report.write_text("<!-- writercraft-evidence\n" + json.dumps(receipt) + "\n-->\n" + narrative)
+        checksum = hashlib.sha256(report.read_bytes()).hexdigest()
+        record["interaction_evidence_sha256"] = checksum
+        for rows in record["coverage"].values():
+            for row in rows:
+                for item in row["evidence"]:
+                    item["sha256"] = checksum
+
+    def require_operation_coverage(self, root, record, scope, path):
+        operations = [
+            {"id": "native-ime", "title": "Compose with the OS input method", "native_os_required": True},
+            {"id": "render-gfm", "title": "Render GFM card content", "native_os_required": False},
+        ]
+        scope["capabilities"][0]["required_operations"] = operations
+        path.write_text(json.dumps(scope))
+        receipt = self.receipt(root, record)
+        for observation in receipt["observations"]:
+            if observation["id"] == "E01":
+                observation["operation_results"] = [
+                    {"id": op["id"], "outcome": "passed", "provenance": observation["provenance"]}
+                    for op in operations]
+        self.replace_receipt(root, record, receipt)
+        return receipt
+
+    def test_observations_require_success_and_explicit_compatible_provenance(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            original = self.receipt(root, record)
+            for index in range(len(original["observations"])):
+                for field, value in [("outcome", None), ("outcome", "failed"), ("outcome", "pending"),
+                                     ("outcome", "skipped"), ("outcome", True), ("provenance", None),
+                                     ("provenance", ""), ("provenance", "screenshot-implies-native")]:
+                    changed = copy.deepcopy(original)
+                    if value is None:
+                        changed["observations"][index].pop(field)
+                    else:
+                        changed["observations"][index][field] = value
+                    self.replace_receipt(root, record, changed)
+                    with self.subTest(index=index, field=field, value=value):
+                        self.assertTrue(PARITY.issues(root, record, "a" * 64))
+
+    def test_each_journey_path_requires_its_own_success_and_provenance(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            original = self.receipt(root, record)
+            for mutation in ["missing", "partial", "duplicate", "unknown", "failed", "no-outcome", "no-provenance", "conflicting-provenance"]:
+                changed = copy.deepcopy(original)
+                observation = changed["observations"][-1]
+                results = observation["path_results"]
+                if mutation == "missing": observation.pop("path_results")
+                elif mutation == "partial": results.pop()
+                elif mutation == "duplicate": results.append(copy.deepcopy(results[0]))
+                elif mutation == "unknown": results[0]["id"] = "unknown"
+                elif mutation == "failed": results[0]["outcome"] = "failed"
+                elif mutation == "no-outcome": results[0].pop("outcome")
+                elif mutation == "no-provenance": results[0].pop("provenance")
+                else: results[0]["provenance"] = "injected-egui"
+                self.replace_receipt(root, record, changed)
+                with self.subTest(mutation=mutation):
+                    self.assertTrue(PARITY.issues(root, record, "a" * 64))
+
+    def test_complete_static_presentation_cannot_accept_an_interactive_journey(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            receipt = self.receipt(root, record)
+            journey = receipt["observations"][-1]
+            journey["provenance"] = "compiled-ui"
+            for result in journey["path_results"]:
+                result["provenance"] = "compiled-ui"
+            self.replace_receipt(root, record, receipt)
+            self.assertIn("compatible observation provenance", ";".join(PARITY.issues(root, record, "a" * 64)))
+
+    def test_input_only_or_failed_operations_cannot_accept_a_complete_capability(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            scope, path = self.make_coverage(root, record)
+            original = self.require_operation_coverage(root, record, scope, path)
+            self.assertEqual(PARITY.issues(root, record, "a" * 64), [])
+            for index in [1, 2]:
+                for mutation in ["missing", "input-only", "duplicate", "unknown", "failed", "no-outcome", "no-provenance"]:
+                    changed = copy.deepcopy(original)
+                    observation = changed["observations"][index]
+                    results = observation["operation_results"]
+                    if mutation == "missing": observation.pop("operation_results")
+                    elif mutation == "input-only": results.pop()
+                    elif mutation == "duplicate": results.append(copy.deepcopy(results[0]))
+                    elif mutation == "unknown": results[0]["id"] = "unknown"
+                    elif mutation == "failed": results[0]["outcome"] = "failed"
+                    elif mutation == "no-outcome": results[0].pop("outcome")
+                    else: results[0].pop("provenance")
+                    self.replace_receipt(root, record, changed)
+                    with self.subTest(index=index, mutation=mutation):
+                        self.assertTrue(PARITY.issues(root, record, "a" * 64))
+
+    def test_injected_or_rendered_receipts_cannot_satisfy_native_os_operations(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            scope, path = self.make_coverage(root, record)
+            original = self.require_operation_coverage(root, record, scope, path)
+            for provenance in ["injected-egui", "compiled-ui"]:
+                changed = copy.deepcopy(original)
+                observation = changed["observations"][2]
+                observation["provenance"] = provenance
+                for result in observation["operation_results"]:
+                    result["provenance"] = provenance
+                self.replace_receipt(root, record, changed)
+                self.assertIn("requires native OS input", ";".join(PARITY.issues(root, record, "a" * 64)))
+                observation["operation_results"][0]["provenance"] = "native-os"
+                self.replace_receipt(root, record, changed)
+                self.assertIn("conflicts with observation provenance", ";".join(PARITY.issues(root, record, "a" * 64)))
+
+    def test_non_os_operations_keep_explicit_injected_or_compiled_provenance(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            scope, path = self.make_coverage(root, record)
+            original = self.require_operation_coverage(root, record, scope, path)
+            scope["capabilities"][0]["required_operations"].pop(0)
+            path.write_text(json.dumps(scope))
+            for observation in original["observations"]:
+                if observation["id"] == "E01":
+                    observation["operation_results"].pop(0)
+            for provenance in ["injected-egui", "compiled-ui"]:
+                changed = copy.deepcopy(original)
+                observation = changed["observations"][2]
+                observation["provenance"] = provenance
+                observation["operation_results"][0]["provenance"] = provenance
+                self.replace_receipt(root, record, changed)
+                self.assertEqual(PARITY.issues(root, record, "a" * 64), [])
+
+    def test_operation_contract_requires_explicit_well_formed_subrequirements(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            scope, path = self.make_coverage(root, record)
+            self.require_operation_coverage(root, record, scope, path)
+            original = copy.deepcopy(scope)
+            for mutation in ["null", "empty", "duplicate", "no-title", "no-os-policy", "invalid-os-policy"]:
+                changed = copy.deepcopy(original)
+                operations = changed["capabilities"][0]["required_operations"]
+                if mutation == "null": changed["capabilities"][0]["required_operations"] = None
+                elif mutation == "empty": operations.clear()
+                elif mutation == "duplicate": operations.append(copy.deepcopy(operations[0]))
+                elif mutation == "no-title": operations[0].pop("title")
+                elif mutation == "no-os-policy": operations[0].pop("native_os_required")
+                else: operations[0]["native_os_required"] = "yes"
+                path.write_text(json.dumps(changed))
+                with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                    PARITY.contract(root)
+
+    def test_canvas_contract_keeps_gfm_board_history_and_recovery_beyond_input(self):
+        required = PARITY.contract(ROOT)["capabilities"]
+        b01 = {row["id"]: row for row in required["B01"]["required_operations"]}
+        b26 = {row["id"]: row for row in required["B26"]["required_operations"]}
+        self.assertTrue({"render-gfm", "reopen-edit", "native-ime", "native-clipboard"}.issubset(b01))
+        self.assertTrue({"local-text-undo-redo", "board-undo-redo", "save-reopen", "recovery-reopen"}.issubset(b26))
+        for operation in ["native-ime", "native-clipboard", "native-selection"]:
+            self.assertIs(b01[operation]["native_os_required"], True)
 
 
 if __name__ == "__main__":

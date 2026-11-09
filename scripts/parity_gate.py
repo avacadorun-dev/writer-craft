@@ -10,6 +10,12 @@ from pathlib import Path
 SCOPES = {"full-editor-parity", "full-parity"}
 CONTRACT = "docs/migration/PARITY_SCOPE.json"
 KINDS = ("inventories", "capabilities", "journeys")
+PROVENANCE = {
+    "inventory-audit": {"source-audit"},
+    "semantic": {"automated-test"},
+    "native": {"native-os", "injected-egui", "compiled-ui"},
+    "native-journey": {"native-os", "injected-egui"},
+}
 
 
 def file_at(root, relative):
@@ -68,6 +74,15 @@ def contract(root, required_scope=None):
     for row in result["capabilities"].values():
         if row.get("inventory") not in result["inventories"]:
             raise ValueError(row["id"] + " has no known inventory")
+        if "required_operations" in row:
+            operations = indexed(row["required_operations"], row["id"] + ".required_operations")
+            if not operations:
+                raise ValueError(row["id"] + " cannot declare empty required_operations")
+            for operation in operations.values():
+                if not isinstance(operation.get("title"), str) or not operation["title"].strip():
+                    raise ValueError(row["id"] + " needs a named operation contract")
+                if type(operation.get("native_os_required")) is not bool:
+                    raise ValueError(row["id"] + " operation needs explicit native_os_required")
     for row in result["journeys"].values():
         if row.get("origin") not in {"legacy", "requested-enhancement", "mixed"}:
             raise ValueError(row["id"] + " cannot require an unselected hypothesis")
@@ -83,7 +98,28 @@ def contract(root, required_scope=None):
     return result
 
 
-def checked_evidence(root, items, required, fingerprint, row_id, required_paths):
+def successful_observation(observation, kind, label):
+    if observation.get("outcome") != "passed":
+        raise ValueError(label + " needs an explicit passed observation outcome")
+    provenance = observation.get("provenance")
+    if not isinstance(provenance, str) or provenance not in PROVENANCE[kind]:
+        raise ValueError(label + " needs explicit compatible observation provenance")
+    return provenance
+
+
+def checked_results(items, expected_ids, kind, label, provenance, native_os_required=()):
+    results = indexed(items, label)
+    if set(results) != set(expected_ids):
+        raise ValueError(label + " does not cover exactly the required IDs")
+    for id_, result in results.items():
+        actual = successful_observation(result, kind, label + "/" + id_)
+        if actual != provenance:
+            raise ValueError(label + "/" + id_ + " conflicts with observation provenance")
+        if kind in {"native", "native-journey"} and id_ in native_os_required and actual != "native-os":
+            raise ValueError(label + "/" + id_ + " requires native OS input; injected or rendered evidence is insufficient")
+
+
+def checked_evidence(root, items, required, fingerprint, row_id, required_paths, required_operations):
     if not isinstance(items, list):
         raise ValueError("Evidence must be a list")
     kinds = set()
@@ -102,16 +138,27 @@ def checked_evidence(root, items, required, fingerprint, row_id, required_paths)
         if not isinstance(receipt, dict) or receipt.get("source_fingerprint") != fingerprint:
             raise ValueError("Report describes a different candidate: " + item["path"])
         kind = item.get("kind")
+        if not isinstance(kind, str) or kind not in PROVENANCE:
+            raise ValueError("Evidence has an unknown observation kind")
         observations = receipt.get("observations")
         if not isinstance(observations, list):
             raise ValueError("Report needs explicit observed requirement IDs")
         matching = [obs for obs in observations if isinstance(obs, dict) and obs.get("id") == row_id and obs.get("kind") == kind]
         if len(matching) != 1:
             raise ValueError("Report does not uniquely cover " + str(kind) + "/" + row_id)
+        observation = matching[0]
+        provenance = successful_observation(observation, kind, row_id)
         if kind == "native-journey":
-            paths = matching[0].get("paths", [])
+            paths = observation.get("paths", [])
             if not isinstance(paths, list) or len(paths) != len(set(paths)) or set(paths) != set(required_paths):
                 raise ValueError("Report does not observe every required task path: " + row_id)
+            checked_results(observation.get("path_results"), required_paths, kind,
+                            row_id + ".path_results", provenance)
+        if required_operations and kind in {"native", "semantic"}:
+            operations = indexed(required_operations, row_id + ".required_operations")
+            os_input = {id_ for id_, operation in operations.items() if operation["native_os_required"]}
+            checked_results(observation.get("operation_results"), operations, kind,
+                            row_id + ".operation_results", provenance, os_input)
         if kind in {"native", "native-journey", "semantic"}:
             if not isinstance(receipt.get("build_ref"), str) or not receipt["build_ref"].startswith("https://"):
                 raise ValueError("Report needs the exact hosted candidate/test build reference")
@@ -166,7 +213,8 @@ def issues(root, gate, fingerprint):
                     if not isinstance(paths, list) or len(paths) != len(set(paths)) or set(paths) != set(requirement["required_paths"]):
                         raise ValueError("required success/return/failure paths are not covered")
                     required = {"native-journey"}
-                checked_evidence(root, row.get("evidence"), required, fingerprint, id_, requirement.get("required_paths", []))
+                checked_evidence(root, row.get("evidence"), required, fingerprint, id_,
+                                 requirement.get("required_paths", []), requirement.get("required_operations", []))
             except (OSError, ValueError, TypeError) as error:
                 failures.append(kind + "/" + id_ + ": " + str(error))
     return failures

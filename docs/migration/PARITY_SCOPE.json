@@ -838,7 +838,44 @@
         17,
         15
       ],
-      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md",
+      "required_operations": [
+        {
+          "id": "create-card",
+          "title": "Create and immediately activate a provisional text card",
+          "native_os_required": true
+        },
+        {
+          "id": "edit-inline",
+          "title": "Edit existing and newly created text directly in the card",
+          "native_os_required": true
+        },
+        {
+          "id": "native-selection",
+          "title": "Select text and move the caret without board gesture interference",
+          "native_os_required": true
+        },
+        {
+          "id": "native-clipboard",
+          "title": "Use the operating-system clipboard in the active card",
+          "native_os_required": true
+        },
+        {
+          "id": "native-ime",
+          "title": "Compose, commit and cancel through the operating-system input method",
+          "native_os_required": true
+        },
+        {
+          "id": "render-gfm",
+          "title": "Render supported GFM card content and return to editable source",
+          "native_os_required": false
+        },
+        {
+          "id": "reopen-edit",
+          "title": "Reopen the saved card and continue editing the exact content",
+          "native_os_required": false
+        }
+      ]
     },
     {
       "id": "B02",
@@ -1064,7 +1101,49 @@
         17,
         15
       ],
-      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md",
+      "required_operations": [
+        {
+          "id": "local-text-undo-redo",
+          "title": "Undo and redo local native text edits",
+          "native_os_required": true
+        },
+        {
+          "id": "board-undo-redo",
+          "title": "Undo and redo durable board operations, separately from local text history",
+          "native_os_required": false
+        },
+        {
+          "id": "save-reopen",
+          "title": "Save the complete board and reopen its exact content and metadata",
+          "native_os_required": false
+        },
+        {
+          "id": "pending-save",
+          "title": "Retain later input and editor identity through an earlier save acknowledgement",
+          "native_os_required": false
+        },
+        {
+          "id": "stale-rejection",
+          "title": "Refuse a stale write without losing the current draft or canonical content",
+          "native_os_required": false
+        },
+        {
+          "id": "save-failure",
+          "title": "Retain failed candidates and latest drafts with explicit retry or preservation",
+          "native_os_required": false
+        },
+        {
+          "id": "cancel-preserve",
+          "title": "Cancel pending persistence without accepting and discarding later input",
+          "native_os_required": false
+        },
+        {
+          "id": "recovery-reopen",
+          "title": "Recover retained board data after restart without presenting manual recovery as a saved project",
+          "native_os_required": false
+        }
+      ]
     },
     {
       "id": "P01",
