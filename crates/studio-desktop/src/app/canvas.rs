@@ -7,8 +7,8 @@ use craft_canvas_egui::{
 };
 use craft_canvas_model::{
     CanvasCommand, CanvasDialect, CanvasDocument, CanvasError, CanvasLimits, CanvasSession,
-    CanvasTransaction, ContentIdentity, GroupBehavior, IdMapping, NodeKind, NodePolicy, NodeRecord,
-    PreparedChange, WorkControl, WorldPoint, WorldRect,
+    CanvasTransaction, ContentIdentity, EdgeRecord, GroupBehavior, IdMapping, NodeKind, NodePolicy,
+    NodeRecord, PreparedChange, WorkControl, WorldPoint, WorldRect,
 };
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -82,6 +82,17 @@ enum PendingOperation {
     Undo(ContentIdentity),
     Redo(ContentIdentity),
 }
+/// One exclusive board tool at a time; arming one disarms the other.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum BoardTool {
+    /// Select, move and edit cards with the existing gestures.
+    #[default]
+    Select,
+    /// Click empty board space to place a text card.
+    Text,
+    /// Click a source card and then a different target card to connect them.
+    Connect,
+}
 struct CommitCompletion {
     prepared: Option<PreparedChange>,
     result: AppResult<ProjectCanvasRevision>,
@@ -109,6 +120,9 @@ pub(super) struct CanvasState {
     reload_requested: bool,
     draft_preserved: bool,
     fit_on_open: bool,
+    tool: BoardTool,
+    connect_source: Option<String>,
+    press_origin: Option<egui::Pos2>,
     viewport_size: Vec2,
     resource: Option<CanvasResource>,
     media: Option<MediaCache>,
@@ -145,6 +159,9 @@ impl CanvasState {
             reload_requested: false,
             draft_preserved: false,
             fit_on_open: true,
+            tool: BoardTool::default(),
+            connect_source: None,
+            press_origin: None,
             viewport_size: Vec2::new(800.0, 600.0),
             resource: None,
             media: None,
@@ -428,16 +445,90 @@ impl CanvasState {
             )),
         )
     }
-    fn add_text_in_view(&mut self, database: &Path, ctx: &egui::Context) -> AppResult<()> {
-        let center = self.view.camera().center();
-        self.add_text(
-            database,
-            ctx,
+    /// Arm exactly one board tool; switching tools cancels a pending connection source.
+    fn set_tool(&mut self, tool: BoardTool) {
+        self.tool = tool;
+        self.cancel_connect_selection();
+    }
+    /// Cancel a pending connection source selection without any mutation.
+    fn cancel_connect_selection(&mut self) {
+        self.connect_source = None;
+    }
+    /// Board-click handler for a completed card press: select the source, then connect.
+    fn board_card_click(&mut self, database: &Path, ctx: &egui::Context, node_id: &str) {
+        if self.tool != BoardTool::Connect {
+            return;
+        }
+        let source = self.connect_source.clone();
+        match source.as_deref() {
+            // A second press on the source card is not a self-connection.
+            Some(source) if source == node_id => {}
+            Some(source) => {
+                self.cancel_connect_selection();
+                let result = self.connect_nodes(database, ctx, source, node_id);
+                self.set_failure(result);
+            }
+            None => self.connect_source = Some(node_id.to_owned()),
+        }
+    }
+    /// Build and durably insert one connector between two existing cards through the
+    /// same prepare → worker draft → canonical save → acknowledgement flow as text edits.
+    fn connect_nodes(
+        &mut self,
+        database: &Path,
+        ctx: &egui::Context,
+        from: &str,
+        to: &str,
+    ) -> AppResult<()> {
+        if from == to {
+            return Err(CanvasError::Invalid("A card cannot be connected to itself".into()).into());
+        }
+        let document = self.session.document();
+        let from_node = document
+            .node(from)
+            .ok_or_else(|| CanvasError::NotFound(from.into()))?;
+        let to_node = document
+            .node(to)
+            .ok_or_else(|| CanvasError::NotFound(to.into()))?;
+        if !self.dialect.can_connect(from_node) {
+            return Err(CanvasError::NotEditable(from.into()).into());
+        }
+        if !self.dialect.can_connect(to_node) {
+            return Err(CanvasError::NotEditable(to.into()).into());
+        }
+        let edge = EdgeRecord::parse(
+            &serde_json::to_string(&serde_json::json!({
+                "id": uuid::Uuid::new_v4().to_string(),
+                "fromNode": from,
+                "toNode": to,
+            }))?,
+            self.session.limits(),
+        )?;
+        let index = self.session.document().edges().len();
+        self.command(database, vec![CanvasCommand::InsertEdge { edge, index }])?;
+        ctx.request_repaint();
+        Ok(())
+    }
+    /// Place a new text card at the clicked empty board position.
+    fn place_text_at(
+        &mut self,
+        database: &Path,
+        ctx: &egui::Context,
+        screen: egui::Pos2,
+        viewport: egui::Rect,
+    ) -> AppResult<()> {
+        let size = WorldPoint {
+            x: f64::from(viewport.width()),
+            y: f64::from(viewport.height()),
+        };
+        let world = self.view.camera().view_to_world(
             WorldPoint {
-                x: center.x - 150.0,
-                y: center.y - 90.0,
+                x: f64::from(screen.x - viewport.left()),
+                y: f64::from(screen.y - viewport.top()),
             },
-        )
+            size,
+        );
+        self.add_text(database, ctx, world)
     }
     fn add_text(&mut self, database: &Path, ctx: &egui::Context, at: WorldPoint) -> AppResult<()> {
         if !self.editable() || self.text_editor.is_some() {
@@ -651,16 +742,47 @@ impl CanvasState {
                             && !self.modal_open()
                             && self.text_editor.is_none(),
                         |ui| {
-                            let add =
-                                icons::labeled_button(ui, Icon::Plus, l.text("Text card"), false);
+                            let text = icons::labeled_button(
+                                ui,
+                                Icon::Plus,
+                                l.text("Text card"),
+                                self.tool == BoardTool::Text,
+                            )
+                            .on_hover_text(l.text("Click the board to place a text card"));
                             super::capture_connected_writing::control(
                                 ui.ctx(),
                                 "canvas.add_text",
-                                add.rect,
+                                text.rect,
                             );
-                            if add.clicked() {
-                                let result = self.add_text_in_view(database, ui.ctx());
-                                self.set_failure(result);
+                            if text.clicked() {
+                                let tool = if self.tool == BoardTool::Text {
+                                    BoardTool::Select
+                                } else {
+                                    BoardTool::Text
+                                };
+                                self.set_tool(tool);
+                            }
+                            let connection = icons::labeled_button(
+                                ui,
+                                Icon::ArrowRight,
+                                l.text("Connection"),
+                                self.tool == BoardTool::Connect,
+                            )
+                            .on_hover_text(
+                                l.text("Click one card, then another, to create a connection"),
+                            );
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.connect",
+                                connection.rect,
+                            );
+                            if connection.clicked() {
+                                let tool = if self.tool == BoardTool::Connect {
+                                    BoardTool::Select
+                                } else {
+                                    BoardTool::Connect
+                                };
+                                self.set_tool(tool);
                             }
                             if ui
                                 .add_enabled(
@@ -725,6 +847,22 @@ impl CanvasState {
                                 self.text_cancel = true;
                             }
                         });
+                    } else {
+                        match self.tool {
+                            BoardTool::Connect => {
+                                ui.separator();
+                                ui.label(l.text(if self.connect_source.is_some() {
+                                    "Select target card"
+                                } else {
+                                    "Select source card"
+                                }));
+                            }
+                            BoardTool::Text => {
+                                ui.separator();
+                                ui.label(l.text("Click the board to place a text card"));
+                            }
+                            BoardTool::Select => {}
+                        }
                     }
                 });
             });
@@ -886,10 +1024,83 @@ impl CanvasState {
         for error in output.errors {
             self.failure = Some(error.to_string());
         }
+        // Tool modes reinterpret board gestures: connection clicks must not also create
+        // or open cards, and text placement handles empty-board clicks itself.
+        let drag_occurred = output
+            .intents
+            .iter()
+            .any(|intent| matches!(intent, CanvasIntent::Transaction(_)));
         for intent in output.intents {
+            let filtered = match &intent {
+                CanvasIntent::CreateText { .. } => self.tool != BoardTool::Select,
+                CanvasIntent::EditText { .. } | CanvasIntent::OpenNode { .. } => {
+                    self.tool == BoardTool::Connect
+                }
+                _ => false,
+            };
+            if filtered {
+                continue;
+            }
             // The first completed mutation freezes this session until its durable acknowledgement.
             let result = self.intent(database, ui.ctx(), intent);
             self.set_failure(result);
+        }
+        if config.interactive {
+            // A pending connection source must never dangle after its card disappeared.
+            if self
+                .connect_source
+                .as_ref()
+                .is_some_and(|id| self.session.document().node(id).is_none())
+            {
+                self.cancel_connect_selection();
+            }
+            if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+                if self.connect_source.is_some() {
+                    self.cancel_connect_selection();
+                } else {
+                    self.set_tool(BoardTool::Select);
+                }
+            }
+            let mut release_at = None;
+            ui.input(|input| {
+                for event in &input.events {
+                    if let egui::Event::PointerButton {
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        pos,
+                        ..
+                    } = event
+                    {
+                        if *pressed {
+                            self.press_origin = Some(*pos);
+                        } else {
+                            release_at = Some(*pos);
+                        }
+                    }
+                }
+            });
+            // A completed click keeps its press and release on one target; a drag that
+            // already produced a transaction never also fires a tool click.
+            if !drag_occurred && let (Some(origin), Some(pos)) = (self.press_origin, release_at) {
+                self.press_origin = None;
+                let node_at = |point: egui::Pos2| {
+                    output
+                        .nodes
+                        .iter()
+                        .find(|node| node.reserved.contains(point))
+                        .map(|node| node.node_id.as_str())
+                };
+                match (node_at(origin), node_at(pos)) {
+                    (Some(pressed), Some(released)) if pressed == released => {
+                        self.board_card_click(database, ui.ctx(), released);
+                    }
+                    (None, None) if self.tool == BoardTool::Text => {
+                        let result = self.place_text_at(database, ui.ctx(), pos, output.viewport);
+                        self.set_failure(result);
+                    }
+                    _ => {}
+                }
+            }
         }
         if let Some(output) = inline_output {
             self.text_composing = output.composing;
@@ -927,6 +1138,8 @@ impl CanvasState {
                     "recovery":self.snapshot.draft.is_some(), "navigation_blocked":self.blocks_navigation(), "status":self.durability_status(),
                     "editor":self.text_editor.as_ref().map(|editor| serde_json::json!({"node_id":editor.node_id(), "text":editor.text(), "dirty":editor.dirty(), "submitted":editor.has_submission(), "awaiting_insertion":editor.awaits_insertion(), "composing":self.text_composing})),
                     "selected_nodes":self.view.selection().nodes,
+                    "tool":match self.tool { BoardTool::Select => "select", BoardTool::Text => "text", BoardTool::Connect => "connect" },
+                    "connect_source":self.connect_source,
                     "camera":{"center":[camera.center().x,camera.center().y],"zoom":camera.zoom()},
                     "viewport":rect(output.viewport),
                     "visible_nodes":output.nodes.iter().map(|node|serde_json::json!({"node_id":node.node_id,"reserved":rect(node.reserved),"body_clip":rect(node.body_clip)})).collect::<Vec<_>>()
@@ -1741,7 +1954,15 @@ mod tests {
         // The real activation pass has not mounted a TextEdit yet. The next pass
         // carries the author's input; no blank editor frame may preinstall its filter.
         let mut activation_output = ctx.run_ui(egui::RawInput::default(), |ui| {
-            created = state.add_text_in_view(&database, ui.ctx());
+            let center = state.view.camera().center();
+            created = state.add_text(
+                &database,
+                ui.ctx(),
+                WorldPoint {
+                    x: center.x - 150.0,
+                    y: center.y - 90.0,
+                },
+            );
         });
         activation_output.textures_delta.clear();
         activation_output.platform_output.commands.clear();
@@ -2970,6 +3191,130 @@ mod tests {
             Workspace::open(&path)?.project_canvas(&project.id, &state.snapshot.canvas.id)?;
         assert_eq!(reopened.revision.content, graph());
         assert_eq!(reopened.revision.info.revision, 3);
+        Ok(())
+    }
+    fn two_card_graph() -> serde_json::Value {
+        json!({"nodes":[{"id":"card","type":"text","x":0,"y":0,"width":300,"height":180,"text":"Old 😀 text","x-writers-studio":{"card":{"typeId":"unknown","fields":{"opaque":[1,null]}},"future":{"keep":true}}},{"id":"other","type":"text","x":420,"y":40,"width":300,"height":180,"text":"Second 日本語 card","future":{"keep":"edge-test"}}],"edges":[],"x-writers-studio":{"schemaVersion":2,"vendor":{"keep":true}}})
+    }
+    fn settle_pending_write(state: &mut CanvasState, ctx: &egui::Context) -> TestResult {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            state.pending.is_none(),
+            "synthetic save did not acknowledge"
+        );
+        Ok(())
+    }
+    #[test]
+    fn connection_mode_should_create_a_durable_compensated_edge_between_two_cards() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("connection.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic board connection")?;
+        let source = two_card_graph();
+        let board = workspace.create_project_canvas(&project.id, "Board", source.clone())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let ctx = egui::Context::default();
+        assert_eq!(state.tool, BoardTool::Select);
+        state.set_tool(BoardTool::Connect);
+        // The same controller entry points the board view drives for completed card clicks.
+        state.board_card_click(&database, &ctx, "card");
+        assert_eq!(state.connect_source.as_deref(), Some("card"));
+        state.board_card_click(&database, &ctx, "other");
+        assert!(state.connect_source.is_none());
+        assert!(state.pending.is_some());
+        assert!(
+            state.blocks_navigation(),
+            "the unacknowledged edge write blocks navigation like a text save"
+        );
+        settle_pending_write(&mut state, &ctx)?;
+        assert!(!state.blocks_navigation());
+        assert_eq!(state.session.document().edges().len(), 1);
+        let edge_id = state.session.document().edges()[0].id().to_owned();
+        let saved = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(saved.revision.info.revision, 2);
+        assert!(saved.draft.is_none());
+        let edges = saved.revision.content["edges"]
+            .as_array()
+            .ok_or("durable edges")?;
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0]["id"], json!(edge_id));
+        assert_eq!(edges[0]["fromNode"], json!("card"));
+        assert_eq!(edges[0]["toNode"], json!("other"));
+        // Every canonical record the connector never touched stays exactly preserved.
+        assert_eq!(saved.revision.content["nodes"], source["nodes"]);
+        assert_eq!(
+            saved.revision.content["x-writers-studio"],
+            source["x-writers-studio"]
+        );
+        // Reopening the board shows the acknowledged edge.
+        let reopened = CanvasState::open(&workspace, &project.id, &state.snapshot.canvas.id)?;
+        let reopened_edge = reopened
+            .session
+            .document()
+            .edge(&edge_id)
+            .ok_or("reopened edge")?;
+        assert_eq!(reopened_edge.from_node(), "card");
+        assert_eq!(reopened_edge.to_node(), "other");
+        // Undo compensates the insertion through the guarded durable path.
+        state.begin(&database, PendingOperation::Undo(state.session.identity()))?;
+        settle_pending_write(&mut state, &ctx)?;
+        assert!(state.session.document().edges().is_empty());
+        let saved = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(saved.revision.info.revision, 3);
+        assert_eq!(saved.revision.content["edges"], json!([]));
+        // Redo restores the same connector durably.
+        state.begin(&database, PendingOperation::Redo(state.session.identity()))?;
+        settle_pending_write(&mut state, &ctx)?;
+        assert_eq!(state.session.document().edges().len(), 1);
+        assert_eq!(state.session.document().edges()[0].id(), edge_id);
+        let saved = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(saved.revision.info.revision, 4);
+        let edges = saved.revision.content["edges"]
+            .as_array()
+            .ok_or("redone edges")?;
+        assert_eq!(edges[0]["id"], json!(edge_id));
+        assert_eq!(edges[0]["fromNode"], json!("card"));
+        assert_eq!(edges[0]["toNode"], json!("other"));
+        Ok(())
+    }
+    #[test]
+    fn connection_escape_cancel_and_self_click_should_refuse_without_any_mutation() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("connection-refusal.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic refused connections")?;
+        let source = two_card_graph();
+        let board = workspace.create_project_canvas(&project.id, "Board", source.clone())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let ctx = egui::Context::default();
+        let original = state.session.document().raw_json().to_owned();
+        state.set_tool(BoardTool::Connect);
+        state.board_card_click(&database, &ctx, "card");
+        assert_eq!(state.connect_source.as_deref(), Some("card"));
+        // Escape cancels only the pending source selection; no write ever starts.
+        state.cancel_connect_selection();
+        assert!(state.connect_source.is_none());
+        assert!(state.pending.is_none());
+        assert!(!state.blocks_navigation());
+        // Two presses on the same card never become a self-loop.
+        state.board_card_click(&database, &ctx, "card");
+        state.board_card_click(&database, &ctx, "card");
+        assert_eq!(state.connect_source.as_deref(), Some("card"));
+        assert!(state.pending.is_none());
+        let self_connect = state.connect_nodes(&database, &ctx, "card", "card");
+        assert!(self_connect.is_err());
+        state.cancel_connect_selection();
+        let unknown_target = state.connect_nodes(&database, &ctx, "card", "absent");
+        assert!(unknown_target.is_err());
+        assert_eq!(state.session.document().raw_json(), original);
+        assert!(state.session.document().edges().is_empty());
+        let saved = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(saved.revision.info.revision, 1);
+        assert_eq!(saved.revision.content, source);
         Ok(())
     }
     #[test]

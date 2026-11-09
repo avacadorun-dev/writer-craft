@@ -1,6 +1,6 @@
 //! Hosted synthetic native-widget probes. These do not certify OS input or product parity.
 use super::*;
-use egui::{Event, Key, Modifiers, PointerButton, RawInput, Rect};
+use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput, Rect, vec2};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -65,7 +65,9 @@ fn key(key: Key, modifiers: Modifiers) -> Vec<Event> {
         .collect()
 }
 fn click(rect: Rect) -> Vec<Event> {
-    let pos = rect.center();
+    click_at(rect.center())
+}
+fn click_at(pos: Pos2) -> Vec<Event> {
     vec![
         Event::PointerMoved(pos),
         Event::PointerButton {
@@ -81,6 +83,27 @@ fn click(rect: Rect) -> Vec<Event> {
             modifiers: Modifiers::NONE,
         },
     ]
+}
+/// Locate a board point outside every visible card so the armed text tool can place a card there.
+fn empty_canvas_point(state: &Value) -> Option<Pos2> {
+    let viewport = value_rect(&state["viewport"])?;
+    let candidates = [
+        viewport.center(),
+        viewport.left_center() + vec2(viewport.width() * 0.25, 0.0),
+        viewport.right_center() - vec2(viewport.width() * 0.25, 0.0),
+        viewport.center_top() + vec2(0.0, viewport.height() * 0.25),
+        viewport.center_bottom() - vec2(0.0, viewport.height() * 0.25),
+        viewport.left_top() + vec2(viewport.width() * 0.2, viewport.height() * 0.2),
+        viewport.right_bottom() - vec2(viewport.width() * 0.2, viewport.height() * 0.2),
+    ];
+    let visible = state["visible_nodes"].as_array();
+    candidates.into_iter().find(|point| {
+        !visible.is_some_and(|nodes| {
+            nodes
+                .iter()
+                .any(|node| value_rect(&node["reserved"]).is_some_and(|rect| rect.contains(*point)))
+        })
+    })
 }
 fn rect_value(rect: Rect) -> Value {
     json!([rect.min.x, rect.min.y, rect.max.x, rect.max.y])
@@ -405,8 +428,13 @@ impl ConnectedCapture {
     }
     fn drive_canvas(&mut self, observation: &Observation, state: &Value) {
         match self.phase {
-            0 => self.click_control(observation, "click-new-card", state, "canvas.add_text"),
-            1 if state["editor"]["node_id"].as_str().is_some() => {
+            0 => self.click_control(observation, "arm-text-card-tool", state, "canvas.add_text"),
+            1 if state["editor"].is_null() && state["pending"] == false => {
+                if let Some(point) = empty_canvas_point(state) {
+                    self.advance("place-text-card-on-empty-board", state, click_at(point));
+                }
+            }
+            2 if state["editor"]["node_id"].as_str().is_some() => {
                 self.card = state["editor"]["node_id"].as_str().map(str::to_owned);
                 self.advance(
                     "new-card-input-mounted",
@@ -418,7 +446,7 @@ impl ConnectedCapture {
                     })],
                 );
             }
-            2 if state["editor"]["text"]
+            3 if state["editor"]["text"]
                 == if self.scenario == "canvas-clipped-2x" {
                     CLIPPED_TEXT
                 } else {
@@ -450,7 +478,7 @@ impl ConnectedCapture {
                     );
                 }
             }
-            3 => {
+            4 => {
                 let expected = self.expected_text();
                 let ready = if self.scenario == "canvas-cancel" {
                     state["editor"].is_null()
@@ -543,7 +571,7 @@ impl ConnectedCapture {
         let previous_steps = self.steps.len();
         if state["project_id"] == self.project && self.failure.is_none() {
             if self.scenario == "canvas-clipped-2x"
-                && self.phase == 1
+                && self.phase == 2
                 && !self.clipped_camera_positioned
             {
                 if let Err(error) = self.position_clipped_camera(app, ctx, &state) {
