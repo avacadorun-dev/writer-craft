@@ -28,6 +28,6 @@ Checkpoint evidence: `docs/research/EDITOR_ENGINE_DECISION.md`. Model/storage te
 
 ## F-46 existing-block editing correction (#7 reopened)
 
-- [ ] Add discoverable direct editing for existing Mermaid and block/inline formula objects (double-click, visible selected-block action and keyboard equivalent) through the same guarded source dialog.
+- [ ] Add discoverable direct editing for existing Mermaid and block/inline formula objects (double-click primary, object context-menu Edit and keyboard equivalent, single-click selection, no permanent toolbar expansion) through the same guarded source dialog.
 - [ ] Retest edit/Apply/render, Cancel/Escape, Undo/Redo and save/reopen on the exact native candidate; preserve IDs, provenance, unknown fields and neighboring text. Include stale/failed draft preservation and independent correction review.
 - [ ] Keep #14 existing-image reduction explicitly pending and #17 Canvas active; source/model checks alone cannot reaccept this finding.

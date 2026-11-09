@@ -218,3 +218,8 @@ Require both axes in the existing release/UX gate, including alpha.3. Missing so
 The same feedback explicitly requests making existing images smaller. #14 already selects direct sizing and exact width/height with aspect lock; those controls remain unimplemented in this preview. Changing workspace zoom is not a substitute. Preserve original media bytes, compatible stored dimensions and adjacent text flow.
 
 The user additionally reaffirmed that Canvas must be completed. #17 remains the active implementation issue under WIP=1; record this finding and update review criteria without abandoning or silently deferring B01–B26. Do not drive, replace or restart the preview while the user explores it.
+
+
+### F-46 interaction clarification
+
+2026-11-09: the user found the existing Edit block command and confirmed that the main problem is its distant, undiscoverable location. Keep the main toolbar compact. Use double-click on an existing rendered formula or Mermaid diagram as the primary editing gesture, retaining single-click selection; provide Edit in the object context menu with a keyboard-accessible equivalent. Do not add a permanent row of block commands. This refines the earlier selected-block action requirement; it does not establish native acceptance of the proposed interaction.
