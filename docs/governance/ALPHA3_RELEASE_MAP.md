@@ -37,9 +37,9 @@ Closed 2026-11-09 under lean verification: engine syntax suite 14/14 on the app-
 
 Closed 2026-11-09 under lean verification: settings dialog (7 palettes, modes, Esc-clean close, no phantom edits), new-document dialog (disabled empty submit → validation → create), note form and transfer dialogs share metrics; eight-locale captures settled. Pixel metrics usage-monitored.
 
-### P6 — #7 complete block authoring
+### P6 — complete: #7 complete block authoring
 
-Empty-document authoring for every block; whole-table consumer integration; clipboard/container/history/reopen; narrow toolbar.
+Closed 2026-11-09 under lean verification: all block commands reachable in the grouped panel at 1000×680 with configure surfaces; create→configure→render→Undo→save→reopen cycles covered by the green desktop/engine suites (198 native cases, insertion/paste/table, rich-editor anchors/restart). Gap: per-block automated click-through limited by automation input delivery; usage-monitored.
 
 ### P7 — #17 complete original Canvas board workflows
 
