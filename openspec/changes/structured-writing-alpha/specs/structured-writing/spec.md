@@ -26,7 +26,7 @@ Authors SHALL rename, edit, move, reorder, trash and restore documents and folde
 
 ### Requirement: Direct tree organization
 
-The hierarchy SHALL support native drag-and-drop into valid folders and before/after siblings, with highlighted targets and insertion lines. Adjacent creation controls and compact indentation SHALL remain usable at three/four nested levels. Contextual and keyboard alternatives SHALL remain available. Hover expansion and edge autoscroll SHALL support organizing larger projects.
+The hierarchy SHALL support native drag-and-drop into valid folders and before/after siblings, with highlighted targets and insertion lines. Full-width item rows and compact indentation SHALL remain usable at three/four nested levels. Right-click and keyboard context menus SHALL provide creation and lifecycle actions without permanent row buttons. Hover expansion and edge autoscroll SHALL support organizing larger projects.
 
 #### Scenario: Move a scene into a collapsed chapter
 - **WHEN** an author drags a scene over a collapsed valid chapter and drops it after the folder expands
@@ -35,6 +35,10 @@ The hierarchy SHALL support native drag-and-drop into valid folders and before/a
 #### Scenario: Reject or cancel a drag
 - **WHEN** a drag targets itself, a descendant, a schema-disallowed parent, leaves the tree or is cancelled with Escape
 - **THEN** invalid placement SHALL be visible and no structure/content mutation SHALL occur
+
+#### Scenario: Act on a tree item without permanent row buttons
+- **WHEN** an author right-clicks an item or invokes its keyboard context menu
+- **THEN** actions target that exact item, including creation inside a schema-valid container, while long titles retain the row's available width
 
 ### Requirement: Exact consultation return
 
@@ -71,6 +75,22 @@ Tree changes and passage markup MUST survive save/reopen and canonical export/re
 #### Scenario: Restore an organized draft
 - **WHEN** the completed project is restored into an independent workspace
 - **THEN** its supported structure, text, tags, notes and references retain their meaning and reader-export limitations remain explicit
+
+### Requirement: Reusable colored project labels
+
+Authors SHALL define, assign and manage named project labels with chosen colors. A note's primary label SHALL determine its manuscript mark and sidebar color; all assigned names SHALL remain visible without depending on color alone. Definitions, including unused labels, MUST survive reopen and canonical restore. Color changes MUST NOT rewrite prose or annotation anchors.
+
+#### Scenario: Recognize a note without opening it
+- **WHEN** an author assigns an existing colored label to a passage note
+- **THEN** the text mark and compact note row show the same primary label color, with distinguishable quote, note preview and named labels
+
+#### Scenario: Revise the project vocabulary
+- **WHEN** an author creates, recolors, renames or removes a label
+- **THEN** the operation shows its scope, refuses stale or conflicting changes before mutation, preserves pending note drafts and retains recoverable note state
+
+#### Scenario: Read existing uncolored markup
+- **WHEN** an older project contains manual tags without color definitions
+- **THEN** exact tag names, notes, histories and anchors remain usable without an opening-time rewrite
 
 ### Requirement: Real native task acceptance
 

@@ -181,4 +181,11 @@ Blocking usability or visual findings require implementation rework and a fresh 
 
 ## F-53 — direct tree authoring
 
-Accept hierarchy organization only after actual pointer dragging into folders and between siblings shows accurate target highlighting/insertion lines. Exercise invalid self/descendant/schema drops, outside-target release, Escape, edge autoscroll and delayed expansion. Inspect three/four-level indentation and adjacent folder Add controls on the populated story. Drag preview/cancellation must not persist changes; a successful drop is one guarded operation preserving IDs/content/history. The removed bottom Organize project entry and a move dialog cannot stand in for this interaction.
+Accept hierarchy organization only after actual pointer dragging into folders and between siblings shows accurate target highlighting/insertion lines. Exercise invalid self/descendant/schema drops, outside-target release, Escape, edge autoscroll and delayed expansion. Inspect three/four-level indentation and full-width titles on the populated story. F-54 supersedes adjacent row buttons: verify right-click and Shift+F10 creation/lifecycle actions on the exact targeted item. Drag preview/cancellation must not persist changes; a successful drop is one guarded operation preserving IDs/content/history. The removed bottom Organize project entry and a move dialog cannot stand in for this interaction.
+
+
+## F-54 — project labels and compact note inspection
+
+Require project-defined label creation before assignment, named color selection, reuse on notes in different documents, consistent inline/sidebar color, guarded recoloring/rename/removal and durable unused definitions. Existing uncolored tags remain exact. Multiple labels retain visible order and an explicit primary color; selected, hovered, resolved, overlapping and detached states cannot invent attachment or obscure label identity. Color must have a named accessible cue in both Light and Dark.
+
+Inspect one/two-note and populated inspectors: quote, authored note and labels are distinct; list height follows content up to a bounded maximum; details do not disappear below fixed empty padding. Label selection/creation, draft Cancel/resume/preflight and existing lifecycle/recovery stay reachable at common/minimum widths and long localized labels. Verify right-click/keyboard actions in full-width tree rows without permanent Add/More buttons. Pre-F-54 images cannot accept this change.

@@ -278,3 +278,15 @@ Assess an appropriate coherent desktop icon treatment, including custom or fille
 2026-11-09: the bottom Organize project control is rejected. Authors need drag-and-drop directly in the tree, small adjacent folder creation controls and compact indentation that remains useful at three or four nested levels. A move dialog alone does not satisfy this correction.
 
 Review highlighted valid folder targets, insertion lines for sibling ordering, explicit invalid placement feedback, edge autoscroll, delayed expansion of a hovered folder and Escape cancellation. Drop must be one guarded structure operation; dragging, hovering, cancellation and rejected placement must not mutate manuscript content or order. Preserve accessible contextual/keyboard alternatives, imported schema constraints and exact identities. Use a populated native-authored tree, including collapsed branches and nested documents, for acceptance.
+
+## F-54 — full-width tree rows and meaningful colored project labels
+
+2026-11-09: actual exploration of the e4157d1 candidate rejects permanent Add and More controls beside every tree item because they consume title space. This supersedes F-53's adjacent creation-control presentation, not its direct drag-and-drop requirement. Use the item's right-click context menu with a keyboard equivalent for creation and lifecycle actions. Keep shared controls in the structure header and an appropriate board Add control.
+
+Passage labels must be reusable project definitions with an author-chosen name and color, assigned to notes so the same meaning is visible in the manuscript and note list without opening a note. The current uniformly amber marks and raw multiline tag input do not satisfy this workflow. Existing labels/notes/anchors must remain compatible; multiple labels stay explicit, with a clear primary color instead of an ambiguous blend. Label definitions, including unused ones, survive save/reopen and canonical export/restore. Creating, recoloring, renaming and removing a label must have explicit project scope and preserve text/history with guarded mutation.
+
+The right inspector currently mixes selected quote, authored note and tags, and reserves excessive blank space between list and detail. Review a compact, content-sized list with separate quote, note preview and named colored chips; selected details follow it directly with an existing-label picker and deliberate label creation. Keep draft preservation, cancel/resume, detached/trashed states, keyboard access and named color cues in both Light and Dark. These are required corrections to A3-WRITE-01/A3-MARK-01 before fresh independent acceptance; pre-F-54 captures are historical only.
+
+### F-54 palette clarification
+
+The same-day follow-up requires label colors to harmonize with the application's main palettes rather than use garish high-saturation colors. Use restrained named accents with soft text highlights and readable glyphs in Light and Dark. Verify recognizability, selected/hovered states and palette compatibility independently; do not assign semantic label meaning from the current appearance palette.

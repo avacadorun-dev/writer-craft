@@ -14,6 +14,10 @@
     "A3-REEDIT-01: complete issue #7 double-click, context-menu and keyboard re-editing with Apply/Cancel/history/reopen evidence.",
     "A3-HANDOFF-01: finish issue #11 readable export and canonical restore through native UI with preservation evidence.",
     "F52-VISUAL-01: capture and independently review every visited surface; resolve blocking spacing, grouping, icon and usability findings.",
+    "F54-TREE-01: remove persistent per-row Add/More controls and reclaim title width; independently verify exact-row right-click and persistent keyboard context menus while preserving direct drag, disclosure and cancellation.",
+    "F54-LABELS-01: independently observe reusable project label creation, assignment, recoloring, renaming, removal/recovery and reopen with exact manuscript/sidebar color identity; corroborate schema11 old-writer protection, stale guards and canonical preservation of unused/retired definitions.",
+    "F54-NOTES-01: replace the ambiguous quote/note/tag presentation and blank list reserve with compact distinct content; verify primary-label ordering, exact overlapping/repeated-passage activation and draft preservation on the fresh candidate.",
+    "F54-COLOR-01: review subdued, legible named label colors with stable hue meaning across all seven main palettes using representative Light/Dark captures; selected states remain readable and color is never the sole meaning cue. Pre-F54 e4157d1 captures do not accept this rework.",
     "Exact-source hosted checks, native installer qualification and final independent matching-source acceptance remain required."
   ],
   "requirements": [

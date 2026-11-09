@@ -31,7 +31,8 @@
         "reference-edit-exact-return-and-dialogue-revision",
         "changed-origin-and-trashed-target",
         "form-cancel-and-invalid-placement-preserves-draft",
-        "save-quit-reopen-and-continue"
+        "save-quit-reopen-and-continue",
+        "full-width-tree-pointer-and-keyboard-context-actions"
       ],
       "required_semantic_operations": [
         {
@@ -62,7 +63,10 @@
         "bulk-label-mutation-draft-preflight",
         "delete-and-restore-same-id",
         "detached-and-trashed-targets",
-        "save-reopen-with-markup-history"
+        "save-reopen-with-markup-history",
+        "project-label-create-color-reuse-and-reopen",
+        "consistent-inline-sidebar-primary-color-and-named-chips",
+        "compact-note-inspector-and-label-picker"
       ],
       "required_semantic_operations": [
         {
@@ -73,6 +77,11 @@
         {
           "id": "failed-markup-save-preserves-draft-and-anchor",
           "title": "Failed markup saves preserve the pending draft, canonical mark identity, exact anchor and prior history",
+          "native_os_required": false
+        },
+        {
+          "id": "label-catalog-roundtrip-and-recolor-preserves-prose-anchors",
+          "title": "Recoloring preserves prose/anchors and canonical restore retains active and unused project label definitions with guarded rename/removal",
           "native_os_required": false
         }
       ]
