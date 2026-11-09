@@ -910,6 +910,37 @@ impl eframe::App for StudioApp {
     }
 }
 
+const PROJECT_LABEL_ERROR_MESSAGES: &[&str] = &[
+    "The project labels changed; review the label catalog again",
+    "These project labels belong to another project; reopen the label picker",
+    "A selected label is unavailable; review the project label picker again",
+    "This project label is unavailable; refresh the catalog",
+    "This project label is not active; restore it before changing it",
+    "That tag already exists; choose a distinct name",
+    "This label was removed; restore it in the project label catalog before assigning it",
+    "This label name is retired; restore the retained label instead of reusing its name",
+    "This project label is not retired; refresh the catalog",
+    "This project label catalog version is not supported; preserve the original project",
+    "This project label color is not supported; preserve the original project",
+    "The restored label catalog does not match its current passage assignments",
+    "The project label revision is invalid",
+    "The project label catalog needs label definitions",
+    "A project label name is missing",
+    "Project label names must be unique, including retired labels",
+    "Project label retirement must be explicit",
+    "Project label revision disagrees with its saved catalog",
+    "The tagged passages changed; review the project tag again",
+    "Use at most 32 tags on one passage",
+    "Each tag needs 1–80 characters without line breaks",
+    "Each tag can occur only once on a passage",
+    "Project label catalog is invalid; use complete-project canonical export",
+    "Project labels contain extension data that cannot be scoped safely; use complete-project canonical export",
+];
+const COMMITTED_LABEL_MESSAGES: &[&str] = &[
+    "The label was created. Add it to the passage again.",
+    "The label was created, but this passage already has 32 labels.",
+];
+
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
     if error.is::<project_tree::TrashedDocument>() {
         return "This document is in Trash. Restore its branch before opening it.";
@@ -928,9 +959,12 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::Validation(message) if message == "protected_workspace_export_path" => {
                 "Choose an export file outside the workspace database and settings files."
             }
-            StudioError::Validation(_) | StudioError::InvalidTextRange { .. } => {
-                "Check the entered values and try again."
-            }
+            StudioError::Validation(message) => PROJECT_LABEL_ERROR_MESSAGES
+                .iter()
+                .copied()
+                .find(|known| *known == message.as_str())
+                .unwrap_or("Check the entered values and try again."),
+            StudioError::InvalidTextRange { .. } => "Check the entered values and try again.",
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
             }
@@ -980,13 +1014,29 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::Json(_) => "The saved data could not be decoded.",
         };
     }
+    let detail = error.to_string();
+    if let Some(message) = COMMITTED_LABEL_MESSAGES
+        .iter()
+        .copied()
+        .find(|known| *known == detail.as_str())
+    {
+        return message;
+    }
     #[cfg(feature = "editor-preview")]
     if let Some(craft_editor_egui::Error::Clipboard(error)) =
         error.downcast_ref::<craft_editor_egui::Error>()
     {
         return clipboard_host::message(error);
     }
-    if error.is::<studio_transfer::TransferError>() {
+    if let Some(error) = error.downcast_ref::<studio_transfer::TransferError>() {
+        if let studio_transfer::TransferError::Invalid(message) = error
+            && let Some(known) = PROJECT_LABEL_ERROR_MESSAGES
+                .iter()
+                .copied()
+                .find(|known| *known == message.as_str())
+        {
+            return known;
+        }
         return "The archive could not be checked. The original project was not changed.";
     }
     if error.is::<std::io::Error>() {
@@ -1253,6 +1303,30 @@ mod tests {
         });
         output.textures_delta.clear();
         output.platform_output.commands.clear();
+    }
+
+    #[test]
+    fn label_refusals_have_actionable_messages_in_every_language() {
+        let error = studio_core::StudioError::Validation(
+            "The project labels changed; review the label catalog again".into(),
+        );
+        assert_eq!(
+            error_message(&error),
+            "The project labels changed; review the label catalog again"
+        );
+        for key in PROJECT_LABEL_ERROR_MESSAGES
+            .iter()
+            .chain(COMMITTED_LABEL_MESSAGES)
+        {
+            for language in Language::ALL {
+                assert_ne!(
+                    language.text(key),
+                    "⟦missing translation⟧",
+                    "{}: {key}",
+                    language.code()
+                );
+            }
+        }
     }
 
     #[test]
@@ -1713,6 +1787,9 @@ mod catalog_source_checks {
             include_str!("app/authoring.rs"),
             include_str!("app/rich_editor.rs"),
             include_str!("app/notes.rs"),
+            include_str!("app/notes/labels.rs"),
+            include_str!("app/notes/presentation.rs"),
+            include_str!("app/project_navigation.rs"),
             include_str!("app/clipboard_host.rs"),
             include_str!("app/rendering.rs"),
             include_str!("app/daily_controls.rs"),

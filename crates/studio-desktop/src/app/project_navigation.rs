@@ -644,10 +644,7 @@ impl ProjectOutline {
                                     });
                                 let response = ui
                                     .allocate_ui_with_layout(
-                                        egui::vec2(
-                                            (ui.available_width() - 48.0).max(30.0),
-                                            ROW_HEIGHT,
-                                        ),
+                                        egui::vec2(ui.available_width().max(30.0), ROW_HEIGHT),
                                         Layout::left_to_right(Align::Center),
                                         |ui| {
                                             tree_row(
@@ -674,38 +671,12 @@ impl ProjectOutline {
                                         ui.ctx().clone(),
                                     ));
                                 }
-                                if !carrying {
-                                    response.context_menu(|ui| {
-                                        if let Some(action) = item_menu(ui, node, language, can_add)
-                                        {
-                                            chosen = Some(action);
-                                        }
-                                    });
+                                if !carrying
+                                    && let Some(action) =
+                                        item_context_menu(&response, node, language, can_add)
+                                {
+                                    chosen = Some(action);
                                 }
-                                let add_label = language
-                                    .format("Add inside {title}", &[("title", node.title.clone())]);
-                                let add = if can_add {
-                                    Some(row_icon_button(ui, Icon::Plus, &add_label, !carrying, t))
-                                } else {
-                                    ui.add_space(24.0);
-                                    None
-                                };
-                                if add.as_ref().is_some_and(|response| response.clicked()) {
-                                    chosen =
-                                        Some(TreeAction::Create(Some(node.logical_id.clone())));
-                                }
-                                let more = row_icon_button(
-                                    ui,
-                                    Icon::More,
-                                    language.text("Item actions"),
-                                    !carrying,
-                                    t,
-                                );
-                                egui::Popup::menu(&more).show(|ui| {
-                                    if let Some(action) = item_menu(ui, node, language, can_add) {
-                                        chosen = Some(action);
-                                    }
-                                });
                                 #[cfg(feature = "editor-preview")]
                                 if super::capture_connected_writing::enabled(ui.ctx()) {
                                     super::capture_connected_writing::control(
@@ -713,13 +684,6 @@ impl ProjectOutline {
                                         &format!("hierarchy.node.{}", node.logical_id),
                                         response.rect,
                                     );
-                                    if let Some(add) = &add {
-                                        super::capture_connected_writing::control(
-                                            ui.ctx(),
-                                            &format!("hierarchy.add.{}", node.logical_id),
-                                            add.rect,
-                                        );
-                                    }
                                     if let Some(document) = &node.document_id {
                                         super::capture_connected_writing::control(
                                             ui.ctx(),
@@ -762,9 +726,13 @@ impl ProjectOutline {
                                     }
                                 }
                                 if node.mapped {
-                                    response.on_hover_text(
+                                    response.on_hover_text(format!(
+                                        "{}\n{}",
                                         language.text("Drag to move. Escape cancels."),
-                                    );
+                                        language.text(
+                                            "Right-click or press Shift+F10 for item actions."
+                                        ),
+                                    ));
                                 }
                             })
                         })
@@ -947,48 +915,6 @@ fn tree_row(ui: &mut egui::Ui, icon: Icon, title: &str, active: bool, t: Tokens)
     response.on_hover_text(title)
 }
 
-fn row_icon_button(
-    ui: &mut egui::Ui,
-    icon: Icon,
-    label: &str,
-    enabled: bool,
-    t: Tokens,
-) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(24.0, 28.0),
-        if enabled {
-            egui::Sense::click()
-        } else {
-            egui::Sense::hover()
-        },
-    );
-    if enabled && (response.hovered() || response.has_focus()) {
-        ui.painter().rect_filled(rect, 4.0, t.surface);
-    }
-    if response.has_focus() {
-        ui.painter().rect_stroke(
-            rect,
-            4.0,
-            egui::Stroke::new(1.0, t.accent),
-            egui::StrokeKind::Inside,
-        );
-    }
-    icons::paint(
-        ui.painter(),
-        egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(15.0)),
-        icon,
-        if enabled {
-            t.muted
-        } else {
-            ui.visuals().disable(t.muted)
-        },
-    );
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled() && enabled, label)
-    });
-    response.on_hover_text(label)
-}
-
 fn disclosure_button(ui: &mut egui::Ui, expanded: bool, label: &str, t: Tokens) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(20.0, ROW_HEIGHT), egui::Sense::click());
@@ -1067,6 +993,49 @@ fn paint_drag_label(ctx: &egui::Context, pointer: egui::Pos2, label: &str, valid
         egui::StrokeKind::Inside,
     );
     painter.galley(position + egui::vec2(8.0, 5.0), galley, t.text);
+}
+
+fn item_context_menu(
+    response: &egui::Response,
+    node: &OutlineNode,
+    language: Language,
+    can_add: bool,
+) -> Option<TreeAction> {
+    if response.clicked() || response.secondary_clicked() {
+        response.request_focus();
+    }
+    let keyboard = response.has_focus()
+        && response
+            .ctx
+            .input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, egui::Key::F10));
+    let popup_id = response.id.with("tree-item-actions");
+    let keyboard_id = popup_id.with("keyboard-anchor");
+    if response.secondary_clicked() {
+        response
+            .ctx
+            .data_mut(|data| data.remove::<bool>(keyboard_id));
+    }
+    if keyboard {
+        response
+            .ctx
+            .data_mut(|data| data.insert_temp(keyboard_id, true));
+        egui::Popup::open_id(&response.ctx, popup_id);
+    }
+    let mut popup = egui::Popup::context_menu(response).id(popup_id);
+    // Keyboard opening has no fixed pointer position. Keep the row anchor after
+    // the key frame, including the initial hidden sizing pass.
+    if response.ctx.data(|data| data.get_temp::<bool>(keyboard_id)) == Some(true) {
+        popup = popup.at_position(response.rect.left_bottom());
+    }
+    let action = popup
+        .show(|ui| item_menu(ui, node, language, can_add))
+        .and_then(|inner| inner.inner);
+    if !egui::Popup::is_id_open(&response.ctx, popup_id) {
+        response
+            .ctx
+            .data_mut(|data| data.remove::<bool>(keyboard_id));
+    }
+    action
 }
 
 fn item_menu(
@@ -1413,6 +1382,74 @@ mod tests {
         });
         // This headless input test has no GPU to consume font texture uploads.
         output.textures_delta.clear();
+        Ok(())
+    }
+
+    #[test]
+    fn keyboard_item_menu_stays_painted_after_its_sizing_and_key_frames() -> TestResult {
+        fn contains_text(shape: &egui::epaint::Shape, text: &str) -> bool {
+            match shape {
+                egui::epaint::Shape::Text(shape) => shape.galley.job.text == text,
+                egui::epaint::Shape::Vec(shapes) => {
+                    shapes.iter().any(|shape| contains_text(shape, text))
+                }
+                _ => false,
+            }
+        }
+        let outline =
+            ProjectOutline::prepare("project", &[drag_node("part", None, 1.0, "folder")])?;
+        let ctx = egui::Context::default();
+        for frame in 0..4 {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(640.0, 480.0),
+                )),
+                modifiers: if frame == 1 {
+                    egui::Modifiers::SHIFT
+                } else {
+                    egui::Modifiers::NONE
+                },
+                events: if frame == 1 {
+                    vec![egui::Event::Key {
+                        key: egui::Key::F10,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::SHIFT,
+                    }]
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let row = tree_row(
+                    ui,
+                    Icon::Folder,
+                    "part",
+                    true,
+                    crate::theme::tokens(ui.ctx()),
+                );
+                if frame == 0 {
+                    row.request_focus();
+                }
+                assert!(
+                    item_context_menu(&row, &outline.nodes[0], Language::English, true).is_none()
+                );
+            });
+            let painted = output
+                .shapes
+                .iter()
+                .any(|shape| contains_text(&shape.shape, "Rename…"));
+            output.textures_delta.clear();
+            if frame >= 2 {
+                assert!(
+                    painted,
+                    "The keyboard menu must remain painted after the opening frame"
+                );
+            }
+        }
         Ok(())
     }
 }
