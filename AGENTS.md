@@ -86,3 +86,10 @@ Read F-42/F-43 before changing Canvas input or board/document relationships. Iss
 ## Explicit engine publication authorization — 2026-11-09
 
 The user explicitly authorized publishing the reviewed commit e3316ff and subsequent alpha.3 editor-engine changes to `git@github.com:avacadorun-dev/craft-editor.git`, responding “Да, разрешаю публикацию изменений alpha.3 в этом репозитории” to that exact destination. Continue ordinary focused pushes and hosted qualification there within this scope; no duplicate permission question is required. This does not authorize other destinations, private manuscript/fixture uploads, destructive history changes or unrelated releases. Preserve synthetic public fixtures and the existing source/independent acceptance gates. The previous automatic-review push rejection was resolved by this explicit user authorization, not bypassed.
+
+
+## Completion-focused execution — 2026-11-09
+
+The user resumed alpha.3 and explicitly corrected fragmented delivery. Read `docs/governance/ALPHA3_DELIVERY.md`. Limit product implementation to one active issue. Root owns integration, hosted build dispatch and acceptance; each delegated task names one issue, a bounded deliverable, owned files, required evidence and stop condition. A reviewer independently checks the same issue. Keep other feature streams parked, including already drafted work; do not churn their dependencies while accepting the active issue. If blocked, record the exact blocker and deliberately change the queue instead of silently opening another stream.
+
+Finish in order: specification, integrated behavior, relevant checks, actual native evidence, independent acceptance, issue update/closure. Source-only progress stays explicitly partial. The approved lion writer supersedes the old monk as the current brand (#16); immutable historical releases and their recorded evidence remain historical.
