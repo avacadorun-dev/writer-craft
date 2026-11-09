@@ -13,6 +13,12 @@ on:
       - 'scripts/native-startup-smoke.py'
       - '.github/workflows/editor-preview.yml'
   workflow_dispatch:
+    inputs:
+      macos_runner:
+        description: Apple Silicon runner image (alternate image for capacity delays)
+        type: choice
+        default: macos-15
+        options: [macos-15, macos-26]
 
 permissions:
   contents: read
@@ -84,7 +90,7 @@ jobs:
     name: Native editor preview (macOS ARM64)
     needs: [resolve-lock]
     if: needs.resolve-lock.outputs.ready == 'true'
-    runs-on: macos-15
+    runs-on: ${{ inputs.macos_runner || 'macos-15' }}
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
