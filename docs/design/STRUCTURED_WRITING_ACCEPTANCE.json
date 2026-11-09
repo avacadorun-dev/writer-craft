@@ -66,7 +66,11 @@
         "save-reopen-with-markup-history",
         "project-label-create-color-reuse-and-reopen",
         "consistent-inline-sidebar-primary-color-and-named-chips",
-        "compact-note-inspector-and-label-picker"
+        "compact-note-inspector-and-label-picker",
+        "one-action-remove-mark-and-guarded-undo",
+        "one-action-local-label-unassignment",
+        "short-inline-correction-loop-preserves-draft-and-caret",
+        "filtered-markup-previous-next-inline-apply-and-parked-replacement"
       ],
       "required_semantic_operations": [
         {
@@ -169,7 +173,8 @@
         "project-label-lifecycle",
         "existing-formula-mermaid-edit",
         "reader-export",
-        "canonical-export-and-restore"
+        "canonical-export-and-restore",
+        "sequential-markup-review-and-inline-replacement"
       ]
     }
   ]

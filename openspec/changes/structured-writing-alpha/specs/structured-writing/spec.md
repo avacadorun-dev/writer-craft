@@ -68,6 +68,18 @@ Authors SHALL create, inspect, edit and remove tags and optional notes attached 
 - **WHEN** the target document or an ancestor is trashed
 - **THEN** navigation retains its identity and presents an unavailable/restore route instead of silently opening it as active manuscript content
 
+### Requirement: Direct recoverable markup removal
+
+Authors SHALL remove a passage mark in one direct action with nearby guarded Undo. Local label unassignment SHALL take one action without deleting the project label. Deletion MUST retain pending authored note data recoverably, preserve manuscript text and refuse stale mutations without losing drafts.
+
+#### Scenario: Finish a marked correction
+- **WHEN** an author revises the manuscript and removes its mark from the note list
+- **THEN** the mark disappears without a menu or confirmation, the text/caret stay unchanged and Undo restores the exact mark with its latest authored note
+
+#### Scenario: Remove one local label
+- **WHEN** an author activates a label's remove control
+- **THEN** that assignment is removed without a second Save, unrelated usages/definitions remain and an emptied label-only mark is recoverable
+
 ### Requirement: Durable compatible writing state
 
 Tree changes and passage markup MUST survive save/reopen and canonical export/restore with unknown source fields, rich text, histories and original media retained. Older records without tags SHALL remain usable with empty tag metadata.
@@ -107,3 +119,15 @@ The application SHALL organize author actions into understandable contextual gro
 #### Scenario: A working action is hard to discover or visually unfinished
 - **WHEN** the native author walkthrough reveals scattered controls, excessive spacing, unclear icons or inaccessible actions
 - **THEN** acceptance SHALL require a recorded correction and fresh compiled visual and interaction evidence for the affected surface
+
+### Requirement: Sequential marked-passage correction
+
+The Review panel SHALL support previous/next navigation through captured marked identities, inline replacement and explicit Apply or Apply-and-next. It MUST preserve unapplied wording across navigation, retain a staged receipt after failure, and show actual changed fragments. Only explicit Apply may change canonical text.
+
+#### Scenario: Correct a filtered sequence
+- **WHEN** an author starts review from filtered project markup and applies a replacement before advancing
+- **THEN** only that exact occurrence changes, the next mark opens by identity and Undo remains guarded by the applied revision
+
+#### Scenario: Pause or navigate with unapplied wording
+- **WHEN** the author closes the panel or visits another marked passage before applying
+- **THEN** the authored replacement remains resumable against its captured revision without altering the manuscript or silently retargeting it

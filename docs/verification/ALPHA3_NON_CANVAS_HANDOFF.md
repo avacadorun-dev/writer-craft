@@ -2,6 +2,14 @@
 
 Prepared 2026-11-09 under explicit F-49 authorization. This is an execution handoff, not a completed release. Continue the current checkout and reconcile newer commits/agents before editing. Repository: `avacadorun-dev/writer-craft`; branch: `feature/alpha3-parity`. Never create `codex/` branches.
 
+## Live application continuation — F-55, 2026-11-10
+
+Application implementation is continuing on #14. Read F-54/F-55 and the latest progress entries before acting: one-action local markup removal, muted palette-compatible labels, and the separate Review panel's marked-passage correction queue are required before acceptance. All implementation/tests remain in the existing checkout; do not restart them. The exact committed candidate must be reconciled because focused commits may follow this prose.
+
+Protected windows now include Preview68db76e, Reviewe4157d1 and Acceptance0710f70. Read-only inspection of the latter found unrecorded revision6/tree/label-form changes; no further input, close or copy as agent-authored evidence is permitted. Use a fresh isolated candidate workspace for native authoring. The first agent-authored scene and historical captures remain retained, but they do not accept later source.
+
+Hosted9535718 macOS jobs were cancelled before execution because GitHub could not acquire Apple Silicon runners; Linux/Windows core passed. The manual workflows retain macos-15 by default and allow official macos-26 Apple Silicon as an alternative. No Rust test, strict check, native acceptance or release gate is waived. Continue #14 native authoring after fresh hosted qualification, then #7 and #11 in sequence.
+
 ## Current authority and division of work
 
 The user explicitly authorized delivering alpha.3 from the existing implementation plus a coherent completed character/screenwriting scenario and other unblocked fixes, without waiting for full Canvas. This supersedes the historical all-parity alpha.3 release prerequisite and the old prohibition on advancing beyond #17. Read the latest overrides in AGENTS.md, NEXT_RELEASE.md and ALPHA3_RELEASE_MAP.md; older paragraphs remain historical evidence.

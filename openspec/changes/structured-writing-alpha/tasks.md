@@ -6,6 +6,7 @@
 - [x] Mount accessible hierarchy actions and exact reference consultation/return with eight locales.
 - [ ] Complete F-53 direct tree drag/drop, placement highlighting, hover expansion, autoscroll and compact nested rows; verify actual native input.
 - [ ] Complete F-54 full-width tree context/keyboard actions and reusable colored project labels with a coherent note inspector; preserve existing drafts and portable state.
+- [ ] Complete F-55 one-action recoverable mark removal, nearby guarded Undo and direct local label removal; simplify and count the native correction loop without losing authored drafts.
 - [x] Implement compatible author-defined passage tags and project result lifecycle.
 - [ ] Verify targeted semantic preservation/refusal checks on GitHub without including the retained #10 diff.
 - [ ] Perform A3-WRITE-01/A3-MARK-01 through the native interface on the substantial acceptance manuscript.

@@ -12,6 +12,8 @@ F-54 native feedback refines the same outcome: reclaim full tree-row title width
 
 ## Impact
 
+F-55 adds direct one-action passage-mark removal with nearby Undo and immediate local label unassignment. It simplifies the correction loop within the same selected workflow; project-wide catalog operations retain explicit scope and guards.
+
 No new project-kind taxonomy, automatic entity extraction or Canvas engine adoption. Preserve rich data, stable identities, revisions, imported provenance and unknown fields. Additive tagging metadata defaults to empty in older records and survives canonical restore. Existing full parity remains pending. See docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md.
 
 F-54 adds schema-11 older-writer protection and a project catalog without rewriting existing annotation/history rows or original imported manifests. Guard shared label changes and retain unused/retired definitions through canonical transfer. Exact previous tag names remain assignment identities; semantic color names are presentation metadata. See ADR-017.
