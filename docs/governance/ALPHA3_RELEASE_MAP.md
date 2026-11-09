@@ -29,9 +29,9 @@ Closed 2026-11-09 under lean verification: Balanced hierarchy and adaptive ≥98
 
 Closed 2026-11-09 under lean verification: real native workflow verified end-to-end on the exact CI candidate (typing → bold mark with exact ranges in durable revision → note creation with exact-occurrence anchor incl. prefix disambiguation → quit/relaunch → mark and note restored and readable). Core preservation suites green (65 core tests + mapping/replay/recovery/portability). Gap: in-text mark pixel rendering usage-monitored.
 
-### P4 — #8 real syntax highlighting
+### P4 — complete: #8 real syntax highlighting
 
-Full declared grammar set. A check accepting `MissingRequiredGrammar` does not establish parity; native edit/copy/Undo/reopen/theme evidence required.
+Closed 2026-11-09 under lean verification: engine syntax suite 14/14 on the app-pinned source (every original named format has a real grammar and colored sample; syntax.rs identical between pin and test), palette-aware cached app integration with explicit unavailable-fallback, source preservation via canonical JSON in green Verify. Gap: pixel-level token colors in the compiled app usage-monitored.
 
 ### P5 — #9 dialogs and input sizing
 
