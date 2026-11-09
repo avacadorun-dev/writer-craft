@@ -44,6 +44,9 @@ struct Prerequisites {
     intent: Intent,
     project: Option<String>,
     notes: Vec<(String, String)>,
+    /// Pre-transfer checks finished; the actual export/restore starts only
+    /// from an explicit user confirmation, never from reopening the dialog.
+    armed: bool,
 }
 #[derive(Clone)]
 struct Context {
@@ -268,7 +271,11 @@ impl ProjectTransferState {
                         ui.label(RichText::new(l.text("Reading files that have changed cannot be restored as an unchanged canonical backup.")).color(t.muted));
                     }
                     Some(View::Preparing(state))=>{
-                        if state.notes.is_empty(){ui.spinner();ui.label(l.text("Saving current work before transfer…"));}
+                        if state.notes.is_empty()&&!state.armed{ui.spinner();ui.label(l.text("Saving current work before transfer…"));}
+                        else if state.notes.is_empty() {
+                            ui.label(l.text("Ready to transfer."));ui.add_space(8.0);
+                            ui.label(RichText::new(l.text("Confirm to start; reopening this window never starts the transfer by itself.")).color(t.muted));
+                        }
                         else {
                             ui.label(l.text("Review pending notes in this project before continuing."));ui.add_space(12.0);
                             for (id,title) in &state.notes {ui.horizontal_wrapped(|ui|{ui.label(title);if components::action(ui,l.text("Review notes"),true,None).clicked(){action=Some(Action::Review(id.clone()));}});}
@@ -309,6 +316,16 @@ impl ProjectTransferState {
                         }
                         Some(View::Preparing(state)) if !state.notes.is_empty() => {
                             if components::action(ui, l.text("Continue"), true, Some(t)).clicked() {
+                                action = Some(Action::Continue);
+                            }
+                        }
+                        Some(View::Preparing(state)) if state.armed => {
+                            let label = if matches!(state.intent, Intent::Restore(_)) {
+                                "Restore project"
+                            } else {
+                                "Choose destination…"
+                            };
+                            if components::action(ui, l.text(label), true, Some(t)).clicked() {
                                 action = Some(Action::Continue);
                             }
                         }
@@ -471,7 +488,7 @@ impl StudioApp {
         {
             return;
         }
-        if let Err(error) = self.continue_project_transfer(ctx) {
+        if let Err(error) = self.continue_project_transfer(ctx, true) {
             self.project_transfer.auxiliary_error = Some(error.to_string());
         }
     }
@@ -490,6 +507,7 @@ impl StudioApp {
                             intent: Intent::Export(request),
                             project,
                             notes: Vec::new(),
+                            armed: false,
                         }));
                     }
                     Some(View::Ready(input)) => {
@@ -498,11 +516,12 @@ impl StudioApp {
                             intent: Intent::Restore(input),
                             project,
                             notes: Vec::new(),
+                            armed: false,
                         }));
                     }
                     other => self.project_transfer.view = other,
                 }
-                self.continue_project_transfer(ctx)?;
+                self.continue_project_transfer(ctx, false)?;
             }
             Action::ChooseArchive | Action::ChooseFolder => {
                 let path = if matches!(action, Action::ChooseArchive) {
@@ -561,12 +580,17 @@ impl StudioApp {
         }
         Ok(())
     }
-    fn continue_project_transfer(&mut self, ctx: &egui::Context) -> AppResult<()> {
+    fn continue_project_transfer(&mut self, ctx: &egui::Context, auto: bool) -> AppResult<()> {
         let view = self.project_transfer.view.take();
         let Some(View::Preparing(mut state)) = view else {
             self.project_transfer.view = view;
             return Ok(());
         };
+        if state.armed && auto {
+            // The checks already finished; only an explicit confirmation may start.
+            self.project_transfer.view = Some(View::Preparing(state));
+            return Ok(());
+        }
         let preparation = (|| -> AppResult<bool> {
             self.save_explicit()?;
             #[cfg(feature = "editor-preview")]
@@ -592,6 +616,13 @@ impl StudioApp {
             Err(error) => {
                 self.project_transfer.view = Some(View::Preparing(state));
                 return Err(error);
+            }
+            Ok(true) if auto => {
+                // Reopening the dialog only arms the confirmed transfer; it never
+                // starts an export or restore without an explicit user action.
+                state.armed = true;
+                self.project_transfer.auxiliary_error = None;
+                self.project_transfer.view = Some(View::Preparing(state));
             }
             Ok(true) => {
                 self.project_transfer.auxiliary_error = None;
@@ -1071,6 +1102,55 @@ mod tests {
         assert_eq!(
             std::fs::read(path)?,
             b"Unrelated replacement after verified preview"
+        );
+        Ok(())
+    }
+    #[test]
+    fn reopening_armed_transfer_waits_for_explicit_confirmation() -> TestResult {
+        let (directory, mut app, project) = fixture()?;
+        let path = directory.path().join("Source.writercraft");
+        let context = Context {
+            title: project.title.clone(),
+            path: Some(path.clone()),
+        };
+        assert!(matches!(
+            export_project_job(
+                &app.database,
+                request(&project, ExportKind::Archive),
+                path.clone(),
+                &ProjectTransferCancellation::default(),
+                context.clone()
+            ),
+            Event::Exported(_)
+        ));
+        let Event::Checked(input) =
+            check_input_job(path, false, &ProjectTransferCancellation::default())
+        else {
+            return Err("checked_input_missing".into());
+        };
+        app.project_transfer.visible = true;
+        app.project_transfer.view = Some(View::Preparing(Prerequisites {
+            intent: Intent::Restore(input),
+            project: None,
+            notes: Vec::new(),
+            armed: true,
+        }));
+        let before = app.workspace.list_projects()?.len();
+        let ctx = egui::Context::default();
+        // Merely reopening the transfer window must never start the restore.
+        app.poll_project_transfer(&ctx);
+        assert!(matches!(
+            &app.project_transfer.view,
+            Some(View::Preparing(state)) if state.armed
+        ));
+        assert_eq!(app.workspace.list_projects()?.len(), before);
+        // The explicit confirmation starts it.
+        app.transfer_action(Action::Continue, &ctx)?;
+        assert!(
+            app.project_transfer
+                .view
+                .as_ref()
+                .is_some_and(|view| matches!(view, View::Working(_)))
         );
         Ok(())
     }

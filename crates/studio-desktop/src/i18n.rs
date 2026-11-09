@@ -449,6 +449,32 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Ready to transfer.",
+        [
+            "Готово к переносу.",
+            "Ready to transfer.",
+            "Bereit zur Übertragung.",
+            "Prêt pour le transfert.",
+            "Listo para la transferencia.",
+            "Pronto para transferir.",
+            "可以开始传输。",
+            "移行の準備ができました。",
+        ],
+    ),
+    (
+        "Confirm to start; reopening this window never starts the transfer by itself.",
+        [
+            "Нажмите «Подтвердить», чтобы начать; само по себе открытие этого окна перенос не запускает.",
+            "Confirm to start; reopening this window never starts the transfer by itself.",
+            "Zum Starten bestätigen; das erneute Öffnen dieses Fensters startet die Übertragung niemals selbst.",
+            "Confirmez pour démarrer ; la réouverture de cette fenêtre ne lance jamais le transfert toute seule.",
+            "Confirma para iniciar; volver a abrir esta ventana nunca inicia la transferencia por sí sola.",
+            "Confirme para iniciar; reabrir esta janela nunca inicia a transferência por si só.",
+            "请确认后开始；重新打开此窗口绝不会自行开始传输。",
+            "開始するには確認してください。このウィンドウを再度開いても転送が自動で開始されることはありません。",
+        ],
+    ),
+    (
         "Review pending notes in this project before continuing.",
         [
             "Перед продолжением проверьте незавершённые заметки этого проекта.",
