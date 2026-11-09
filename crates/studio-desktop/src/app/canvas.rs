@@ -15,6 +15,7 @@ use std::path::Path;
 use std::sync::Arc;
 use studio_core::{ProjectCanvasRevision, ProjectCanvasSnapshot};
 
+mod connections;
 #[cfg(test)]
 mod input_tests;
 
@@ -133,6 +134,7 @@ pub(super) struct CanvasState {
     resource: Option<CanvasResource>,
     media: Option<MediaCache>,
     media_viewer: Option<MediaViewer>,
+    connection_editor: Option<connections::ConnectionEditor>,
 }
 impl CanvasState {
     pub(super) fn open(workspace: &Workspace, project: &str, id: &str) -> AppResult<Self> {
@@ -173,6 +175,7 @@ impl CanvasState {
             resource: None,
             media: None,
             media_viewer: None,
+            connection_editor: None,
         })
     }
     /// Bounded camera/selection bookmark, without retaining decoded media or draft buffers.
@@ -216,6 +219,10 @@ impl CanvasState {
     }
     pub(super) fn modal_open(&self) -> bool {
         self.media_viewer.is_some()
+            || self
+                .connection_editor
+                .as_ref()
+                .is_some_and(connections::ConnectionEditor::is_open)
     }
     /// Run before egui focus navigation, with the same modal boundary as the board view.
     pub(super) fn prepare_input(
@@ -224,7 +231,7 @@ impl CanvasState {
         input: &mut egui::RawInput,
         blocked: bool,
     ) {
-        let blocked = blocked || self.media_viewer.is_some() || self.text_cancel;
+        let blocked = blocked || self.modal_open() || self.text_cancel;
         if let Some(editor) = &mut self.text_editor {
             editor.prepare_inline_input(ctx, input, blocked);
         }
@@ -267,6 +274,7 @@ impl CanvasState {
     pub(super) fn blocks_navigation(&self) -> bool {
         self.pending.is_some()
             || self.failed.is_some()
+            || self.connection_editor.is_some()
             || self.text_save_error
             || self.text_composing
             || self.text_editor.as_ref().is_some_and(|editor| {
@@ -386,6 +394,7 @@ impl CanvasState {
                     .prepared
                     .ok_or_else(|| CanvasError::Invalid("Missing board acknowledgement".into()))?;
                 let dialect = SourceDialect::new(prepared.document())?;
+                let acknowledged_base = prepared.base();
                 let session = Arc::get_mut(&mut self.session).ok_or_else(|| {
                     CanvasError::Invalid(
                         "Board preparation still owns the acknowledged session".into(),
@@ -418,6 +427,7 @@ impl CanvasState {
                 if self.text_cancel {
                     self.finish_inline();
                 }
+                self.connection_acknowledged(acknowledged_base)?;
                 Ok(())
             }
             Err(error) => {
@@ -750,7 +760,8 @@ impl CanvasState {
                         self.editable()
                             && !blocked
                             && !self.modal_open()
-                            && self.text_editor.is_none(),
+                            && self.text_editor.is_none()
+                            && self.connection_editor.is_none(),
                         |ui| {
                             let text = icons::labeled_button(
                                 ui,
@@ -794,26 +805,32 @@ impl CanvasState {
                                 };
                                 self.set_tool(tool);
                             }
-                            if ui
-                                .add_enabled(
-                                    self.session.history_usage().undo_steps > 0,
-                                    egui::Button::new(l.text("Undo")),
-                                )
-                                .clicked()
-                            {
+                            let undo = ui.add_enabled(
+                                self.session.history_usage().undo_steps > 0,
+                                egui::Button::new(l.text("Undo")),
+                            );
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.undo",
+                                undo.rect,
+                            );
+                            if undo.clicked() {
                                 let result = self.begin(
                                     database,
                                     PendingOperation::Undo(self.session.identity()),
                                 );
                                 self.set_failure(result);
                             }
-                            if ui
-                                .add_enabled(
-                                    self.session.history_usage().redo_steps > 0,
-                                    egui::Button::new(l.text("Redo")),
-                                )
-                                .clicked()
-                            {
+                            let redo = ui.add_enabled(
+                                self.session.history_usage().redo_steps > 0,
+                                egui::Button::new(l.text("Redo")),
+                            );
+                            super::capture_connected_writing::control(
+                                ui.ctx(),
+                                "canvas.redo",
+                                redo.rect,
+                            );
+                            if redo.clicked() {
                                 let result = self.begin(
                                     database,
                                     PendingOperation::Redo(self.session.identity()),
@@ -822,6 +839,12 @@ impl CanvasState {
                             }
                         },
                     );
+                    // Keep recovery reachable while a failed label draft is hidden.
+                    if self.text_editor.is_none() {
+                        ui.add_enabled_ui(!blocked && !self.modal_open(), |ui| {
+                            self.connection_tools(ui, database, l);
+                        });
+                    }
                     if self.text_editor.is_some() {
                         ui.separator();
                         ui.label(l.text(if self.text_cancel {
@@ -861,15 +884,23 @@ impl CanvasState {
                         match self.tool {
                             BoardTool::Connect => {
                                 ui.separator();
-                                ui.label(l.text(if self.connect_source.is_some() {
-                                    "Select target card"
-                                } else {
-                                    "Select source card"
-                                }));
+                                ui.add(
+                                    egui::Label::new(l.text(if self.connect_source.is_some() {
+                                        "Select target card"
+                                    } else {
+                                        "Select source card"
+                                    }))
+                                    .truncate(),
+                                );
                             }
                             BoardTool::Text => {
                                 ui.separator();
-                                ui.label(l.text("Click the board to place a text card"));
+                                ui.add(
+                                    egui::Label::new(
+                                        l.text("Click the board to place a text card"),
+                                    )
+                                    .truncate(),
+                                );
                             }
                             BoardTool::Select => {}
                         }
@@ -998,8 +1029,11 @@ impl CanvasState {
         config.style.text = tokens.text;
         config.style.selection = tokens.accent;
         config.style.error = tokens.warning;
-        config.interactive =
-            self.editable() && !blocked && !self.modal_open() && self.text_editor.is_none();
+        config.interactive = self.editable()
+            && !blocked
+            && !self.modal_open()
+            && self.text_editor.is_none()
+            && self.connection_editor.is_none();
         config.shortcuts_blocked = !config.interactive;
         self.viewport_size = ui.available_size_before_wrap();
         if self.fit_on_open && self.viewport_size.x > 0.0 && self.viewport_size.y > 0.0 {
@@ -1014,6 +1048,7 @@ impl CanvasState {
         // Reveal an offscreen active card now so resizing cannot omit its real widget.
         let reveal = self.reveal_inline_input();
         self.set_failure(reveal);
+        let input_blocked = blocked || self.modal_open() || self.text_cancel;
         let media = self
             .media
             .get_or_insert_with(|| MediaCache::new(database.to_owned()));
@@ -1026,11 +1061,12 @@ impl CanvasState {
             media,
             editor: self.text_editor.as_mut(),
             inline_output: &mut inline_output,
-            blocked: blocked || self.media_viewer.is_some() || self.text_cancel,
+            blocked: input_blocked,
         };
         let output = self
             .view
             .show(ui, &self.session, &self.dialect, &mut host, &config);
+        self.paint_connections(ui, output.viewport, tokens);
         for error in output.errors {
             self.failure = Some(error.to_string());
         }
@@ -1189,6 +1225,7 @@ impl CanvasState {
                     "recovery":self.snapshot.draft.is_some(), "navigation_blocked":self.blocks_navigation(), "status":self.durability_status(),
                     "editor":self.text_editor.as_ref().map(|editor| serde_json::json!({"node_id":editor.node_id(), "text":editor.text(), "dirty":editor.dirty(), "submitted":editor.has_submission(), "awaiting_insertion":editor.awaits_insertion(), "composing":self.text_composing})),
                     "selected_nodes":self.view.selection().nodes,
+                    "selected_edges":self.view.selection().edges,
                     "tool":match self.tool { BoardTool::Select => "select", BoardTool::Text => "text", BoardTool::Connect => "connect" },
                     "connect_source":self.connect_source,
                     "camera":{"center":[camera.center().x,camera.center().y],"zoom":camera.zoom()},
@@ -1283,10 +1320,11 @@ impl CanvasState {
     pub(super) fn dialogs(
         &mut self,
         ctx: &egui::Context,
-        _database: &Path,
+        database: &Path,
         language: Language,
         tokens: Tokens,
     ) {
+        self.connection_dialog(ctx, database, language, tokens);
         if let (Some(media), Some(viewer)) = (&mut self.media, &mut self.media_viewer)
             && media.viewer(ctx, &self.project_id, viewer, language, tokens)
         {
@@ -1423,11 +1461,13 @@ impl CanvasState {
         if !self.failed_preserved || self.pending.is_some() || self.text_composing {
             return Err(CanvasError::StaleBase.into());
         }
-        *self = Self::open(
+        let mut saved = Self::open(
             &Workspace::open(database)?,
             &self.project_id,
             &self.snapshot.canvas.id,
         )?;
+        saved.connection_editor = self.connection_editor.take();
+        *self = saved;
         Ok(())
     }
     fn keep_saved(&mut self, database: &Path) -> AppResult<()> {
@@ -1441,7 +1481,9 @@ impl CanvasState {
             &self.snapshot.canvas.id,
             &draft.version,
         )?;
-        *self = Self::open(&workspace, &self.project_id, &self.snapshot.canvas.id)?;
+        let mut saved = Self::open(&workspace, &self.project_id, &self.snapshot.canvas.id)?;
+        saved.connection_editor = self.connection_editor.take();
+        *self = saved;
         Ok(())
     }
     /// Recover only the exact persisted native draft, never an imported checkpoint envelope.
@@ -1456,7 +1498,9 @@ impl CanvasState {
             self.snapshot.revision.info.revision,
             &draft.version,
         )?;
-        *self = Self::open(workspace, &self.project_id, &self.snapshot.canvas.id)?;
+        let mut saved = Self::open(workspace, &self.project_id, &self.snapshot.canvas.id)?;
+        saved.connection_editor = self.connection_editor.take();
+        *self = saved;
         Ok(())
     }
 }
