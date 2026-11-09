@@ -369,7 +369,10 @@ impl ConnectedCapture {
                     CLIPPED_TEXT
                 } else {
                     INITIAL
-                } =>
+                }
+                && (self.scenario == "canvas-cancel"
+                    || (state["editor"]["awaiting_insertion"] == false
+                        && state["pending"] == false)) =>
             {
                 if self.scenario == "canvas-cancel" {
                     self.advance(
