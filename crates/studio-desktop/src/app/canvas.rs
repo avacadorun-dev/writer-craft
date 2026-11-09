@@ -15,6 +15,9 @@ use std::path::Path;
 use std::sync::Arc;
 use studio_core::{ProjectCanvasRevision, ProjectCanvasSnapshot};
 
+#[cfg(test)]
+mod input_tests;
+
 /// Explicit project-relative navigation. It never authorizes an ambient file read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct CanvasResource {
@@ -123,6 +126,9 @@ pub(super) struct CanvasState {
     tool: BoardTool,
     connect_source: Option<String>,
     press_origin: Option<egui::Pos2>,
+    /// Board tool active when the primary press landed; toolbar clicks in the
+    /// same frame must not retro-activate placement for an earlier press.
+    press_tool: BoardTool,
     viewport_size: Vec2,
     resource: Option<CanvasResource>,
     media: Option<MediaCache>,
@@ -162,6 +168,7 @@ impl CanvasState {
             tool: BoardTool::default(),
             connect_source: None,
             press_origin: None,
+            press_tool: BoardTool::default(),
             viewport_size: Vec2::new(800.0, 600.0),
             resource: None,
             media: None,
@@ -448,6 +455,8 @@ impl CanvasState {
     /// Arm exactly one board tool; switching tools cancels a pending connection source.
     fn set_tool(&mut self, tool: BoardTool) {
         self.tool = tool;
+        self.press_origin = None;
+        self.view.cancel_transient();
         self.cancel_connect_selection();
     }
     /// Cancel a pending connection source selection without any mutation.
@@ -678,6 +687,7 @@ impl CanvasState {
         blocked: bool,
     ) {
         let l = language;
+        let tool_at_frame_start = self.tool;
         // An export permission covers the previous input pass only. Even if clicking
         // Reload moves focus first, same-batch native text must not disappear unnoticed.
         let text_input_arrived = self.text_editor.is_some()
@@ -1024,15 +1034,32 @@ impl CanvasState {
         for error in output.errors {
             self.failure = Some(error.to_string());
         }
-        // Tool modes reinterpret board gestures: connection clicks must not also create
-        // or open cards, and text placement handles empty-board clicks itself.
+        let board_rect = output.viewport.intersect(ui.clip_rect());
+        let board_owns_pointer = ui.rect_contains_pointer(board_rect);
+        let pan_input = ui.input(|input| {
+            input.key_down(egui::Key::Space)
+                || input.key_pressed(egui::Key::Space)
+                || input.key_released(egui::Key::Space)
+                || input.pointer.button_down(egui::PointerButton::Middle)
+                || input.pointer.button_released(egui::PointerButton::Middle)
+        });
+        // Tool clicks are scoped to the board. Preserve the Select tool's native
+        // double-click creation without reinterpreting toolbar clicks as placement.
         let drag_occurred = output
             .intents
             .iter()
             .any(|intent| matches!(intent, CanvasIntent::Transaction(_)));
         for intent in output.intents {
             let filtered = match &intent {
-                CanvasIntent::CreateText { .. } => self.tool != BoardTool::Select,
+                CanvasIntent::CreateText { .. } => {
+                    self.tool != BoardTool::Select
+                        || self.tool != tool_at_frame_start
+                        || !board_owns_pointer
+                        || pan_input
+                        || !output
+                            .response
+                            .double_clicked_by(egui::PointerButton::Primary)
+                }
                 CanvasIntent::EditText { .. } | CanvasIntent::OpenNode { .. } => {
                     self.tool == BoardTool::Connect
                 }
@@ -1045,7 +1072,13 @@ impl CanvasState {
             let result = self.intent(database, ui.ctx(), intent);
             self.set_failure(result);
         }
-        if config.interactive {
+        if config.interactive
+            && self.editable()
+            && self.text_editor.is_none()
+            && ui.input(|input| input.focused)
+            && self.tool == tool_at_frame_start
+            && !pan_input
+        {
             // A pending connection source must never dangle after its card disappeared.
             if self
                 .connect_source
@@ -1055,6 +1088,7 @@ impl CanvasState {
                 self.cancel_connect_selection();
             }
             if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+                self.press_origin = None;
                 if self.connect_source.is_some() {
                     self.cancel_connect_selection();
                 } else {
@@ -1064,6 +1098,9 @@ impl CanvasState {
             let mut release_at = None;
             ui.input(|input| {
                 for event in &input.events {
+                    if matches!(event, egui::Event::PointerGone) {
+                        self.press_origin = None;
+                    }
                     if let egui::Event::PointerButton {
                         button: egui::PointerButton::Primary,
                         pressed,
@@ -1072,35 +1109,49 @@ impl CanvasState {
                     } = event
                     {
                         if *pressed {
-                            self.press_origin = Some(*pos);
+                            self.press_origin =
+                                (board_owns_pointer && board_rect.contains(*pos)).then_some(*pos);
+                            self.press_tool = tool_at_frame_start;
                         } else {
                             release_at = Some(*pos);
                         }
                     }
                 }
             });
-            // A completed click keeps its press and release on one target; a drag that
-            // already produced a transaction never also fires a tool click.
-            if !drag_occurred && let (Some(origin), Some(pos)) = (self.press_origin, release_at) {
-                self.press_origin = None;
+            // Always consume the press on release, including a drag or an outside
+            // release. egui's click classification also rejects out-and-back drags.
+            let origin = release_at.and_then(|_| self.press_origin.take());
+            if !drag_occurred
+                && board_owns_pointer
+                && self.press_tool == self.tool
+                && ui.input(|input| input.pointer.primary_clicked())
+                && let (Some(origin), Some(pos)) = (origin, release_at)
+                && board_rect.contains(origin)
+                && board_rect.contains(pos)
+            {
                 let node_at = |point: egui::Pos2| {
                     output
                         .nodes
                         .iter()
+                        .rev()
                         .find(|node| node.reserved.contains(point))
                         .map(|node| node.node_id.as_str())
                 };
                 match (node_at(origin), node_at(pos)) {
-                    (Some(pressed), Some(released)) if pressed == released => {
+                    (Some(pressed), Some(released))
+                        if pressed == released && self.press_tool == BoardTool::Connect =>
+                    {
                         self.board_card_click(database, ui.ctx(), released);
                     }
-                    (None, None) if self.tool == BoardTool::Text => {
+                    (None, None) if self.press_tool == BoardTool::Text => {
                         let result = self.place_text_at(database, ui.ctx(), pos, output.viewport);
                         self.set_failure(result);
                     }
                     _ => {}
                 }
             }
+        } else {
+            self.press_origin = None;
         }
         if let Some(output) = inline_output {
             self.text_composing = output.composing;

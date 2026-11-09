@@ -64,3 +64,16 @@ Also this window:
 - **#17** first implementation slice (card connections via the qualified engine's `InsertEdge`) in progress under the one-implementer rule.
 
 Remaining before the alpha.3 gate: #17 slices, #11 compiled pass, #10 synthetic-profile import round-trip (+ owner-side private-archive checks), #14 selected sizing implementation, and the two-axis `full-editor-parity` UX gate with a fresh independent review on the final candidate.
+
+
+## Root takeover reconciliation — 2026-11-09 (continued checkout)
+
+Rechecked branch `feature/alpha3-parity` at `4bc85c28578ef97f7122ec39f5303ebb57d77ad4`, current GitHub issues/comments and hosted runs. Closed product issues remain #15, #12, #6, #2, #8, #9 and #7. The active sequence remains #17 → #11 → #10 → #14 → #4. Earlier active-#15 paragraphs in ALPHA3_DELIVERY are historical. No preceding worker is still implementing in this checkout.
+
+Retained work: the uncommitted synthetic demonstration-profile tests in `crates/studio-core/tests/project_portability.rs` belong to parked #10 and are excluded from the #17 commit. Existing `canvas.rs` gesture corrections and `capture_connected_writing.rs` diagnostics are reconciled into the active #17 correction, not discarded. CraftEditor is clean at `7f2885c`; the previously reported Cargo.lock diff is absent. CraftCanvas is clean at qualified app pin `69f2382`; no engine repin is needed.
+
+The 4bc85c2 Verify run42594554121 and preview run42595388932 succeeded, but downloaded startup artifact13662739907 explicitly reports `all_captures_settled:false`: canvas-inline, canvas-cancel and canvas-clipped-2x time out after toolbar arming unexpectedly creates a card. Packaging success is not Canvas acceptance. Existing local e21f8bb/c9cb895 packages and renderer/table handoffs are historical; none verifies these newer changes. Temporary drafts are retained.
+
+Independent source reconciliation (`canvas17_review`) found global host pointer routing, wrong first/bottom-card hit order, stale press/drag handling and a double-click regression in the retained attempted fix. The active correction scopes clicks to the clipped board/layer, captures the tool before toolbar processing, clears abandoned presses, preserves Select double-click and excludes pan gestures. Targeted compiled checks and native acceptance are still pending. The prior issue comment's claim that locked endpoints are refused was inaccurate: the original source allows connecting locked cards while forbidding dragging them. Native behavior retains that baseline.
+
+Next concrete delivery: qualify this repaired input boundary on hosted Rust checks and the exact native package, then finish B15 connection labels/selection/deletion/preview. #17 remains open: source audit finds substantial B01–B26 authoring gaps, including media/card creation, GFM, structured clipboard, drawing/shapes, groups/frames, schemas/templates/views/layouts, presentation/playthrough, board management and dedicated output. No full inventory or journey acceptance is inferred.

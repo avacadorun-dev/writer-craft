@@ -49,6 +49,13 @@ fn frame(ctx: &egui::Context) -> Observation {
             .unwrap_or_default()
     })
 }
+#[cfg(test)]
+pub(super) fn test_observation(
+    ctx: &egui::Context,
+) -> (BTreeMap<String, Rect>, BTreeMap<String, Value>) {
+    let observed = frame(ctx);
+    (observed.controls, observed.surfaces)
+}
 fn digest(value: &Value) -> String {
     format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
 }
@@ -324,9 +331,21 @@ impl ConnectedCapture {
                 .find(|node| node["id"] == id)
                 .ok_or("connected_capture_new_card_not_durable")?;
             let expected = self.expected_text();
-            if nodes.len() != 2
-                || node["text"] != expected
-                || saved.revision.content != state["canonical"]
+            if nodes.len() != 2 {
+                return Err(format!(
+                    "connected_capture_node_count_mismatch nodes={} ",
+                    nodes.len()
+                )
+                .into());
+            }
+            if node["text"] != expected {
+                return Err(format!(
+                    "connected_capture_text_mismatch durable={:?} expected={:?}",
+                    node["text"], expected
+                )
+                .into());
+            }
+            if saved.revision.content != state["canonical"]
                 || saved.revision.info.revision != state["revision"]
             {
                 return Err("connected_capture_durable_content_does_not_match_native_state".into());
