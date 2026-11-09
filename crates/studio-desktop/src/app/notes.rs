@@ -1,6 +1,7 @@
 //! Persistent passage-note presentation over guarded core commands and ephemeral native ranges.
 mod labels;
 mod presentation;
+mod quick_actions;
 use super::*;
 use craft_editor_egui::{
     DocPoint, Selection,
@@ -92,6 +93,7 @@ pub(super) struct NotesState {
     project_browser: Option<ProjectMarksBrowser>,
     labels: labels::LabelUi,
     decoration_cache: presentation::DecorationCache,
+    quick_undo: Option<quick_actions::QuickMarkupUndo>,
 }
 impl NotesState {
     pub(super) fn clear(&mut self) {
@@ -106,6 +108,7 @@ impl NotesState {
             paused_composers,
             project_browser: self.project_browser.take(),
             labels: std::mem::take(&mut self.labels),
+            quick_undo: self.quick_undo.take(),
             ..Self::default()
         };
     }
@@ -431,20 +434,35 @@ fn note_input(
     note_length(ui, body, l, t);
     response
 }
+struct NoteRowState {
+    selected: bool,
+    removable: bool,
+}
+struct NoteRowResponse {
+    row: egui::Response,
+    remove: egui::Response,
+}
 fn note_row(
     ui: &mut egui::Ui,
     note: &PassageAnnotation,
     quote: &str,
-    selected: bool,
+    state: NoteRowState,
     catalog: Option<&studio_core::ProjectLabelCatalog>,
     l: Language,
     t: Tokens,
-) -> egui::Response {
+) -> NoteRowResponse {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 72.0), egui::Sense::click());
-    if selected || response.hovered() {
-        ui.painter()
-            .rect_filled(rect, 5.0, if selected { t.accent_soft } else { t.surface });
+    if state.selected || response.hovered() {
+        ui.painter().rect_filled(
+            rect,
+            5.0,
+            if state.selected {
+                t.accent_soft
+            } else {
+                t.surface
+            },
+        );
     }
     ui.painter().rect_filled(
         egui::Rect::from_min_size(
@@ -454,9 +472,27 @@ fn note_row(
         2.0,
         labels::primary(note, catalog, t),
     );
+    let remove = ui
+        .scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    rect.right_top() + egui::vec2(-37.0, 3.0),
+                    egui::vec2(32.0, 30.0),
+                ))
+                .layout(Layout::left_to_right(Align::Min)),
+            |ui| {
+                ui.add_enabled_ui(state.removable, |ui| {
+                    icons::icon_button(ui, Icon::Trash, l.text("Delete markup"))
+                })
+                .inner
+            },
+        )
+        .inner;
+    let mut content_rect = rect.shrink2(egui::vec2(9.0, 5.0));
+    content_rect.max.x -= 34.0;
     ui.scope_builder(
         egui::UiBuilder::new()
-            .max_rect(rect.shrink2(egui::vec2(9.0, 5.0)))
+            .max_rect(content_rect)
             .layout(Layout::top_down(Align::Min)),
         |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
@@ -501,16 +537,19 @@ fn note_row(
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
             ui.is_enabled(),
-            selected,
+            state.selected,
             format!("{}: {}", quote, markup_summary(note, 240)),
         )
     });
-    response.on_hover_text(format!(
-        "{}\n{}\n{}",
-        note.note,
-        quote,
-        note.tags.join(" · ")
-    ))
+    NoteRowResponse {
+        row: response.on_hover_text(format!(
+            "{}\n{}\n{}",
+            note.note,
+            quote,
+            note.tags.join(" · ")
+        )),
+        remove,
+    }
 }
 
 fn markup_summary(note: &PassageAnnotation, limit: usize) -> String {
@@ -836,6 +875,19 @@ impl StudioApp {
         }
         Ok(())
     }
+    pub(super) fn select_markup_for_review(&mut self, id: &str) -> AppResult<PassageAnnotation> {
+        self.refresh_notes()?;
+        let note = self
+            .notes
+            .preview
+            .iter()
+            .find(|note| note.id == id)
+            .filter(|note| !note.deleted && note.anchor_status == AnchorStatus::Attached)
+            .cloned()
+            .ok_or("This marked passage is unavailable. Restore or reattach it first.")?;
+        self.activate_note(id)?;
+        Ok(note)
+    }
     /// Explicit Save only; partial conflicts keep all still-unsaved bodies reachable.
     pub(super) fn save_note_drafts(&mut self) -> AppResult<()> {
         let blocked_document = self
@@ -963,6 +1015,7 @@ impl StudioApp {
     }
     fn confirm_notes_close(&mut self, ctx: &egui::Context, t: Tokens) {
         let l = self.language;
+        let review_pending = self.rich_review.has_unsaved_drafts();
         let mut save = false;
         let mut discard = false;
         let mut cancel = false;
@@ -970,12 +1023,18 @@ impl StudioApp {
             ctx,
             l,
             "unsaved-note-close",
-            l.text("Save note drafts before closing?"),
+            l.text(if review_pending {
+                "Save note and edit drafts before closing?"
+            } else {
+                "Save note drafts before closing?"
+            }),
             540.0,
             |ui| {
-                ui.label(
-                    l.text("Choose whether to save your note drafts before closing WriterCraft."),
-                );
+                ui.label(l.text(if review_pending {
+                    "Save replacements as unapplied edits, or discard drafts before closing."
+                } else {
+                    "Choose whether to save your note drafts before closing WriterCraft."
+                }));
                 components::footer(ui, |ui| {
                     save = components::action(ui, l.text("Save drafts"), true, Some(t)).clicked();
                     discard =
@@ -985,7 +1044,9 @@ impl StudioApp {
             },
         );
         if save {
-            let result = self.save_note_drafts();
+            let result = self
+                .save_note_drafts()
+                .and_then(|_| self.save_review_drafts());
             if result.is_ok() {
                 self.notes.close_confirmation = false;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -993,6 +1054,7 @@ impl StudioApp {
             self.record_error(result);
         } else if discard {
             self.discard_note_drafts(ctx);
+            self.discard_review_drafts();
             self.notes.close_confirmation = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         } else if cancel || response.should_close() {
@@ -1041,7 +1103,7 @@ impl StudioApp {
         }
         Ok((current.revision, expected))
     }
-    fn refresh_notes(&mut self) -> AppResult<()> {
+    pub(super) fn refresh_notes(&mut self) -> AppResult<()> {
         self.refresh_label_catalog()?;
         let document = self.document.as_ref().ok_or("missing_note_document")?;
         self.notes.invalidate();
@@ -1291,6 +1353,7 @@ impl StudioApp {
             let result = self.open_label_manager();
             self.record_error(result);
         }
+        self.quick_undo_control(ui, t);
         if self.notes.decoration_cache.has_overlaps() {
             ui.label(
                 RichText::new(
@@ -1325,6 +1388,7 @@ impl StudioApp {
         }
         ui.add_space(12.0);
         let mut activate = None;
+        let mut remove_row = None;
         let list_height = (ui.available_height() - 260.0).clamp(72.0, 216.0);
         let mut list = egui::ScrollArea::vertical()
             .id_salt("document-notes-list")
@@ -1364,13 +1428,25 @@ impl StudioApp {
                     self.rich.as_ref().map(|rich| rich.session.document())
                 };
                 let quote = displayed_quote(&note.anchor, tree, l);
-                if ui
+                let response = ui
                     .push_id(&note.id, |ui| {
-                        note_row(ui, note, &quote, selected, catalog.as_ref(), l, t)
+                        note_row(
+                            ui,
+                            note,
+                            &quote,
+                            NoteRowState {
+                                selected,
+                                removable: writable && !self.notes.invalid,
+                            },
+                            catalog.as_ref(),
+                            l,
+                            t,
+                        )
                     })
-                    .inner
-                    .clicked()
-                {
+                    .inner;
+                if response.remove.clicked() {
+                    remove_row = Some((**note).clone());
+                } else if response.row.clicked() {
                     activate = Some(note.id.clone());
                 }
             }
@@ -1379,7 +1455,11 @@ impl StudioApp {
             ui.label(RichText::new(l.text("No notes in this document.")).color(t.muted));
         }
         drop(rows);
-        if let Some(id) = activate {
+        if let Some(note) = remove_row {
+            let result = self.quick_remove_note(&note);
+            self.record_error(result);
+            return;
+        } else if let Some(id) = activate {
             let result = self.activate_note(&id);
             self.record_error(result);
         }
@@ -1409,8 +1489,10 @@ impl StudioApp {
         let mut reattach = false;
         let mut remove = false;
         let mut reveal = false;
+        let mut edit_passage = false;
         let mut reload_draft = false;
         let mut create_label = false;
+        let mut remove_label = None;
         let quote = displayed_quote(
             &note.anchor,
             self.rich.as_ref().map(|rich| rich.session.document()),
@@ -1421,6 +1503,11 @@ impl StudioApp {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.add(egui::Label::new(RichText::new(excerpt(&quote, 180)).size(12.0).color(t.muted)).wrap()).on_hover_text(&quote);
+                ui.horizontal(|ui| {
+                    let attached = note.anchor_status == AnchorStatus::Attached && !self.notes.invalid;
+                    edit_passage = ui.add_enabled_ui(attached && writable, |ui| icons::labeled_button(ui, Icon::TextCursor, l.text("Edit passage"), false)).inner.clicked();
+                    remove = ui.add_enabled_ui(!self.notes.invalid && writable, |ui| icons::icon_button(ui, Icon::Trash, l.text("Delete markup"))).inner.clicked();
+                });
                 ui.add_space(8.0);
                 if note.anchor_status == AnchorStatus::Detached || note.status == AnnotationStatus::NeedsAttention {
                     ui.colored_label(t.warning, l.text("The passage changed. The note is preserved; select text to attach it again."));
@@ -1448,7 +1535,9 @@ impl StudioApp {
                     ui.colored_label(t.warning, l.text("Project labels changed. Your draft is preserved."));
                     if ui.button(l.text("Review label changes")).clicked() { draft.catalog = catalog.clone(); }
                 }
-                create_label = labels::assignment_picker(ui, &mut draft.tags, catalog.as_ref(), l, t, !writable);
+                let assignment = labels::assignment_picker(ui, &mut draft.tags, catalog.as_ref(), l, t, !writable, true);
+                create_label = assignment.create;
+                remove_label = assignment.remove;
                 let labels_available = !assignments_changed || labels::assignments_available(&draft.tags, catalog.as_ref());
                 if !labels_available { ui.colored_label(t.warning, l.text("Remove or replace labels that are no longer available.")); }
                 ui.add_space(8.0);
@@ -1463,8 +1552,7 @@ impl StudioApp {
                     let more = icons::icon_button(ui, Icon::More, l.text("Markup actions"));
                     egui::Popup::menu(&more).show(|ui| {
                         toggle = ui.add_enabled(!self.notes.invalid && writable, egui::Button::new(l.text(if note.status == AnnotationStatus::Resolved {"Reopen note"} else {"Resolve note"}))).clicked();
-                        remove = ui.add_enabled(!self.notes.invalid && writable, egui::Button::new(l.text("Delete markup"))).clicked();
-                        if toggle || remove { ui.close(); }
+                        if toggle { ui.close(); }
                     });
                 });
             });
@@ -1472,6 +1560,11 @@ impl StudioApp {
             let result =
                 self.begin_label_creation(Some(labels::LabelTarget::Note(note.id.clone())));
             self.record_error(result);
+        }
+        if let Some(label) = remove_label {
+            let result = self.quick_remove_label(&note, &label);
+            self.record_error(result);
+            return;
         }
         if reload_draft {
             let id = egui::Id::new(("author-note-body", &note.id));
@@ -1512,7 +1605,23 @@ impl StudioApp {
             self.record_error(result);
         }
         if remove {
-            self.notes.delete_confirmation = Some(note);
+            let result = self.quick_remove_note(&note);
+            self.record_error(result);
+        } else if edit_passage {
+            let ids = self
+                .notes
+                .preview
+                .iter()
+                .filter(|candidate| {
+                    !candidate.deleted
+                        && candidate.anchor_status == AnchorStatus::Attached
+                        && (candidate.status != AnnotationStatus::Resolved
+                            || candidate.id == note.id)
+                })
+                .map(|note| note.id.clone())
+                .collect();
+            let result = self.begin_markup_review(ids, &note.id);
+            self.record_error(result);
         }
     }
 
@@ -1581,7 +1690,9 @@ impl StudioApp {
                                 l,
                                 t,
                                 !writable,
-                            );
+                                false,
+                            )
+                            .create;
                             if !labels::assignments_available(&composer.tags, catalog.as_ref()) {
                                 ui.colored_label(
                                     t.warning,
@@ -2169,6 +2280,7 @@ impl StudioApp {
         let mut tag_action = None;
         let mut close = false;
         let mut manage_labels = false;
+        let mut review_passages = false;
         let response = components::modal(
             ctx,
             l,
@@ -2248,6 +2360,16 @@ impl StudioApp {
                     ui.label(l.text("No matching markup in this project."));
                 }
                 components::footer(ui, |ui| {
+                    let available = rows.iter().any(|index| {
+                        let note = &browser.records[*index].annotation;
+                        !note.deleted
+                            && note.status != AnnotationStatus::Resolved
+                            && note.anchor_status == AnchorStatus::Attached
+                            && !browser.trashed.contains(&note.document_id)
+                    });
+                    review_passages =
+                        components::action(ui, l.text("Review marked passages"), available, None)
+                            .clicked();
                     close = components::action(ui, l.text("Done"), true, Some(t)).clicked();
                 });
             },
@@ -2265,6 +2387,27 @@ impl StudioApp {
         if manage_labels {
             let result = self.open_label_manager();
             self.record_error(result);
+        }
+        if review_passages {
+            let ids: Vec<_> = browser
+                .visible
+                .iter()
+                .filter_map(|index| {
+                    let note = &browser.records[*index].annotation;
+                    (!note.deleted
+                        && note.status != AnnotationStatus::Resolved
+                        && note.anchor_status == AnchorStatus::Attached
+                        && !browser.trashed.contains(&note.document_id))
+                    .then(|| note.id.clone())
+                })
+                .collect();
+            if let Some(first) = ids.first().cloned() {
+                let result = self.begin_markup_review(ids, &first);
+                if result.is_ok() {
+                    browser.open = false;
+                }
+                self.record_error(result);
+            }
         }
         if let Some(remove) = tag_action
             && let Some(tag) = &browser.tag
@@ -3192,8 +3335,10 @@ mod tests {
             note: &PassageAnnotation,
             events: Vec<egui::Event>,
             time: f64,
-        ) -> AppResult<egui::FullOutput> {
+        ) -> AppResult<(egui::FullOutput, egui::Rect)> {
             let mut clicked = false;
+            let mut removed = false;
+            let mut remove_rect = egui::Rect::NOTHING;
             let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
@@ -3218,27 +3363,35 @@ mod tests {
                                     ui,
                                     note,
                                     "echo",
-                                    app.notes.selected.as_deref() == Some(note.id.as_str()),
+                                    NoteRowState {
+                                        selected: app.notes.selected.as_deref()
+                                            == Some(note.id.as_str()),
+                                        removable: true,
+                                    },
                                     app.notes.labels.catalog.as_ref(),
                                     Language::English,
                                     theme::tokens(ctx),
                                 );
                                 assert!(
-                                    (row.rect.width() - 340.0).abs() < 0.1,
+                                    (row.row.rect.width() - 340.0).abs() < 0.1,
                                     "The row must use the inspector width, got {:?}",
-                                    row.rect
+                                    row.row.rect
                                 );
-                                clicked |= row.clicked();
+                                remove_rect = row.remove.rect;
+                                removed |= row.remove.clicked();
+                                clicked |= row.row.clicked() && !row.remove.clicked();
                             },
                         );
                     });
                 },
             );
             output.textures_delta.clear();
-            if clicked {
+            if removed {
+                app.quick_remove_note(note)?;
+            } else if clicked {
                 app.activate_note(&note.id)?;
             }
-            Ok(output)
+            Ok((output, remove_rect))
         }
         let mut fixture = backup_notes_fixture()?;
         let note = fixture.app.workspace.update_annotation_markup(
@@ -3258,9 +3411,21 @@ mod tests {
             ("source quote", "echo"),
             ("label chip", "Motivation"),
             ("label overflow", "+2"),
+            ("delete control", "Delete markup"),
         ] {
             let ctx = egui::Context::default();
             fixture.app.notes.selected = None;
+            if name == "delete control" {
+                fixture.app.notes.drafts.insert(
+                    note.id.clone(),
+                    NoteDraft {
+                        original: note.clone(),
+                        body: "Retained unfinished note 😀".into(),
+                        tags: note.tags.join("\n"),
+                        catalog: fixture.app.notes.labels.catalog.clone(),
+                    },
+                );
+            }
             let rich = fixture.app.rich.as_mut().ok_or("missing rich session")?;
             let caret = Selection {
                 anchor: DocPoint {
@@ -3274,19 +3439,27 @@ mod tests {
             };
             rich.session.set_selection(caret.clone())?;
             frame(&ctx, &mut fixture.app, &note, vec![], 0.0)?;
-            let output = frame(&ctx, &mut fixture.app, &note, vec![], 0.05)?;
+            let (output, remove_rect) = frame(&ctx, &mut fixture.app, &note, vec![], 0.05)?;
             let mut painted = Vec::new();
             for shape in &output.shapes {
                 collect_painted_text(&shape.shape, &mut painted);
             }
-            let point = painted
+            let point = if name == "delete control" {
+                assert!(
+                    remove_rect.is_positive(),
+                    "Delete must expose a real hit target"
+                );
+                remove_rect.center()
+            } else {
+                painted
                 .iter()
                 .find_map(|(text, center)| (text == target).then_some(*center))
                 .ok_or_else(|| {
                     format!(
                         "Missing painted {name} target {target:?}; observed text/centers: {painted:?}"
                     )
-                })?;
+                })?
+            };
             frame(
                 &ctx,
                 &mut fixture.app,
@@ -3309,7 +3482,26 @@ mod tests {
                 )?;
             }
             let rich = fixture.app.rich.as_ref().ok_or("missing rich session")?;
-            if target == "+2" {
+            if name == "delete control" {
+                assert!(fixture.app.notes.selected.is_none());
+                assert_eq!(rich.session.selection(), Some(&caret));
+                assert!(fixture.app.notes.delete_confirmation.is_none());
+                assert!(fixture.app.notes.quick_undo.is_some());
+                let deleted = fixture
+                    .app
+                    .workspace
+                    .project_annotations(&fixture.first.project_id, true)?;
+                let deleted = deleted
+                    .iter()
+                    .find(|row| row.annotation.id == note.id)
+                    .ok_or("missing recoverable removed note")?;
+                assert!(deleted.annotation.deleted);
+                assert_eq!(deleted.annotation.note, "Retained unfinished note 😀");
+                assert_eq!(
+                    fixture.app.workspace.document(&fixture.first.id)?,
+                    fixture.first
+                );
+            } else if target == "+2" {
                 assert!(egui::Popup::is_any_open(&ctx));
                 assert!(fixture.app.notes.selected.is_none());
                 assert_eq!(rich.session.selection(), Some(&caret));
@@ -3321,8 +3513,10 @@ mod tests {
                 let full = selection_for(&note, rich.session.document())?;
                 assert_eq!(rich.session.selection(), Some(&full), "{target}");
             }
+            if name != "delete control" {
+                assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
+            }
         }
-        assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
         Ok(())
     }
 

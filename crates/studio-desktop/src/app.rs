@@ -840,7 +840,8 @@ impl eframe::App for StudioApp {
                 self.record_error(title_result);
             } else {
                 #[cfg(feature = "editor-preview")]
-                let note_drafts_pending = self.notes.has_unsaved_drafts();
+                let note_drafts_pending =
+                    self.notes.has_unsaved_drafts() || self.rich_review.has_unsaved_drafts();
                 #[cfg(not(feature = "editor-preview"))]
                 let note_drafts_pending = false;
                 if note_drafts_pending {
@@ -937,6 +938,18 @@ const PROJECT_LABEL_ERROR_MESSAGES: &[&str] = &[
     "Project labels contain extension data that cannot be scoped safely; use complete-project canonical export",
 ];
 const COMMITTED_LABEL_MESSAGES: &[&str] = &[
+    "This passage cannot be revealed safely. Save or restore the document, then select it again.",
+    "Write a replacement before saving this draft, or discard it.",
+    "This marked passage is unavailable. Restore or reattach it first.",
+    "This marked passage changed. Refresh the review before applying it.",
+    "The edit was saved, but the panel could not refresh. Reopen the document before continuing.",
+    "There is no recent markup removal to undo",
+    "Return to this document to undo markup removal",
+    "Save or cancel the pending note edits before Undo",
+    "The original label assignment is unavailable; use Project markup",
+    "The pending note is too long; preserve its text before removing the mark",
+    "Review the project label picker before removing changed assignments",
+    "This label is no longer assigned to the mark; refresh its note",
     "The label was created. Add it to the passage again.",
     "The label was created, but this passage already has 32 labels.",
 ];
@@ -961,6 +974,7 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             }
             StudioError::Validation(message) => PROJECT_LABEL_ERROR_MESSAGES
                 .iter()
+                .chain(COMMITTED_LABEL_MESSAGES)
                 .copied()
                 .find(|known| *known == message.as_str())
                 .unwrap_or("Check the entered values and try again."),
@@ -1789,6 +1803,8 @@ mod catalog_source_checks {
             include_str!("app/notes.rs"),
             include_str!("app/notes/labels.rs"),
             include_str!("app/notes/presentation.rs"),
+            include_str!("app/notes/quick_actions.rs"),
+            include_str!("app/rich_review.rs"),
             include_str!("app/project_navigation.rs"),
             include_str!("app/clipboard_host.rs"),
             include_str!("app/rendering.rs"),

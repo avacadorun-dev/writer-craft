@@ -221,10 +221,19 @@ impl StudioApp {
                     let unsaved_notes = self.notes.has_unsaved_drafts();
                     #[cfg(not(feature = "editor-preview"))]
                     let unsaved_notes = false;
-                    let status = l.text(self.save_status_msgid(unsaved_notes));
+                    #[cfg(feature = "editor-preview")]
+                    let unsaved_review = self.rich_review.has_unsaved_drafts();
+                    #[cfg(not(feature = "editor-preview"))]
+                    let unsaved_review = false;
+                    let status = l.text(if unsaved_review && self.error.is_none() {
+                        "Unsaved edit drafts"
+                    } else {
+                        self.save_status_msgid(unsaved_notes)
+                    });
                     ui.label(RichText::new(status).size(12.0).color(
                         if self.error.is_some()
                             || unsaved_notes
+                            || unsaved_review
                             || self.preferences_need_attention()
                         {
                             t.warning

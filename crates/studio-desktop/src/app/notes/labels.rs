@@ -202,7 +202,13 @@ pub(super) fn preview_chips(
     });
 }
 
-/// Edits only the current note draft. The catalog is an immutable cached snapshot.
+#[derive(Default)]
+pub(super) struct AssignmentAction {
+    pub create: bool,
+    pub remove: Option<String>,
+}
+
+/// Assignment edits stay in the draft; saved-note removals are returned for one guarded command.
 pub(super) fn assignment_picker(
     ui: &mut egui::Ui,
     source: &mut String,
@@ -210,7 +216,9 @@ pub(super) fn assignment_picker(
     l: Language,
     t: Tokens,
     read_only: bool,
-) -> bool {
+    immediate_removal: bool,
+) -> AssignmentAction {
+    let mut action = AssignmentAction::default();
     let mut tags = parsed_tags(source);
     let original = tags.clone();
     let mut remove = None;
@@ -270,7 +278,11 @@ pub(super) fn assignment_picker(
         }
     });
     if let Some(index) = remove {
-        tags.remove(index);
+        if immediate_removal {
+            action.remove = Some(tags[index].clone());
+        } else {
+            tags.remove(index);
+        }
     }
     if let Some(index) = primary
         && index < tags.len()
@@ -278,7 +290,6 @@ pub(super) fn assignment_picker(
         let name = tags.remove(index);
         tags.insert(0, name);
     }
-    let mut create = false;
     ui.add_enabled_ui(!read_only, |ui| {
         ui.menu_button(l.text("Add label…"), |ui| {
             egui::ScrollArea::vertical()
@@ -309,6 +320,9 @@ pub(super) fn assignment_picker(
                                 {
                                     if assigned {
                                         tags.push(label.name.clone());
+                                    } else if immediate_removal {
+                                        action.remove = Some(label.name.clone());
+                                        ui.close();
                                     } else {
                                         tags.retain(|name| name != &label.name);
                                     }
@@ -319,7 +333,7 @@ pub(super) fn assignment_picker(
                 });
             ui.separator();
             if ui.button(l.text("Create label…")).clicked() {
-                create = true;
+                action.create = true;
                 ui.close();
             }
         });
@@ -336,7 +350,7 @@ pub(super) fn assignment_picker(
     if tags != original {
         *source = tags.join("\n");
     }
-    create
+    action
 }
 
 impl StudioApp {
