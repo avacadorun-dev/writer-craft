@@ -148,7 +148,11 @@ pub(super) fn chip(
         .corner_radius(5)
         .inner_margin(egui::Margin::symmetric(6, 3))
         .show(ui, |ui| {
-            ui.add(egui::Label::new(RichText::new(name).size(12.0).color(t.text)).truncate())
+            ui.add(
+                egui::Label::new(RichText::new(name).size(12.0).color(t.text))
+                    .selectable(false)
+                    .truncate(),
+            )
         })
         .inner
         .on_hover_text(name)

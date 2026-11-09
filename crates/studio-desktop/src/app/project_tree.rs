@@ -1,5 +1,8 @@
 //! Schema-aware native tree actions. All mutations are shared guarded core commands.
 use super::*;
+
+#[cfg(all(test, feature = "editor-preview"))]
+mod input_tests;
 use studio_core::{ImportedProjectStructure, ProjectTreeNode};
 
 #[derive(Debug)]
@@ -14,6 +17,7 @@ impl std::error::Error for TrashedDocument {}
 
 #[derive(Clone)]
 pub(super) enum TreeAction {
+    Browse { id: String, mapped: bool },
     Open(String),
     OpenDocument(String, bool),
     Reference(String),
@@ -386,6 +390,17 @@ impl StudioApp {
         if let TreeAction::Drop(request) = action {
             return self.apply_tree_drop(&request);
         }
+        let (action, browsing) = match action {
+            TreeAction::Browse { id, mapped } => (
+                if mapped {
+                    TreeAction::Open(id)
+                } else {
+                    TreeAction::OpenDocument(id, false)
+                },
+                true,
+            ),
+            action => (action, false),
+        };
         self.save_explicit()?;
         self.refresh_project_tree()?;
         let project = self
@@ -407,8 +422,7 @@ impl StudioApp {
             if *reference {
                 self.begin_reference_excursion(document)?;
             } else {
-                self.open_document(document)?;
-                self.focus_manuscript = true;
+                self.open_tree_document(document, browsing)?;
             }
             return Ok(());
         }
@@ -441,6 +455,7 @@ impl StudioApp {
             | TreeAction::Restore(id) => id,
             TreeAction::Create(_)
             | TreeAction::OpenDocument(_, _)
+            | TreeAction::Browse { .. }
             | TreeAction::Drop(_)
             | TreeAction::BeginDrag(_, _) => {
                 return Ok(());
@@ -479,8 +494,7 @@ impl StudioApp {
             if matches!(action, TreeAction::Reference(_)) {
                 self.begin_reference_excursion(document)?;
             } else {
-                self.open_document(document)?;
-                self.focus_manuscript = true;
+                self.open_tree_document(document, browsing)?;
             }
             return Ok(());
         }
@@ -504,6 +518,28 @@ impl StudioApp {
             original: Some(node),
             focus: true,
         });
+        Ok(())
+    }
+
+    fn open_tree_document(&mut self, document: Document, browsing: bool) -> AppResult<()> {
+        if !document_is_active(
+            &self.workspace.project_tree(&document.project_id)?,
+            &document.id,
+        ) {
+            return Err(TrashedDocument.into());
+        }
+        let reuse = browsing
+            && self.document.as_ref().is_some_and(|current| {
+                current.id == document.id && current.revision == document.revision
+            });
+        #[cfg(feature = "editor-preview")]
+        let reuse = reuse && self.canvas.is_none() && !self.is_recovery_read_only();
+        // Selecting the current tree row must not replace its live editor, undo history or
+        // measured scroll merely to give the navigator keyboard focus.
+        if !reuse {
+            self.open_document(document)?;
+        }
+        self.focus_manuscript = !browsing;
         Ok(())
     }
 

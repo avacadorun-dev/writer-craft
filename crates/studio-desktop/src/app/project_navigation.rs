@@ -706,10 +706,9 @@ impl ProjectOutline {
                                         toggle = Some(index);
                                     }
                                     if response.clicked() {
-                                        chosen = Some(if node.mapped {
-                                            TreeAction::Open(node.logical_id.clone())
-                                        } else {
-                                            TreeAction::OpenDocument(node.logical_id.clone(), false)
+                                        chosen = Some(TreeAction::Browse {
+                                            id: node.logical_id.clone(),
+                                            mapped: node.mapped,
                                         });
                                     }
                                     if node.mapped
@@ -903,7 +902,12 @@ fn tree_row(ui: &mut egui::Ui, icon: Icon, title: &str, active: bool, t: Tokens)
         17.0,
         if active { t.accent } else { t.muted },
     );
-    child.add(egui::Label::new(RichText::new(title).size(13.5).color(t.text)).truncate());
+    // The row owns pointer selection, dragging and context actions, including over its title.
+    child.add(
+        egui::Label::new(RichText::new(title).size(13.5).color(t.text))
+            .selectable(false)
+            .truncate(),
+    );
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,

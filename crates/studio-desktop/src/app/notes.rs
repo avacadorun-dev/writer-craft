@@ -481,12 +481,14 @@ fn note_row(
                             .strong()
                             .color(t.text),
                     )
+                    .selectable(false)
                     .truncate(),
                 );
             });
             if !note.note.is_empty() {
                 ui.add(
                     egui::Label::new(RichText::new(excerpt(quote, 100)).size(12.0).color(t.muted))
+                        .selectable(false)
                         .truncate(),
                 );
             }
@@ -3160,6 +3162,134 @@ mod tests {
             Some(&caret)
         );
         assert_eq!(fixture.app.workspace.annotation(&broad.id)?, broad);
+        Ok(())
+    }
+
+    #[test]
+    fn pointer_on_note_text_quote_or_preview_chip_activates_the_exact_note() -> TestResult {
+        fn painted_text_center(shape: &egui::epaint::Shape, text: &str) -> Option<egui::Pos2> {
+            match shape {
+                egui::epaint::Shape::Text(shape) if shape.galley.job.text == text => {
+                    Some(shape.visual_bounding_rect().center())
+                }
+                egui::epaint::Shape::Vec(shapes) => shapes
+                    .iter()
+                    .find_map(|shape| painted_text_center(shape, text)),
+                _ => None,
+            }
+        }
+        fn frame(
+            ctx: &egui::Context,
+            app: &mut StudioApp,
+            note: &PassageAnnotation,
+            events: Vec<egui::Event>,
+            time: f64,
+        ) -> AppResult<egui::FullOutput> {
+            let mut clicked = false;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(640.0, 480.0),
+                    )),
+                    focused: true,
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |root| {
+                    egui::CentralPanel::default().show(root, |ui| {
+                        ui.set_max_width(340.0);
+                        ui.style_mut().interaction.selectable_labels = true;
+                        clicked |= note_row(
+                            ui,
+                            note,
+                            "echo",
+                            app.notes.selected.as_deref() == Some(note.id.as_str()),
+                            app.notes.labels.catalog.as_ref(),
+                            Language::English,
+                            theme::tokens(ctx),
+                        )
+                        .clicked();
+                    });
+                },
+            );
+            output.textures_delta.clear();
+            if clicked {
+                app.activate_note(&note.id)?;
+            }
+            Ok(output)
+        }
+        let mut fixture = backup_notes_fixture()?;
+        let note = fixture.app.workspace.update_annotation_markup(
+            &fixture.first_note.id,
+            fixture.first.revision,
+            fixture.first_note.revision,
+            AnnotationPatch::default(),
+            Some(vec![
+                "Motivation".into(),
+                "This second label intentionally exceeds the remaining row width".into(),
+                "Other".into(),
+            ]),
+        )?;
+        fixture.app.refresh_notes()?;
+        for target in [note.note.as_str(), "echo", "Motivation", "+2"] {
+            let ctx = egui::Context::default();
+            fixture.app.notes.selected = None;
+            let rich = fixture.app.rich.as_mut().ok_or("missing rich session")?;
+            let caret = Selection {
+                anchor: DocPoint {
+                    block_id: "first".into(),
+                    offset: ScalarOffset(0),
+                },
+                head: DocPoint {
+                    block_id: "first".into(),
+                    offset: ScalarOffset(0),
+                },
+            };
+            rich.session.set_selection(caret.clone())?;
+            let output = frame(&ctx, &mut fixture.app, &note, vec![], 0.0)?;
+            let point = output
+                .shapes
+                .iter()
+                .find_map(|shape| painted_text_center(&shape.shape, target))
+                .ok_or("missing painted click target")?;
+            frame(
+                &ctx,
+                &mut fixture.app,
+                &note,
+                vec![egui::Event::PointerMoved(point)],
+                0.1,
+            )?;
+            for (pressed, time) in [(true, 0.2), (false, 0.3)] {
+                frame(
+                    &ctx,
+                    &mut fixture.app,
+                    &note,
+                    vec![egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                    time,
+                )?;
+            }
+            let rich = fixture.app.rich.as_ref().ok_or("missing rich session")?;
+            if target == "+2" {
+                assert!(egui::Popup::is_any_open(&ctx));
+                assert!(fixture.app.notes.selected.is_none());
+                assert_eq!(rich.session.selection(), Some(&caret));
+            } else {
+                assert_eq!(
+                    fixture.app.notes.selected.as_deref(),
+                    Some(note.id.as_str())
+                );
+                let full = selection_for(&note, rich.session.document())?;
+                assert_eq!(rich.session.selection(), Some(&full), "{target}");
+            }
+        }
+        assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
         Ok(())
     }
 
