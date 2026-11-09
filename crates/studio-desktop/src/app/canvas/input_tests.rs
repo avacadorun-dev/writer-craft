@@ -35,7 +35,7 @@ fn frame(
     state.prepare_input(ctx, &mut input, false);
     let tokens = theme::resolve(&ThemeSettings::default(), false);
     let mut outside = Rect::NOTHING;
-    let _ = ctx.run_ui(input, |root| {
+    let mut output = ctx.run_ui(input, |root| {
         egui::Panel::left("test-navigation")
             .exact_size(140.0)
             .show(root, |ui| {
@@ -45,6 +45,8 @@ fn frame(
             state.show(ui, database, Language::English, tokens, false);
         });
     });
+    output.textures_delta.clear();
+    output.platform_output.commands.clear();
     outside
 }
 
