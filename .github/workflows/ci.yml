@@ -75,6 +75,66 @@ jobs:
           python3 scripts/generate-notices.py --self-test
       - name: Validate source metadata and honest UX disposition
         run: python3 scripts/release-check.py --mode source --json
+      - name: Package the checked alpha3 pull-request candidate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/alpha3-parity'
+        env:
+          WRITERCRAFT_EDITOR_PREVIEW: '1'
+          RUST_TARGET: aarch64-apple-darwin
+        run: |
+          test "$(uname -m)" = arm64
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          rustup target add "$RUST_TARGET"
+          cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/alpha3-native-metadata.json"
+          git diff --exit-code -- Cargo.lock
+          python3 scripts/native-startup-smoke.py --self-test
+          ./scripts/package-macos.sh --release --target "$RUST_TARGET" --output 'artifacts/WriterCraft Editor Preview.app'
+          codesign --verify --deep --strict 'artifacts/WriterCraft Editor Preview.app'
+          python3 scripts/release-check.py --mode source --json > artifacts/source-evidence.json
+          cp Cargo.lock artifacts/Cargo.lock
+          python3 - <<'PYTHON'
+          import hashlib, json, os, plistlib, subprocess
+          from pathlib import Path
+          with Path('artifacts/WriterCraft Editor Preview.app/Contents/Info.plist').open('rb') as stream:
+              info = plistlib.load(stream)
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert info['CFBundleIdentifier'] == 'app.writercraft.editor-preview'
+          assert info['WriterCraftBuildCommit'] == source == os.environ['GITHUB_SHA']
+          assert info['LSEnvironment'] == {'WRITERCRAFT_EDITOR_PREVIEW': '1'}
+          evidence = {
+              'source_commit': source,
+              'version': info['WriterCraftVersion'],
+              'dependency_lock_sha256': hashlib.sha256(Path('Cargo.lock').read_bytes()).hexdigest(),
+              'resolved_lock_committed': subprocess.run(['git', 'diff', '--quiet', '--', 'Cargo.lock']).returncode == 0,
+              'source_fingerprint': json.loads(Path('artifacts/source-evidence.json').read_text())['source_fingerprint'],
+              'channel': info['WriterCraftChannel'],
+              'target': os.environ['RUST_TARGET'],
+              'bundle_identifier': info['CFBundleIdentifier'],
+              'signing': 'ad-hoc',
+              'editor_acceptance': False,
+              'native_interaction_acceptance': False,
+              'release': False,
+          }
+          Path('artifacts/build-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          PYTHON
+          ditto -c -k --sequesterRsrc --keepParent 'artifacts/WriterCraft Editor Preview.app' artifacts/WriterCraft-Editor-Preview-macos-arm64.zip
+          cd artifacts
+          shasum -a 256 WriterCraft-Editor-Preview-macos-arm64.zip > SHA256SUMS
+          echo 'Exact checked PR merge source. Engineering preview only; native acceptance and release remain pending.' > PREVIEW.txt
+      - name: Retain the checked alpha3 native candidate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/alpha3-parity'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WriterCraft-Editor-Preview-macos-arm64-${{ github.sha }}
+          path: |
+            artifacts/WriterCraft-Editor-Preview-macos-arm64.zip
+            artifacts/SHA256SUMS
+            artifacts/build-evidence.json
+            artifacts/source-evidence.json
+            artifacts/Cargo.lock
+            artifacts/PREVIEW.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   portable-core:
     name: Shared core (${{ matrix.os }})
