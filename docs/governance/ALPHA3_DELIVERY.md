@@ -52,3 +52,7 @@ Before the branding work, no open product issue had complete closure evidence at
 - Existing application source before branding: `a7deffdc319ae426d31d633390049490e41114e0`; its prior preview is not a lion-brand build.
 
 Historical release evidence stays unchanged. Fresh alpha.3 evidence must name its actual source and scope; the full release gate stays pending until all required journeys pass.
+
+## Coverage audit correction — 2026-11-09
+
+The complete original Canvas obligation now has dedicated issue #17 and stable B01–B26 inventory. #15 remains active; #17 stays queued and cannot close from direct-text or import completion. The current inventory/capability/task ledger remains pending until exact native evidence and independent omission review exist. The pending-input engine candidate is now `73e4f9b7e3c3005d01db28fdac3fbf8d64162082` atop `df6405f`; it is not yet hosted-qualified or adopted. No application input behavior changed in this gate work.

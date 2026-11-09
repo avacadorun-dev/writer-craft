@@ -1,0 +1,11 @@
+# Design
+
+`PARITY_SCOPE.json` is the authored required-ID inventory, referencing pinned legacy file bytes and human-readable contracts. It is an initial scaffold, not an omission audit. All inventory sign-offs remain pending. Editor N/M/E/C IDs are reused; B IDs describe the source Canvas; larger project/domain groups must be refined during audit.
+
+`UX_GATE.json.coverage` is the observation ledger owned by the existing independent review, not a competing approval file. Inventory rows require complete independent omission review; capability rows require native entry, semantic and native evidence; role journeys require every authored path. Each accepted row carries the current fingerprint, independent reviewer and hashed narrative evidence. The release checker still validates overall version, scope, source and actual visual evidence.
+
+`parity_gate.py` validates references/IDs/evidence, while `release-check.py` binds scope documents and validator bytes to source identity and enforces both axes for full-editor-parity/full-parity. A changed requirement or report invalidates acceptance. Source mode validates schema with pending coverage allowed; release mode rejects it. Current whole-product boundaries remain explicit: selected alpha.3 coverage is not recording/provider-transport/publication parity.
+
+Automation cannot decide whether a report is truthful or an inventory exhaustive. Independent source/native review remains necessary; copied screenshots, engineer-designed personas and vendor descriptions do not establish functional completion or validated human demand. Only the existing explicitly approved63-column table exception applies.
+
+Review hardening: reports contain a hash-bound structured receipt identifying candidate, hosted build/platform and exact observed IDs/kinds/journey paths. Rehashing an unrelated report cannot satisfy the claimed joins. The catalog declares `review_scopes: [full-editor-parity]`; full-product acceptance is refused until an expanded catalog exists. `contract_inputs` binds authoritative PRD/research decisions and active OpenSpec requirements, excluding mutable review/task outputs. Reviewer and native-entry fields require real nonempty strings.

@@ -203,3 +203,9 @@ Compare canonical multi-view records, stable live references, revision-pinned ex
 On2026-11-09 the user supplied the lion-writer handoff and requested replacement of the old logo throughout current branding, native application and platform icons, with deliberate size/background treatment. Preserve the supplied character; maintain Light/Dark coherence and exact source provenance. Independent review must inspect actual compiled header and packaged icon, not only an asset board. Historical released screenshots remain historical evidence. Tracked in #16.
 
 The same instruction corrects fragmented delivery: limit implementation to one product issue at a time, assign bounded file ownership and observable acceptance, and integrate/review/verify before starting another feature. Root owns the queue, CI and closure evidence. Research or a green library alone is not issue completion.
+
+## F-45 — full Canvas and coherent task acceptance
+
+2026-11-09: the latest preview exposed a reduced board, prompting a request for complete original Canvas coverage and an operational gate proving that migrated functionality is actually usable. Track the explicit original board inventory in #17, separately from direct card input #15 and migration #10. Balance exhaustive capability checks with complete writer/screenwriter/editor journeys and researched human needs in #14. Do not substitute a feature gallery for real work, or a polished journey for omitted baseline functions. No new reduction of the source contract was authorized.
+
+Require both axes in the existing release/UX gate, including alpha.3. Missing source coverage, unreviewed inventory completeness, stale evidence or an unfinished role journey blocks parity acceptance. Existing product-scope boundaries remain explicit; role hypotheses and competitor references are not claims of user validation.

@@ -9,6 +9,7 @@
   "source_fingerprint": null,
   "source_fingerprint_status": "Pending immutable candidate. Active implementation changes have not received exact-source independent native acceptance.",
   "blockers": [
+    "Both source-completeness and complete role-journey evidence are pending. Initial inventory groups require independent omission review; Canvas authoring is explicitly tracked in #17.",
     "Remaining source-backed issues need complete implementation and evidence; closing the verified alpha.2 installer issue does not complete editor or project migration parity.",
     "Complete table/cell/structural authoring, rich clipboard/input and the exact consumer mounting require native success, cancellation, failure, history and preservation acceptance.",
     "Persistent notes/dictionary/source links, exact rich assistant attachments and preview/Apply/Reject/guarded Undo require actual native integration journeys.",
@@ -21,7 +22,10 @@
     "docs/design/EDITOR_UX_PARITY.md",
     "docs/migration/EDITOR_PARITY_MATRIX.md",
     "docs/governance/NEXT_RELEASE.md",
-    "openspec/changes/full-editor-parity/"
+    "openspec/changes/full-editor-parity/",
+    "docs/migration/PARITY_SCOPE.json",
+    "docs/migration/CANVAS_PARITY_MATRIX.md",
+    "docs/design/ROLE_JOURNEYS.md"
   ],
   "evidence": [],
   "interaction_evidence": null,
@@ -31,5 +35,10 @@
     "version": "0.1.0-alpha.2",
     "scope": "native-rich-editor-alpha",
     "note": "Preserved byte-for-byte. The owner confirms the published alpha.2 works on macOS. That engineering checkpoint remains historically accepted; it cannot authorize an alpha.3 release or satisfy unfinished technical criteria."
+  },
+  "coverage": {
+    "inventories": [],
+    "capabilities": [],
+    "journeys": []
   }
 }

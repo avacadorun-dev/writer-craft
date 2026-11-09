@@ -1,0 +1,1360 @@
+{
+  "schema_version": 1,
+  "scope": "Selected alpha.3 legacy/editor/project parity; not unselected full-product recording, provider transport or publishing scope.",
+  "inventory_status": "Initial coverage scaffold; every inventory still needs independent omission review and refinement. No completeness or implementation acceptance claimed.",
+  "inventories": [
+    {
+      "id": "editor",
+      "title": "Complete original editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md",
+      "sources": [
+        {
+          "path": "internal/editor/document.go",
+          "sha256": "60b2b761cb6af26c06056b3a0494d3113d19de3a680914e56b304df14b3a83a9"
+        },
+        {
+          "path": "src/features/editor/model/extensions.ts",
+          "sha256": "cab5b92255c6e7e60a7831a9b428346f632bafbab297c515b5cef9d874eee135"
+        },
+        {
+          "path": "src/features/editor/ui/formatting-toolbar.tsx",
+          "sha256": "11732c9424293add63819da115ca49cb733e8204d2e9cb1377d94b6cbb19f181"
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "title": "Complete original Canvas",
+      "issues": [
+        17,
+        15,
+        10
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md",
+      "sources": [
+        {
+          "path": "src/widgets/canvas-board/ui/canvas-board.tsx",
+          "sha256": "be67e4c9d97a490df4053844e1cc317ce77d7098c8383299f5a3940300940d87"
+        },
+        {
+          "path": "src/pages/canvas/ui/canvas-page.tsx",
+          "sha256": "734ac61b54534be0b4e688935b4a3602e94072d96522ab7603d4a9f3bed1b978"
+        },
+        {
+          "path": "src/entities/canvas/model/templates.ts",
+          "sha256": "d6e661a887b20e7b2e1cf1640851910ce5cbff2f6a55e83f882696a9fa0a2751"
+        },
+        {
+          "path": "src/features/canvas-schema-editor/ui/canvas-schema-editor.tsx",
+          "sha256": "32db0cb547db4a98e41162b60a9b555dc96f1da9342b07b7fa3b0aaca46ad24f"
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "title": "Project structure and history",
+      "issues": [
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md",
+      "sources": [
+        {
+          "path": "internal/store/structure.go",
+          "sha256": "6a2c934f79411ab3f679f1dbe28daa2b98b15864d89b788f890ad5979de757d9"
+        },
+        {
+          "path": "internal/store/project_transfer.go",
+          "sha256": "347a00ce728481cbc0792b76e7e6c6886ae740ae6f068ee3a0b113135e217e29"
+        }
+      ]
+    },
+    {
+      "id": "knowledge",
+      "title": "Dictionary, guide and memory",
+      "issues": [
+        4,
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md",
+      "sources": [
+        {
+          "path": "internal/store/dictionary.go",
+          "sha256": "d1676948720c368fa0d8a35e6d07c93c5c09173d41dbbaf5b7420cef884caf45"
+        },
+        {
+          "path": "src/pages/assistant-context/model/memory.ts",
+          "sha256": "2368c30b6aca35ebf0f0554af83c7e7637fdc0bd0dc4f2a4861a34464ba9be28"
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "title": "Original media and source playback",
+      "issues": [
+        4,
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md",
+      "sources": [
+        {
+          "path": "internal/projectmedia/image.go",
+          "sha256": "79b76d6dea645aea81c7d3b26df946d2a2861a18fe62f87fea000f31eecce5a3"
+        },
+        {
+          "path": "internal/store/project_transfer.go",
+          "sha256": "347a00ce728481cbc0792b76e7e6c6886ae740ae6f068ee3a0b113135e217e29"
+        }
+      ]
+    },
+    {
+      "id": "transfer",
+      "title": "Import, portable export and restore",
+      "issues": [
+        10,
+        11
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md",
+      "sources": [
+        {
+          "path": "internal/httpapi/project_transfer.go",
+          "sha256": "d473df2df915de4473780c1591fa24f7d03fe6896f3a144b57579c3451a94934"
+        },
+        {
+          "path": "internal/store/project_transfer.go",
+          "sha256": "347a00ce728481cbc0792b76e7e6c6886ae740ae6f068ee3a0b113135e217e29"
+        }
+      ]
+    },
+    {
+      "id": "workspace",
+      "title": "Coherent desktop workspace and controls",
+      "issues": [
+        6,
+        9,
+        12
+      ],
+      "contract": "docs/design/WORKFLOW_MAP.md",
+      "sources": [
+        {
+          "path": "src/shared/lib/preferences.ts",
+          "sha256": "31ff8ba5364c2a4e757150db79b8fae97b116ccd34d60cb5b2cbe9546bed379d"
+        },
+        {
+          "path": "src/widgets/manuscript-editor/ui/manuscript-editor.tsx",
+          "sha256": "a6fdda486c7d9e283c635b38e43d033d6d3d875c45464296d705527c370369d9"
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "title": "Exact proposals and review authority",
+      "issues": [
+        2,
+        4
+      ],
+      "contract": "docs/design/WORKFLOW_MAP.md",
+      "sources": [
+        {
+          "path": "internal/assistantapp/backend.go",
+          "sha256": "6e08a850a3ec9a79d7876a77afe2845d581a159135832764682e0e634de8aa1d"
+        },
+        {
+          "path": "internal/store/annotations.go",
+          "sha256": "89a2fc104380e9abdbcc6e43842ebe0f47b311eebf66becee44e1188cede52ba"
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "N01",
+      "title": "`doc`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N02",
+      "title": "`paragraph`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N03",
+      "title": "`heading`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N04",
+      "title": "`blockquote`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N05",
+      "title": "`bulletList`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N06",
+      "title": "`orderedList`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N07",
+      "title": "`listItem`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N08",
+      "title": "`hardBreak`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N09",
+      "title": "`horizontalRule`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N10",
+      "title": "`sceneBreak`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N11",
+      "title": "`text`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N12",
+      "title": "`codeBlock`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N13",
+      "title": "`table`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N14",
+      "title": "`tableRow`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N15",
+      "title": "`tableHeader`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N16",
+      "title": "`tableCell`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N17",
+      "title": "`imageBlock`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N18",
+      "title": "`mermaidBlock`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N19",
+      "title": "`callout`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N20",
+      "title": "`inlineMath`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "N21",
+      "title": "`mathBlock`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M01",
+      "title": "`bold`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M02",
+      "title": "`italic`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M03",
+      "title": "`underline`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M04",
+      "title": "`strike`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M05",
+      "title": "`link`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "M06",
+      "title": "`code`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E01",
+      "title": "Continuous manuscript input and selection",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E02",
+      "title": "Paragraphs/headings/quotes",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E03",
+      "title": "All six marks/links",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E04",
+      "title": "Nested ordered/unordered lists",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E05",
+      "title": "Both separators",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E06",
+      "title": "Tables",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E07",
+      "title": "Code blocks",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E08",
+      "title": "Images",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E09",
+      "title": "Mermaid",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E10",
+      "title": "Four callouts",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E11",
+      "title": "Both formula forms",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E12",
+      "title": "Clipboard interoperability",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E13",
+      "title": "Identity/provenance",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E14",
+      "title": "Toolbar modes",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E15",
+      "title": "Typography/preferences",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E16",
+      "title": "Local history",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E17",
+      "title": "Durable edits/recovery",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E18",
+      "title": "Document title and context",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E19",
+      "title": "Focus/find/statistics",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E20",
+      "title": "Source playback",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E21",
+      "title": "Selection context menu",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E22",
+      "title": "Persistent notes",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E23",
+      "title": "Dictionary links",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E24",
+      "title": "Assistant selection attachment",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E25",
+      "title": "Assistant proposal integration",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E26",
+      "title": "Annotation/proposal atomicity",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "E27",
+      "title": "Accessibility/localization",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C01",
+      "title": "`tree.create_nodes_batch`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C02",
+      "title": "`document.create_draft`, `note.create`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C03",
+      "title": "`document.insert`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C04",
+      "title": "`document.append`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C05",
+      "title": "`document.append_chunk`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C06",
+      "title": "`document.get`, `document.list_references`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C07",
+      "title": "`document.find_exact` / `_batch`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C08",
+      "title": "`document.replace_range`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C09",
+      "title": "`document.apply_marks`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C10",
+      "title": "`document.set_title` / `note.update`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C11",
+      "title": "`project.upload_image`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "C12",
+      "title": "`annotation.propose_fixes`",
+      "inventory": "editor",
+      "issues": [
+        4,
+        7
+      ],
+      "contract": "docs/migration/EDITOR_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B01",
+      "title": "Direct card text creation, input and rendered GFM",
+      "inventory": "canvas",
+      "issues": [
+        17,
+        15
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B02",
+      "title": "Document cards, exact target opening and promotion to document",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B03",
+      "title": "URL cards and preview/navigation",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B04",
+      "title": "Image creation, display and original assets",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B05",
+      "title": "PDF creation, page navigation and display",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B06",
+      "title": "Audio/video creation and playback",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B07",
+      "title": "Document, URL and file drag-and-drop",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B08",
+      "title": "Pen, highlighter and eraser",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B09",
+      "title": "Rectangle, ellipse, diamond, line and arrow",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B10",
+      "title": "Groups and presentation frames",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B11",
+      "title": "Selection, movement, sizing and rotation",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B12",
+      "title": "Structured Copy/Cut/Paste and duplicate",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B13",
+      "title": "Colors, locking and layering",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B14",
+      "title": "Alignment, distribution and tidy",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B15",
+      "title": "Connections and labels",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B16",
+      "title": "Card/relation types and project-wide schema editing",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B17",
+      "title": "All fifteen existing starting templates",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B18",
+      "title": "Free, mind-map, timeline, swimlane, dependency and filtered views",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B19",
+      "title": "Automatic-layout preview and Apply",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B20",
+      "title": "Object navigator, search and diagnostics",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B21",
+      "title": "Dialogue, quest and state playthrough",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B22",
+      "title": "Frame presentation and focus timer",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B23",
+      "title": "Board rename, duplicate, trash and restore",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B24",
+      "title": ".canvas import and editable JSON Canvas export",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B25",
+      "title": "PNG, SVG and PDF output",
+      "inventory": "canvas",
+      "issues": [
+        17
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "B26",
+      "title": "Undo/Redo, save/reopen, pending/failure/cancel and recovery",
+      "inventory": "canvas",
+      "issues": [
+        17,
+        15
+      ],
+      "contract": "docs/migration/CANVAS_PARITY_MATRIX.md"
+    },
+    {
+      "id": "P01",
+      "title": "Hierarchy authoring, legacy kinds and custom schemas",
+      "inventory": "project",
+      "issues": [
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "P02",
+      "title": "Named history, trash, restore and recovery",
+      "inventory": "project",
+      "issues": [
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "K01",
+      "title": "Dictionary, guide and memory lifecycle and references",
+      "inventory": "knowledge",
+      "issues": [
+        4,
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "A01",
+      "title": "Original image/PDF/audio/video and bounded source playback",
+      "inventory": "media",
+      "issues": [
+        4,
+        10
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "T01",
+      "title": "Supported Studio import and whole-project compatibility",
+      "inventory": "transfer",
+      "issues": [
+        10,
+        11
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "T02",
+      "title": "Transparent locations, Markdown/artifacts and canonical restore",
+      "inventory": "transfer",
+      "issues": [
+        10,
+        11
+      ],
+      "contract": "docs/migration/FEATURE_PARITY.md"
+    },
+    {
+      "id": "W01",
+      "title": "Adaptive bounded surface, panels, focus and context retention",
+      "inventory": "workspace",
+      "issues": [
+        6,
+        9,
+        12
+      ],
+      "contract": "docs/design/WORKFLOW_MAP.md"
+    },
+    {
+      "id": "W02",
+      "title": "Shared controls, keyboard, themes and eight locales",
+      "inventory": "workspace",
+      "issues": [
+        6,
+        9,
+        12
+      ],
+      "contract": "docs/design/WORKFLOW_MAP.md"
+    },
+    {
+      "id": "R01",
+      "title": "Passage annotation, exact proposal, Apply/Reject and guarded Undo",
+      "inventory": "review",
+      "issues": [
+        2,
+        4
+      ],
+      "contract": "docs/design/WORKFLOW_MAP.md"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "PT-MIG-01",
+      "title": "Migrate and continue an existing Studio project",
+      "issues": [
+        10,
+        11
+      ],
+      "origin": "legacy",
+      "capabilities": [
+        "T01",
+        "T02",
+        "P01",
+        "P02",
+        "K01",
+        "A01",
+        "B26"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    },
+    {
+      "id": "PT-NOV-01",
+      "title": "Restructure and resume a long manuscript",
+      "issues": [
+        10,
+        6,
+        2
+      ],
+      "origin": "legacy",
+      "capabilities": [
+        "P01",
+        "P02",
+        "E01",
+        "E17",
+        "W01",
+        "R01"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    },
+    {
+      "id": "PT-EDIT-01",
+      "title": "Review an exact passage without losing later writing",
+      "issues": [
+        2,
+        4
+      ],
+      "origin": "legacy",
+      "capabilities": [
+        "R01",
+        "E21",
+        "E22",
+        "E23"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    },
+    {
+      "id": "PT-NONF-01",
+      "title": "Compose and hand off an illustrated chapter",
+      "issues": [
+        7,
+        11,
+        12,
+        14
+      ],
+      "origin": "mixed",
+      "capabilities": [
+        "E06",
+        "E08",
+        "A01",
+        "T02",
+        "W01"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    },
+    {
+      "id": "PT-KNOW-01",
+      "title": "Check lore/context and return to writing",
+      "issues": [
+        4,
+        10
+      ],
+      "origin": "legacy",
+      "capabilities": [
+        "K01",
+        "R01",
+        "E01"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    },
+    {
+      "id": "PT-LINK-01",
+      "title": "Plan on a board, write a scene and return",
+      "issues": [
+        17,
+        15,
+        14,
+        10
+      ],
+      "origin": "mixed",
+      "capabilities": [
+        "B01",
+        "B02",
+        "B15",
+        "B16",
+        "B26",
+        "P01",
+        "T02"
+      ],
+      "contract": "docs/design/ROLE_JOURNEYS.md",
+      "required_paths": [
+        "main",
+        "return-context",
+        "cancel",
+        "stale",
+        "failure-recovery",
+        "save-reopen",
+        "compatibility"
+      ]
+    }
+  ],
+  "review_scopes": [
+    "full-editor-parity"
+  ],
+  "contract_inputs": [
+    "docs/research/PROJECT_TYPES_AND_FORMATTING.md",
+    "docs/design/EDITOR_UX_PARITY.md",
+    "docs/PRD.md",
+    "openspec/specs/appearance/spec.md",
+    "openspec/specs/assistant-review/spec.md",
+    "openspec/specs/brand-identity/spec.md",
+    "openspec/specs/localization/spec.md",
+    "openspec/specs/manuscript-editing/spec.md",
+    "openspec/specs/native-workspace/spec.md",
+    "openspec/changes/direct-canvas-text-editing/specs/project-canvas/spec.md",
+    "openspec/changes/enforce-parity-journeys/specs/release-readiness/spec.md",
+    "openspec/changes/full-editor-parity/specs/clipboard-media/spec.md",
+    "openspec/changes/full-editor-parity/specs/editor-workspace-presentation/spec.md",
+    "openspec/changes/full-editor-parity/specs/manuscript-editing/spec.md",
+    "openspec/changes/full-editor-parity/specs/rich-manuscript-editor/spec.md",
+    "openspec/changes/full-project-portability/specs/project-portability/spec.md",
+    "openspec/changes/installable-distribution/specs/desktop-distribution/spec.md",
+    "openspec/changes/native-canvas-integration/specs/native-canvas-integration/spec.md",
+    "openspec/changes/native-mvp/specs/appearance/spec.md",
+    "openspec/changes/native-mvp/specs/assistant-review/spec.md",
+    "openspec/changes/native-mvp/specs/localization/spec.md",
+    "openspec/changes/native-mvp/specs/manuscript-editing/spec.md",
+    "openspec/changes/native-mvp/specs/native-workspace/spec.md",
+    "openspec/changes/native-project-media-preview/specs/project-media/spec.md",
+    "openspec/changes/native-project-navigation/specs/project-navigation/spec.md",
+    "openspec/changes/native-project-structure-authoring/specs/project-structure-authoring/spec.md",
+    "openspec/changes/native-project-transfer/specs/project-portability/spec.md",
+    "openspec/changes/native-table-authoring-alpha3/specs/rich-manuscript-editor/spec.md",
+    "openspec/changes/persistent-text-annotations/specs/persistent-text-annotations/spec.md",
+    "openspec/changes/writing-workflow-discovery/specs/writing-workflow-profiles/spec.md"
+  ]
+}

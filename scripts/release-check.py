@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import plistlib
@@ -23,6 +24,10 @@ SEMVER = re.compile(
     r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
 )
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+_parity_spec = importlib.util.spec_from_file_location("writercraft_parity_gate", ROOT / "scripts/parity_gate.py")
+PARITY = importlib.util.module_from_spec(_parity_spec)
+_parity_spec.loader.exec_module(PARITY)
 
 
 def version_parts(version: str):
@@ -72,6 +77,14 @@ def source_fingerprint(root: Path = ROOT) -> str:
         for parent, directories, names in os.walk(directory):
             directories[:] = sorted(name for name in directories if name not in {"target", ".git", "__pycache__"})
             files.extend(Path(parent) / name for name in names if name != ".DS_Store")
+    scope_file = root / PARITY.CONTRACT
+    if scope_file.is_file():
+        scope = PARITY.contract(root)
+        contracts = {PARITY.CONTRACT, "scripts/parity_gate.py", "scripts/release-check.py", "docs/governance/NEXT_RELEASE.md"}
+        contracts.update(row["contract"] for rows in scope.values() for row in rows.values())
+        contracts.update(json.loads(scope_file.read_text())["contract_inputs"])
+        files.extend(PARITY.file_at(root, relative) for relative in sorted(contracts))
+    files = list(set(files))
     digest = hashlib.sha256()
     for path in sorted(files, key=lambda item: item.relative_to(root).as_posix()):
         if path.is_symlink():
@@ -120,7 +133,7 @@ def accepted_ux(root: Path, version: str, fingerprint: str, required_scope=None)
         if record.get("status") != "accepted":
             continue
         try:
-            if record.get("independent") is not True or not str(record.get("reviewer", "")).strip():
+            if record.get("independent") is not True or not isinstance(record.get("reviewer"), str) or not record["reviewer"].strip():
                 raise ValueError("acceptance must identify an independent reviewer")
             if record.get("version") != version or record.get("source_fingerprint") != fingerprint:
                 raise ValueError("acceptance does not match the current version/source fingerprint")
@@ -152,6 +165,12 @@ def accepted_ux(root: Path, version: str, fingerprint: str, required_scope=None)
             report = confined_file(root, record.get("interaction_evidence"))
             if report.suffix != ".md" or len(report.read_text().strip()) < 100:
                 raise ValueError("acceptance needs a nonempty narrative interaction report")
+            if record["scope"] in PARITY.SCOPES:
+                if record.get("interaction_evidence_sha256") != hashlib.sha256(report.read_bytes()).hexdigest():
+                    raise ValueError("interaction report is unbound or changed after review")
+                coverage_errors = PARITY.issues(root, record, fingerprint)
+                if coverage_errors:
+                    raise ValueError("Completeness/task acceptance: " + "; ".join(coverage_errors))
             return {"review": review_path, "scope": record["scope"], "reviewer": record["reviewer"]}, None
         except (ValueError, TypeError, AttributeError) as error:
             reasons.append(review_path + ": " + str(error))
@@ -207,6 +226,11 @@ def source_issues(root: Path, metadata):
     for name in result.stdout.decode().split("\0"):
         if name.startswith(("target/", "artifacts/")) or ".app/" in name or re.search(r'\.sqlite(?:3)?(?:-wal|-shm)?$', name):
             issues.append("Generated build/user data must not be tracked: " + name)
+    if metadata["required_ux_scope"] in PARITY.SCOPES:
+        try:
+            PARITY.contract(root, metadata["required_ux_scope"])
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            issues.append("Invalid parity contract: " + str(error))
     return issues
 
 
@@ -264,18 +288,17 @@ def main(argv=None):
     if args.mode == "release" and acceptance is None:
         issues.append(ux_reason)
     if args.mode == "release" and int(version_parts(metadata["version"])[0]) >= 1:
-        parity_path = ROOT / "docs/migration/PARITY_GATE.json"
-        parity = json.loads(parity_path.read_text()) if parity_path.is_file() else {}
-        if (acceptance or {}).get("scope") != "full-parity" or parity.get("status") != "accepted" or parity.get("source_fingerprint") != fingerprint or parity.get("version") != metadata["version"]:
-            issues.append("Version 1.0+ needs current independent full-parity UX and PARITY_GATE.json acceptance")
+        if (acceptance or {}).get("scope") != "full-parity":
+            issues.append("Version 1.0+ needs current independent full-parity UX including both coverage axes")
     if args.bundle:
         issues.extend(bundle_issues(args.bundle, metadata))
     gates = review_records(ROOT)
     gate = gates[0][1] if gates else {}
     report = {"ok": not issues, "mode": args.mode, **metadata, "source_fingerprint": fingerprint,
-              "release_ready": acceptance is not None, "ux_acceptance": acceptance,
+              "release_ready": acceptance is not None and not issues, "ux_acceptance": acceptance,
               "ux_gate_status": gate.get("status", "pending"), "ux_open_blockers": gate.get("blockers", []),
               "ux_review_scope": gate.get("scope"),
+              "coverage_blockers": PARITY.issues(ROOT, gate, fingerprint) if metadata["required_ux_scope"] in PARITY.SCOPES else [],
               "ux_status": "accepted for named scope" if acceptance else ux_reason, "errors": issues}
     if args.json:
         print(json.dumps(report, indent=2))
@@ -390,6 +413,9 @@ class ReleaseChecks(unittest.TestCase):
             self.assertIn("required scope: full-editor-parity", reason)
             record["scope"] = "full-editor-parity"
             gate.write_text(json.dumps(record))
+            self.assertIsNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")[0])
+            self.make_coverage(root, record)
+            gate.write_text(json.dumps(record))
             self.assertIsNotNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-editor-parity")[0])
 
     def test_stale_blocked_and_unreviewed_scopes_do_not_pass(self):
@@ -409,6 +435,163 @@ class ReleaseChecks(unittest.TestCase):
             self.make_review(root)
             (root / "docs/images/dark.png").write_bytes(PNG_SIGNATURE + b"changed")
             self.assertIsNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64)[0])
+
+
+    def make_coverage(self, root, record):
+        report = root / record["interaction_evidence"]
+        record["scope"] = "full-editor-parity"
+        receipt = {"source_fingerprint": "a" * 64, "build_ref": "https://example.invalid/synthetic-build", "platform": "synthetic fixture",
+                   "observations": [{"kind": "inventory-audit", "id": "editor"}, {"kind": "semantic", "id": "E01"},
+                                    {"kind": "native", "id": "E01"}, {"kind": "native-journey", "id": "PT-NOV-01", "paths": ["main", "cancel", "save-reopen"]}]}
+        report.write_text("<!-- writercraft-evidence\n" + json.dumps(receipt) + "\n-->\n" + report.read_text())
+        checksum = hashlib.sha256(report.read_bytes()).hexdigest()
+        record["interaction_evidence_sha256"] = checksum
+        contract_path = "docs/design/task-contract.md"
+        (root / contract_path).write_text("Synthetic required task and source inventory.")
+        scope = {"schema_version": 1, "review_scopes": ["full-editor-parity"], "contract_inputs": [contract_path],
+                 "inventories": [{"id": "editor", "title": "Editor", "issues": [4], "contract": contract_path,
+                                  "sources": [{"path": "legacy/editor.ts", "sha256": "b" * 64}]}],
+                 "capabilities": [{"id": "E01", "title": "Write", "issues": [4], "contract": contract_path, "inventory": "editor"}],
+                 "journeys": [{"id": "PT-NOV-01", "title": "Continue a draft", "issues": [4], "contract": contract_path,
+                               "origin": "legacy", "capabilities": ["E01"], "required_paths": ["main", "cancel", "save-reopen"]}]}
+        path = root / PARITY.CONTRACT
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(scope))
+        def row(id_, kinds, **extra):
+            return {"id": id_, "status": "accepted", "source_fingerprint": "a" * 64,
+                    "independent": True, "reviewer": "independent fixture reviewer",
+                    "evidence": [{"kind": kind, "path": record["interaction_evidence"], "sha256": checksum} for kind in kinds], **extra}
+        record["coverage"] = {
+            "inventories": [row("editor", ["inventory-audit"], complete=True)],
+            "capabilities": [row("E01", ["semantic", "native"], native_entry="Document > type")],
+            "journeys": [row("PT-NOV-01", ["native-journey"], covered_paths=["main", "cancel", "save-reopen"])]}
+        return scope, path
+
+    def test_parity_gate_rejects_missing_duplicate_unknown_pending_and_stale_coverage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            self.assertEqual(PARITY.issues(root, record, "a" * 64), [])
+            import copy
+            for kind in PARITY.KINDS:
+                for mutation in ["missing", "duplicate", "unknown", "pending", "stale", "self-review", "empty-evidence"]:
+                    changed = copy.deepcopy(record)
+                    rows = changed["coverage"][kind]
+                    if mutation == "missing": rows.clear()
+                    elif mutation == "duplicate": rows.append(copy.deepcopy(rows[0]))
+                    elif mutation == "unknown": rows[0]["id"] = "unknown"
+                    elif mutation == "pending": rows[0]["status"] = "pending"
+                    elif mutation == "stale": rows[0]["source_fingerprint"] = "c" * 64
+                    elif mutation == "self-review": rows[0]["independent"] = False
+                    else: rows[0]["evidence"] = []
+                    with self.subTest(kind=kind, mutation=mutation):
+                        self.assertTrue(PARITY.issues(root, changed, "a" * 64))
+
+    def test_inventory_omissions_and_partial_task_paths_cannot_pass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            record["coverage"]["inventories"][0]["complete"] = False
+            self.assertTrue(PARITY.issues(root, record, "a" * 64))
+            record["coverage"]["inventories"][0]["complete"] = True
+            record["coverage"]["journeys"][0]["covered_paths"].remove("cancel")
+            self.assertTrue(PARITY.issues(root, record, "a" * 64))
+
+    def test_changed_report_and_new_requirement_invalidate_parity_acceptance(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, gate = self.make_review(root)
+            record["scope"] = "full-editor-parity"
+            scope, path = self.make_coverage(root, record)
+            gate.write_text(json.dumps(record))
+            self.assertIsNotNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64)[0])
+            report = root / record["interaction_evidence"]
+            original = report.read_text()
+            report.write_text(original + "Changed observation.")
+            self.assertIsNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64)[0])
+            report.write_text(original)
+            scope["capabilities"].append({**scope["capabilities"][0], "id": "E02"})
+            path.write_text(json.dumps(scope))
+            self.assertTrue(PARITY.issues(root, record, "a" * 64))
+
+    def test_required_contract_and_journey_text_are_bound_to_source_fingerprint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            (root / "Cargo.toml").write_text("workspace")
+            (root / "Cargo.lock").write_text("lock")
+            (root / "scripts").mkdir()
+            (root / "scripts/parity_gate.py").write_text("synthetic validator")
+            (root / "scripts/release-check.py").write_text("synthetic release enforcement")
+            (root / "docs/governance").mkdir()
+            (root / "docs/governance/NEXT_RELEASE.md").write_text("selected scope")
+            before = source_fingerprint(root)
+            (root / "docs/design/task-contract.md").write_text("Changed required task.")
+            self.assertNotEqual(before, source_fingerprint(root))
+            before = source_fingerprint(root)
+            (root / "scripts/release-check.py").write_text("changed enforcement")
+            self.assertNotEqual(before, source_fingerprint(root))
+
+    def test_invalid_or_hypothetical_contract_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            scope, path = self.make_coverage(root, record)
+            scope["journeys"][0]["origin"] = "unselected-hypothesis"
+            path.write_text(json.dumps(scope))
+            with self.assertRaises(ValueError): PARITY.contract(root)
+            scope["journeys"][0]["origin"] = "legacy"
+            scope["journeys"][0]["contract"] = "../outside.md"
+            path.write_text(json.dumps(scope))
+            with self.assertRaises(ValueError): PARITY.contract(root)
+
+
+
+    def test_old_or_unrelated_report_cannot_be_relabelled_as_current_evidence(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            report = root / record["interaction_evidence"]
+            original = report.read_text()
+            for replacement in [original.replace("a" * 64, "b" * 64), original.replace('"E01"', '"E99"'),
+                                original.replace('"paths": ["main", "cancel", "save-reopen"]', '"paths": ["main"]')]:
+                report.write_text(replacement)
+                changed = copy.deepcopy(record)
+                for rows in changed["coverage"].values():
+                    for row in rows:
+                        for item in row["evidence"]:
+                            item["sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+                self.assertTrue(PARITY.issues(root, changed, "a" * 64))
+
+    def test_selected_alpha_catalog_cannot_qualify_full_product_parity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, gate = self.make_review(root)
+            self.make_coverage(root, record)
+            record["scope"] = "full-parity"
+            gate.write_text(json.dumps(record))
+            self.assertIsNone(accepted_ux(root, "0.1.0-alpha.1", "a" * 64, "full-parity")[0])
+            self.assertIn("does not cover requested scope", ";".join(PARITY.issues(root, record, "a" * 64)))
+
+
+
+    def test_missing_native_entry_and_reviewer_cannot_pass_as_stringified_null(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, _ = self.make_review(root)
+            self.make_coverage(root, record)
+            row = record["coverage"]["capabilities"][0]
+            for key in ["native_entry", "reviewer"]:
+                original = row[key]
+                for value in [None, {}, [], 12, " "]:
+                    row[key] = value
+                    self.assertTrue(PARITY.issues(root, record, "a" * 64))
+                row[key] = original
 
 
 if __name__ == "__main__":

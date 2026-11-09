@@ -94,3 +94,9 @@ No alpha.3 publication/tag before the required acceptance. Published alpha.1 and
 The owner first selected editor-only alpha.2 and then approved an eight-goal complete-editor contract. All eight goals remain mandatory. On 2026-11-08 the owner subsequently selected **all open issues**, advancing #3/#10/#11 into this release. Earlier deferral text is historical and no longer applies.
 
 Balanced 48/56/40-point workspace rhythm and adaptive wide/focus/docked concepts were owner-approved. Design approval authorizes implementation; exact compiled/native acceptance still follows. The owner is testing an isolated engineering preview; development and hosted verification continue without driving or replacing that window.
+
+## Enforced completeness and role journeys — 2026-11-09
+
+Full Canvas authoring is now explicitly tracked by [#17](https://github.com/avacadorun-dev/writer-craft/issues/17), with B01–B26 in `CANVAS_PARITY_MATRIX.md`; #15 remains only its first input slice and #10 its migration dependency. This clarifies the existing complete Canvas obligation rather than adding unrelated scope.
+
+Alpha.3 requires both source inventory/capability completeness and complete role journeys through the existing `UX_GATE.json.coverage`, bound to `PARITY_SCOPE.json` and the current source/lock/contract fingerprint. The validator applies this to the selected `full-editor-parity` scope even before1.0. All inventories/rows/journeys are currently pending; no full native acceptance is claimed. Existing full-product boundaries remain as documented in FEATURE_PARITY. One active product issue remains #15; this gate and #17 inventory do not open parallel feature implementation streams.
