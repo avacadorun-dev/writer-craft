@@ -2,7 +2,7 @@ name: Build editor engineering preview
 
 on:
   push:
-    branches: [feature/full-editor-parity]
+    branches: [feature/full-editor-parity, feature/alpha3-parity]
     paths:
       - 'Cargo.toml'
       - 'Cargo.lock'
