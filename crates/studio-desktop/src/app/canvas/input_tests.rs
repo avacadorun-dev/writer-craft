@@ -67,32 +67,32 @@ fn click(pos: Pos2) -> Vec<Event> {
     ]
 }
 
-fn canvas_observation(ctx: &egui::Context) -> Value {
+fn canvas_observation(ctx: &egui::Context) -> AppResult<Value> {
     super::super::capture_connected_writing::test_observation(ctx)
         .1
         .remove("canvas")
-        .expect("the actual board pass must emit its observation")
+        .ok_or_else(|| "the actual board pass must emit its observation".into())
 }
 
-fn rect(value: &Value) -> Rect {
-    let values = value.as_array().expect("observed rectangle");
-    Rect::from_min_max(
+fn rect(value: &Value) -> AppResult<Rect> {
+    let values = value.as_array().ok_or("observed rectangle")?;
+    Ok(Rect::from_min_max(
         egui::pos2(
-            values[0].as_f64().expect("left") as f32,
-            values[1].as_f64().expect("top") as f32,
+            values[0].as_f64().ok_or("left")? as f32,
+            values[1].as_f64().ok_or("top")? as f32,
         ),
         egui::pos2(
-            values[2].as_f64().expect("right") as f32,
-            values[3].as_f64().expect("bottom") as f32,
+            values[2].as_f64().ok_or("right")? as f32,
+            values[3].as_f64().ok_or("bottom")? as f32,
         ),
-    )
+    ))
 }
 
-fn text_control(ctx: &egui::Context) -> Rect {
+fn text_control(ctx: &egui::Context) -> AppResult<Rect> {
     super::super::capture_connected_writing::test_observation(ctx)
         .0
         .remove("canvas.add_text")
-        .expect("rendered Text card control")
+        .ok_or_else(|| "rendered Text card control".into())
 }
 
 fn settle_write(state: &mut CanvasState, ctx: &egui::Context) -> AppResult<()> {
@@ -112,7 +112,7 @@ fn toolbar_toggles_and_other_panes_should_never_place_a_card() -> AppResult<()> 
     let database = directory.path().join("input.sqlite");
     frame(&mut state, &database, &ctx, vec![], 0.0);
     let outside = frame(&mut state, &database, &ctx, vec![], 0.1);
-    let text = text_control(&ctx).center();
+    let text = text_control(&ctx)?.center();
 
     frame(&mut state, &database, &ctx, click(text), 1.0);
     assert_eq!(state.tool, BoardTool::Text);
@@ -143,9 +143,9 @@ fn board_drag_and_space_pan_should_not_place_but_a_subsequent_click_should() -> 
     let database = directory.path().join("input.sqlite");
     frame(&mut state, &database, &ctx, vec![], 0.0);
     frame(&mut state, &database, &ctx, vec![], 0.1);
-    let text = text_control(&ctx).center();
+    let text = text_control(&ctx)?.center();
     frame(&mut state, &database, &ctx, click(text), 1.0);
-    let viewport = rect(&canvas_observation(&ctx)["viewport"]);
+    let viewport = rect(&canvas_observation(&ctx)?["viewport"])?;
     let start = viewport.center() - vec2(viewport.width() * 0.15, 0.0);
     let end = viewport.center() + vec2(viewport.width() * 0.15, 0.0);
     frame(
@@ -218,7 +218,7 @@ fn select_mode_should_keep_empty_board_double_click_creation() -> AppResult<()> 
     let database = directory.path().join("input.sqlite");
     frame(&mut state, &database, &ctx, vec![], 0.0);
     frame(&mut state, &database, &ctx, vec![], 0.1);
-    let point = rect(&canvas_observation(&ctx)["viewport"]).center();
+    let point = rect(&canvas_observation(&ctx)?["viewport"])?.center();
     frame(&mut state, &database, &ctx, click(point), 1.0);
     assert!(state.text_editor.is_none());
     frame(&mut state, &database, &ctx, click(point), 1.1);
@@ -251,7 +251,7 @@ fn connecting_overlapping_cards_should_use_the_topmost_painted_card() -> AppResu
     let controls = super::super::capture_connected_writing::test_observation(&ctx).0;
     let connect = controls.get("canvas.connect").ok_or("Connection control")?;
     frame(&mut state, &database, &ctx, click(connect.center()), 1.0);
-    let observed = canvas_observation(&ctx);
+    let observed = canvas_observation(&ctx)?;
     let nodes = observed["visible_nodes"]
         .as_array()
         .ok_or("visible cards")?;
@@ -267,7 +267,7 @@ fn connecting_overlapping_cards_should_use_the_topmost_painted_card() -> AppResu
         &mut state,
         &database,
         &ctx,
-        click(rect(&top["reserved"]).center()),
+        click(rect(&top["reserved"])?.center()),
         2.0,
     );
     assert_eq!(state.connect_source.as_deref(), Some("top"));
@@ -276,7 +276,7 @@ fn connecting_overlapping_cards_should_use_the_topmost_painted_card() -> AppResu
         &mut state,
         &database,
         &ctx,
-        click(rect(&target["reserved"]).center()),
+        click(rect(&target["reserved"])?.center()),
         3.0,
     );
     settle_write(&mut state, &ctx)?;
