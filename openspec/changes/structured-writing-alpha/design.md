@@ -1,0 +1,11 @@
+# Hierarchy-led writing, explicit markup and exact return
+
+The original free schema already allows nested folders, documents and notes. Use this source-compatible structure for native organization without adding project kinds. Imported novel/screenplay/custom schemas retain their exact labels/rules. Domain commands own validation, stable aliases, transactions and optimistic guards; the navigator only presents choices. Native initialization must preserve existing flat documents and avoid rewriting imported raw manifests.
+
+Select containers independently of disclosure state. Offer root/child creation, rename, move/reorder, trash and restore from localized context/keyboard-accessible controls. Trash is recoverable and distinct from permanent purge; preserve descendants and references. A stale target/schema or invalid parent fails before mutation. Tree presentation never silently changes manuscript text. Creation and moving use current saved allowedChildren/canBeRoot/contentBearing rules.
+
+Reference consultation uses existing NavigationReturn: save and acknowledge the current scene, capture exact revision/selection/measured scroll/panes, open the chosen document and retain the bookmark until successful return. Do not infer links from names. A changed origin opens latest content with an explicit changed-context message instead of stale caret application. Return does not claim preservation of an in-memory editor undo stack across reopened sessions.
+
+Extend passage-note metadata with author-defined tags under an additive compatible representation. Retain exact Unicode-scalar anchors and existing mapping/detachment/history authority. Empty tags preserve old records. Tag changes cannot retarget a note or rewrite prose. Project results are scoped by project ID and reference exact document/note IDs; duplicate words/names are not identity. Tags are manual labels, not fixed entity types or provider inference. Canonical import/export must retain metadata/history; reader inclusion follows explicit privacy scope.
+
+Native validation is a complete author session in The Last Light, created and edited through the actual UI. Shared commands/tests corroborate persistence and refusal paths but do not substitute for interaction. Independent review covers the same active issue and exact source; all release claims remain scoped.

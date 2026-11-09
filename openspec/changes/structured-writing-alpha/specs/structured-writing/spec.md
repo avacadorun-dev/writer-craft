@@ -1,0 +1,69 @@
+## ADDED Requirements
+
+### Requirement: Schema-aware manuscript organization
+
+Authors SHALL create and navigate nested folders, documents and notes using the saved project structure. Native projects SHALL support the original free structure without requiring a project-kind selector. Imported custom rules and unknown data MUST remain intact.
+
+#### Scenario: Organize a new story
+- **WHEN** A3-WRITE-01 creates chapter, scene and reference branches
+- **THEN** each item appears in its chosen valid location with a stable identity and writable content only when its kind permits text
+
+### Requirement: Complete recoverable hierarchy lifecycle
+
+Authors SHALL rename, edit, move, reorder, trash and restore documents and folders. Commands MUST preserve text, descendants, revisions, annotations and references and refuse stale, cyclic, foreign or disallowed placements before mutation.
+
+#### Scenario: Revise the manuscript structure
+- **WHEN** an author moves a scene, renames a chapter, trashes and restores a branch
+- **THEN** the saved tree reflects those deliberate actions and the restored content and history remain available under the same identities
+
+#### Scenario: Cancel or reject a structural change
+- **WHEN** a placement is cancelled, invalid or stale
+- **THEN** the prior tree and unsaved writing remain intact with an actionable result
+
+#### Scenario: Restore a nested branch
+- **WHEN** a folder is trashed and restored
+- **THEN** all active descendants participate, independently trashed descendants remain in Trash, and a missing, trashed or disallowed parent causes refusal before mutation
+
+### Requirement: Exact consultation return
+
+An author SHALL consult and edit a reference document and return to the acknowledged originating scene with exact selection and measured scroll when its revision remains unchanged. Failed navigation MUST retain drafts and the return route.
+
+#### Scenario: Consult a motivation while revising dialogue
+- **WHEN** the author leaves the second repeated Unicode passage to inspect a character note and returns
+- **THEN** subsequent typing operates on the original occurrence; changed source instead receives an explicit changed-context result without guessed positioning
+
+### Requirement: Author-defined passage markup
+
+Authors SHALL create, inspect, edit and remove tags and optional notes attached to exact passages, then filter and navigate those records across the current project. Labels MUST retain author text and meaning; no automatic extraction or name matching grants attachment authority.
+
+#### Scenario: Follow a character through several scenes
+- **WHEN** A3-MARK-01 tags selected occurrences in different documents and opens a filtered result
+- **THEN** the intended passage and note are revealed by saved identity and exact anchor, with a return route and no change to unrelated prose
+
+#### Scenario: Manage the author's labels
+- **WHEN** a label is removed from one passage or explicitly renamed/removed across the project
+- **THEN** the action names its scope, matches exact case-sensitive labels, guards the captured affected revisions and never silently merges differently authored labels
+
+#### Scenario: Remove the last tag or restore deleted markup
+- **WHEN** project-wide removal empties a tag-only mark, or deleted markup is restored
+- **THEN** the empty mark becomes a recoverable tombstone; restoration retains its identity and marks a no-longer-valid anchor detached without searching for another matching quote
+
+#### Scenario: A result or reference belongs to Trash
+- **WHEN** the target document or an ancestor is trashed
+- **THEN** navigation retains its identity and presents an unavailable/restore route instead of silently opening it as active manuscript content
+
+### Requirement: Durable compatible writing state
+
+Tree changes and passage markup MUST survive save/reopen and canonical export/restore with unknown source fields, rich text, histories and original media retained. Older records without tags SHALL remain usable with empty tag metadata.
+
+#### Scenario: Restore an organized draft
+- **WHEN** the completed project is restored into an independent workspace
+- **THEN** its supported structure, text, tags, notes and references retain their meaning and reader-export limitations remain explicit
+
+### Requirement: Real native task acceptance
+
+The named alpha.3 scope SHALL require independent review of a coherent substantial manuscript created and revised through the native interface. Compiler checks, API seeding or a rendered feature gallery MUST NOT establish user-journey completion.
+
+#### Scenario: Engineering checks pass without a writing session
+- **WHEN** only semantic fixtures or source inspection are available
+- **THEN** native task acceptance and release readiness remain pending

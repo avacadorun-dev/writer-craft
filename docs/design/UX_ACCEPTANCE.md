@@ -166,3 +166,9 @@ Compare the chosen native substrate with React Flow and the complete B01–B26 c
 ## F-48/F-49 — separate engine and scoped alpha.3 acceptance
 
 CraftCanvas has a source-backed standalone roadmap and an independent production gate. Its WriterCraft-ready handoff permits exact-qualified integration, not automatic B01–B26 acceptance. A separately authorized app agent may deliver a named non-Canvas alpha.3 workflow checkpoint before that handoff. Review the actual completed character/screenwriting task and unblocked fixes selected by that release; retain pending full Canvas/full-product coverage. Do not label a subset `full-editor-parity` or infer natural connection UX acceptance from retained scripted lifecycle captures.
+
+## F-50/F-51 — hierarchy-led author sessions and substantial native acceptance
+
+Read ALPHA3_STRUCTURED_WRITING_PLAN.md and the structured-writing-alpha change. An isolated character form is not the selected outcome. Review a complete original story project with multiple chapters/scenes and character/reference branches, created and revised through the native UI. Observe full folder/document lifecycle, a meaningful motivation-to-dialogue revision, exact consultation return, author-defined markup across scenes, save/reopen and readable/canonical handoff. Source fixtures/API-created records are corroboration only, never the author journey.
+
+Explicitly inspect subtree trash/restore without reviving independently trashed children; typed schema-valid moves; duplicate-title identity; tag-only notes; assignment removal versus project-wide label rename/removal; guarded same-ID markup restoration; detached/trashed target states; and draft preservation. Do not invent human research participation or claim professional screenplay element/pagination support. Project-kind taxonomy remains undecided. Reject missing lifecycle operations or a control gallery, and retain pending broad parity after a scoped acceptance.

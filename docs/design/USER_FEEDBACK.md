@@ -254,3 +254,15 @@ The same instruction subsequently requests a published, strictly ordered issue r
 2026-11-09: prepare a handoff for another agent to assemble alpha.3 from the existing implementation, defer full Canvas, and complete a concrete user scenario such as character/profile and screenwriting work plus another unblocked issue. The Canvas agent continues standalone CraftCanvas; the WriterCraft agent resumes Canvas integration only after a qualified engine handoff.
 
 This explicitly supersedes the requirement that full Canvas or full-product parity block alpha.3. It does not close #17/#4, remove B01–B26, accept the rejected connection UX or authorize misleading parity claims. Define a named bounded engineering-release scope, complete its chosen end-to-end native workflow, and retain full parity inventories/gates for the later integration. Existing preview, alpha.1/alpha.2, private data and unfinished work remain protected. Parallel engine and app workstreams are now authorized, each with one active issue and separate file ownership.
+
+## F-50 — complete author workflows, hierarchy and manual markup
+
+2026-11-09: the resumed application task was corrected after it narrowed the character example to an isolated entity form. Begin from an author's real working session and the original tree structure, informed by competitor workflows and #14. Complete organization, drafting, reference consultation, exact return and export instead of implementing the nouns of the request literally. Project-kind taxonomy is explicitly undecided and must not become a nominal mandatory selector.
+
+The user explicitly requests expanding existing exact passage notes into author-defined tags/markers with different meanings and useful cross-document scenarios. This selects manual markup as an enhancement; it does not request automatic extraction or infer a fixed taxonomy. Documents, folders and markup need complete CRUD: create/read/edit/rename as applicable, move/reorder for tree items, remove and recover without breaking content/references. Record this in #14 and preserve the broader #10/#11 obligations.
+
+## F-51 — substantial native acceptance manuscript and goal-directed delivery
+
+2026-11-09: prepare a large coherent working project with several chapters, character branches, motivations and descriptions. Acceptance must follow how an author creates and works with it in the actual native interface. A synthetic test matrix, API-created project or successful command call is not user acceptance. Use newly authored demonstration content without private user manuscripts; public CI fixtures remain synthetic and separate from the editorial interaction record. Do not describe this as observed human research or pretend the authoring was performed by a person.
+
+The user requested an explicit plan and goal covering all corrections, followed by execution. The selected scenarios and sequence are recorded in ALPHA3_STRUCTURED_WRITING_PLAN.md and the structured-writing-alpha OpenSpec change. Independent reviewers must reject feature-gallery or isolated-form acceptance and require the whole author outcome on the exact candidate.
