@@ -771,20 +771,19 @@ impl StudioApp {
                         .as_ref()
                         .is_some_and(|document| document.id == note.document_id)
                 });
-            if let Some(note) = note {
-                if ui
+            if let Some(note) = note
+                && ui
                     .add_enabled_ui(self.can_edit_manuscript(), |ui| {
                         icons::labeled_button(ui, Icon::Trash, l.text("Delete markup"), false)
                     })
                     .inner
                     .clicked()
-                {
-                    let result = self.quick_remove_note(&note);
-                    if result.is_ok() {
-                        self.rich_review.paused = true;
-                    }
-                    self.record_error(result);
+            {
+                let result = self.quick_remove_note(&note);
+                if result.is_ok() {
+                    self.rich_review.paused = true;
                 }
+                self.record_error(result);
             }
             self.quick_undo_control(ui, t);
             ui.add_space(6.0);
