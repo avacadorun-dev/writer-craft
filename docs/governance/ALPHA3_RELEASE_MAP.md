@@ -17,13 +17,13 @@ Owner-approved 2026-11-09. This is the single authoritative sequence for closing
 
 Closed 2026-11-09 under the owner-approved lean verification. Exact evidence: [Verify 42575620140](https://github.com/avacadorun-dev/writer-craft/actions/runs/42575620140) at `bcba6e8`; package from [Preview 42570107425](https://github.com/avacadorun-dev/writer-craft/actions/runs/42570107425) (hashes in [the input verification record](../verification/CANVAS_INPUT_ALPHA3.md)); qualified engine `69f2382…`; real-OS journey/failure/crash/recovery pass; independent review PASS. Accepted caveat: live OS-IME composition not exercised on this machine (engine-level IME covered by qualified hosted tests; live findings become a separate owner-filed issue).
 
-### P1 — active: #12 media/diagram block-flow
+### P1 — complete: #12 media/diagram block-flow
 
-Per the owner lean-verification decision (2026-11-09): no new exhaustive test matrix. Verify the shipped flow-repair behavior with the existing hosted checks and a quick compiled inspection, record honest gaps in the issue, and let usage findings become separate issues.
+Closed 2026-11-09 under lean verification: shipped flow repair in pinned engine `fd96a30`, existing engine separation tests and app Verify green ([run 42575620140](https://github.com/avacadorun-dev/writer-craft/actions/runs/42575620140)), showcase captures settled, real compiled showcase scroll inspection clean. Gaps (transition matrix, caption/paint-hit assertions) are usage-monitored separate-issue material.
 
-### P2 — #6 editor workspace layout
+### P2 — complete: #6 editor workspace layout
 
-Wide/minimum layouts; panels/Focus/resize retain selection and scroll; long labels and table controls usable. Shares review context with #9.
+Closed 2026-11-09 under lean verification: Balanced hierarchy and adaptive ≥984 pt surface implemented; real runs at exactly 1000×680 (full toolbar, Focus toggle hides/restores both panes) and 1440 wide; eight-locale capture matrix settled. Pixel-exact surface/scroll-retention regressions are usage-monitored separate-issue material.
 
 ### P3 — #2 persistent marks and author notes
 
