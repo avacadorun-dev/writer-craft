@@ -735,6 +735,45 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Finishing cancellation…",
+        [
+            "Завершаем отмену…",
+            "Finishing cancellation…",
+            "Abbrechen wird abgeschlossen…",
+            "Finalisation de l’annulation…",
+            "Finalizando la cancelación…",
+            "Concluindo o cancelamento…",
+            "正在完成取消…",
+            "キャンセルを完了しています…",
+        ],
+    ),
+    (
+        "Editing paused",
+        [
+            "Редактирование приостановлено",
+            "Editing paused",
+            "Bearbeitung pausiert",
+            "Modification suspendue",
+            "Edición pausada",
+            "Edição pausada",
+            "编辑已暂停",
+            "編集を一時停止中",
+        ],
+    ),
+    (
+        "Already saved changes are kept.",
+        [
+            "Уже сохранённые изменения останутся.",
+            "Already saved changes are kept.",
+            "Bereits gespeicherte Änderungen bleiben erhalten.",
+            "Les modifications déjà enregistrées sont conservées.",
+            "Se conservan los cambios ya guardados.",
+            "As alterações já guardadas são mantidas.",
+            "已保存的更改将保留。",
+            "保存済みの変更は保持されます。",
+        ],
+    ),
+    (
         "Editing text card",
         [
             "Редактирование карточки",
@@ -758,6 +797,32 @@ const CATALOG: &[(&str, [&str; 8])] = &[
             "Alterações não salvas",
             "看板有未保存的更改",
             "ボードに未保存の変更があります",
+        ],
+    ),
+    (
+        "Preserve full card draft…",
+        [
+            "Сохранить полный черновик карточки…",
+            "Preserve full card draft…",
+            "Vollständigen Kartenentwurf sichern…",
+            "Conserver le brouillon complet de la carte…",
+            "Conservar borrador completo de la tarjeta…",
+            "Preservar rascunho completo do cartão…",
+            "保留完整卡片草稿…",
+            "カードの下書き全体を保存…",
+        ],
+    ),
+    (
+        "Recovery JSON preserves the board and exact draft. Manual recovery is required; it is not an importable project.",
+        [
+            "JSON восстановления сохраняет доску и точный черновик. Восстановление выполняется вручную; это не проект для импорта.",
+            "Recovery JSON preserves the board and exact draft. Manual recovery is required; it is not an importable project.",
+            "Die Wiederherstellungs-JSON bewahrt Board und exakten Entwurf. Manuelle Wiederherstellung erforderlich; kein importierbares Projekt.",
+            "Le JSON de récupération conserve le tableau et le brouillon exact. Récupération manuelle requise ; ce n’est pas un projet importable.",
+            "El JSON de recuperación conserva el tablero y el borrador exacto. Requiere recuperación manual; no es un proyecto importable.",
+            "O JSON de recuperação preserva o quadro e o rascunho exato. Exige recuperação manual; não é um projeto importável.",
+            "恢复 JSON 保留看板和完整草稿。需要手动恢复；它不是可导入的项目。",
+            "復元用 JSON はボードと下書きをそのまま保存します。手動での復元が必要で、インポート可能なプロジェクトではありません。",
         ],
     ),
     (

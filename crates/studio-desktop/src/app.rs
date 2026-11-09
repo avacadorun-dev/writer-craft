@@ -743,6 +743,10 @@ impl eframe::App for StudioApp {
         if let Some(probe) = &mut self.capture_probe.connected {
             probe.raw_input(ctx, input);
         }
+        let blocked = self.modal_open();
+        if let Some(canvas) = &mut self.canvas {
+            canvas.prepare_input(ctx, input, blocked);
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

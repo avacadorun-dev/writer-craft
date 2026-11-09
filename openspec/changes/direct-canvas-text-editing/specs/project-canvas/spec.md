@@ -55,3 +55,13 @@ Cancel SHALL immediately stop accepting further edits into the cancelled draft a
 - **WHEN** Done is requested while composition or an older request remains pending
 - **THEN** finishing SHALL wait for resolved composition and durable acknowledgement of the latest intended source
 - **AND** an older acknowledgement SHALL not claim the latest text saved
+
+#### Scenario: A draft exceeds validated board capacity
+- **WHEN** retry and validated `.canvas` preservation cannot prepare the draft
+- **THEN** a separately named versioned recovery JSON SHALL preserve exact base-board/node/candidate JSON strings and the latest text without representing an invalid graph as a valid board
+- **AND** only a complete flushed/synced export SHALL enable explicit Reload saved board; later input SHALL invalidate that permission
+- **AND** the UI SHALL identify this as manual recovery, not a successful save or an importable project
+
+#### Scenario: Done acknowledgement shares a frame with new input
+- **WHEN** a save or insertion acknowledgement arrives before the current frame's native text or IME is processed
+- **THEN** Done SHALL retain the same editor until the input pass completes and the latest committed text is acknowledged

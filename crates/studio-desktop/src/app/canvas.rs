@@ -101,7 +101,6 @@ pub(super) struct CanvasState {
     text_cancel: bool,
     text_composing: bool,
     text_save_error: bool,
-    edit_after_insert: Option<String>,
     checkpoint_version: Option<String>,
     pending: Option<mpsc::Receiver<CommitCompletion>>,
     failed: Option<PreparedChange>,
@@ -137,7 +136,6 @@ impl CanvasState {
             text_cancel: false,
             text_composing: false,
             text_save_error: false,
-            edit_after_insert: None,
             checkpoint_version: None,
             pending: None,
             failed: None,
@@ -193,21 +191,34 @@ impl CanvasState {
     pub(super) fn modal_open(&self) -> bool {
         self.media_viewer.is_some()
     }
+    /// Run before egui focus navigation, with the same modal boundary as the board view.
+    pub(super) fn prepare_input(
+        &mut self,
+        ctx: &egui::Context,
+        input: &mut egui::RawInput,
+        blocked: bool,
+    ) {
+        let blocked = blocked || self.media_viewer.is_some() || self.text_cancel;
+        if let Some(editor) = &mut self.text_editor {
+            editor.prepare_inline_input(ctx, input, blocked);
+        }
+    }
     /// Dirty or unacknowledged native input cannot silently disappear through navigation.
     pub(super) fn blocks_navigation(&self) -> bool {
         self.pending.is_some()
             || self.failed.is_some()
             || self.text_save_error
             || self.text_composing
-            || self
-                .text_editor
-                .as_ref()
-                .is_some_and(|editor| editor.dirty() || editor.has_submission())
+            || self.text_editor.as_ref().is_some_and(|editor| {
+                editor.dirty() || editor.has_submission() || editor.awaits_insertion()
+            })
     }
     /// One acknowledgement-aware status shared by all visible save indicators.
     pub(super) fn durability_status(&self) -> &'static str {
         if self.failed.is_some() || self.failure.is_some() || self.text_save_error {
             "Attention needed"
+        } else if self.text_cancel && self.pending.is_some() {
+            "Finishing cancellation…"
         } else if self.pending.is_some() {
             "Saving…"
         } else if self.blocks_navigation() {
@@ -250,6 +261,17 @@ impl CanvasState {
     fn retry(&mut self, database: &Path) -> AppResult<()> {
         if self.pending.is_some() {
             return Err(CanvasError::Invalid("A board save is already pending".into()).into());
+        }
+        if self.failed.is_none()
+            && self
+                .text_editor
+                .as_ref()
+                .is_some_and(TextCardEditor::awaits_insertion)
+        {
+            // A preparation failure has no candidate. Recreate only the exact original
+            // insertion at its unchanged base, never an EditText against an absent node.
+            let transaction = self.insertion_transaction()?;
+            return self.begin(database, PendingOperation::Transaction(transaction));
         }
         let prepared = self.failed.take().ok_or(CanvasError::NoHistory)?;
         if prepared.base() != self.session.identity() {
@@ -324,22 +346,16 @@ impl CanvasState {
                 self.failed = None;
                 self.checkpoint_version = None;
                 self.text_save_error = false;
-                if let Some(editor) = &mut self.text_editor
-                    && editor.has_submission()
-                {
-                    editor.acknowledge(session)?;
+                if let Some(editor) = &mut self.text_editor {
+                    if editor.awaits_insertion() {
+                        editor.acknowledge_insertion(session)?;
+                    } else if editor.has_submission() {
+                        editor.acknowledge(session)?;
+                    }
                 }
-                if let Some(id) = self.edit_after_insert.take() {
-                    self.text_editor = Some(TextCardEditor::new(session, &id)?);
-                    self.text_changed_at = Instant::now();
-                }
-                if self.text_cancel
-                    || (self.text_done
-                        && self
-                            .text_editor
-                            .as_ref()
-                            .is_some_and(|editor| !editor.dirty()))
-                {
+                // Cancel already froze input. Done remains live until this frame's
+                // native input has been processed by drive_inline; polling happens first.
+                if self.text_cancel {
                     self.finish_inline();
                 }
                 Ok(())
@@ -350,7 +366,7 @@ impl CanvasState {
                 self.text_save_error = self
                     .text_editor
                     .as_ref()
-                    .is_some_and(TextCardEditor::has_submission);
+                    .is_some_and(|editor| editor.has_submission() || editor.awaits_insertion());
                 if self.failed.is_none()
                     && let Some(editor) = &mut self.text_editor
                 {
@@ -376,17 +392,21 @@ impl CanvasState {
             )),
         )
     }
-    fn add_text_in_view(&mut self, database: &Path) -> AppResult<()> {
+    fn add_text_in_view(&mut self, database: &Path, ctx: &egui::Context) -> AppResult<()> {
         let center = self.view.camera().center();
         self.add_text(
             database,
+            ctx,
             WorldPoint {
                 x: center.x - 150.0,
                 y: center.y - 90.0,
             },
         )
     }
-    fn add_text(&mut self, database: &Path, at: WorldPoint) -> AppResult<()> {
+    fn add_text(&mut self, database: &Path, ctx: &egui::Context, at: WorldPoint) -> AppResult<()> {
+        if !self.editable() || self.text_editor.is_some() {
+            return Err(PendingCanvas.into());
+        }
         let node = NodeRecord::text(
             uuid::Uuid::new_v4().to_string(),
             WorldRect {
@@ -398,16 +418,35 @@ impl CanvasState {
             String::new(),
             self.session.limits(),
         )?;
-        let id = node.id().to_owned();
-        self.command(
-            database,
+        let mut editor = TextCardEditor::pending_insertion(&self.session, node)?;
+        editor.begin_inline(ctx)?;
+        self.text_editor = Some(editor);
+        self.text_changed_at = Instant::now();
+        self.text_done = false;
+        self.text_cancel = false;
+        self.text_composing = false;
+        self.text_save_error = false;
+        let result = self.insertion_transaction().and_then(|transaction| {
+            self.begin(database, PendingOperation::Transaction(transaction))
+        });
+        if result.is_err() {
+            self.text_save_error = true;
+        }
+        result
+    }
+    /// Retry the original insertion without changing its raw fields, index or base.
+    fn insertion_transaction(&self) -> AppResult<CanvasTransaction> {
+        let editor = self.text_editor.as_ref().ok_or(CanvasError::NoHistory)?;
+        let node = editor
+            .pending_node(&self.session)
+            .ok_or(CanvasError::StaleBase)?;
+        Ok(CanvasTransaction::new(
+            self.session.identity(),
             vec![CanvasCommand::InsertNode {
-                node,
+                node: NodeRecord::parse(node.raw_json(), self.session.limits())?,
                 index: self.session.document().nodes().len(),
             }],
-        )?;
-        self.edit_after_insert = Some(id);
-        Ok(())
+        ))
     }
     fn duplicate(
         &mut self,
@@ -443,21 +482,29 @@ impl CanvasState {
             }],
         )
     }
-    fn intent(&mut self, database: &Path, intent: CanvasIntent) -> AppResult<()> {
+    fn intent(
+        &mut self,
+        database: &Path,
+        ctx: &egui::Context,
+        intent: CanvasIntent,
+    ) -> AppResult<()> {
         match intent {
             CanvasIntent::Transaction(transaction) => self.begin(database, PendingOperation::Transaction(transaction)),
             CanvasIntent::Undo(base) => self.begin(database, PendingOperation::Undo(base)),
             CanvasIntent::Redo(base) => self.begin(database, PendingOperation::Redo(base)),
             CanvasIntent::CreateText { base, position } => {
                 if base != self.session.identity() { return Err(CanvasError::StaleBase.into()); }
-                self.add_text(database, position)
+                self.add_text(database, ctx, position)
             }
             CanvasIntent::EditText { base, node_id } => {
                 if base != self.session.identity() { return Err(CanvasError::StaleBase.into()); }
                 let node=self.session.document().node(&node_id).ok_or_else(||CanvasError::NotFound(node_id.clone()))?;
                 if !self.dialect.node_policy(node).movable { return Err(CanvasError::NotEditable(node_id).into()); }
+                if !self.editable() || self.text_editor.is_some() { return Err(PendingCanvas.into()); }
+                let mut editor = TextCardEditor::new(&self.session, &node_id)?;
+                editor.begin_inline(ctx)?;
                 self.view.cancel_transient();
-                self.text_editor = Some(TextCardEditor::new(&self.session, &node_id)?);
+                self.text_editor = Some(editor);
                 self.text_changed_at=Instant::now(); self.text_done=false; self.text_cancel=false; self.text_composing=false; self.text_save_error=false;
                 Ok(())
             }
@@ -565,7 +612,7 @@ impl CanvasState {
                                 add.rect,
                             );
                             if add.clicked() {
-                                let result = self.add_text_in_view(database);
+                                let result = self.add_text_in_view(database, ui.ctx());
                                 self.set_failure(result);
                             }
                             if ui
@@ -598,10 +645,14 @@ impl CanvasState {
                     );
                     if self.text_editor.is_some() {
                         ui.separator();
-                        ui.label(l.text("Editing text card"));
+                        ui.label(l.text(if self.text_cancel {
+                            "Editing paused"
+                        } else {
+                            "Editing text card"
+                        }));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             let done = ui.add_enabled(
-                                !self.text_composing,
+                                !self.text_composing && !self.text_cancel,
                                 egui::Button::new(l.text("Done")),
                             );
                             super::capture_connected_writing::control(
@@ -612,10 +663,12 @@ impl CanvasState {
                             if done.clicked() {
                                 self.text_done = true;
                             }
-                            let cancel = ui.add_enabled(
-                                !self.text_composing,
-                                egui::Button::new(l.text("Cancel")),
-                            );
+                            let cancel = ui
+                                .add_enabled(
+                                    !self.text_composing && !self.text_cancel,
+                                    egui::Button::new(l.text("Cancel")),
+                                )
+                                .on_hover_text(l.text("Already saved changes are kept."));
                             super::capture_connected_writing::control(
                                 ui.ctx(),
                                 "canvas.cancel",
@@ -679,8 +732,24 @@ impl CanvasState {
                     );
                     if (self.failed.is_some() || self.text_save_error) && self.pending.is_none() {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button(l.text("Retry save")).clicked() {
-                                let result = if self.failed.is_some() {
+                            if ui
+                                .add_enabled(
+                                    !self.text_cancel
+                                        || self.failed.is_some()
+                                        || self
+                                            .text_editor
+                                            .as_ref()
+                                            .is_some_and(TextCardEditor::awaits_insertion),
+                                    egui::Button::new(l.text("Retry save")),
+                                )
+                                .clicked()
+                            {
+                                let result = if self.failed.is_some()
+                                    || self
+                                        .text_editor
+                                        .as_ref()
+                                        .is_some_and(TextCardEditor::awaits_insertion)
+                                {
                                     self.retry(database)
                                 } else {
                                     self.submit_inline(database)
@@ -697,6 +766,14 @@ impl CanvasState {
                                 && ui.button(l.text("Preserve card text…")).clicked()
                             {
                                 let result = self.preserve_card_text(l);
+                                self.set_failure(result);
+                            }
+                            if self.text_editor.is_some()
+                                && ui.button(l.text("Preserve full card draft…"))
+                                    .on_hover_text(l.text("Recovery JSON preserves the board and exact draft. Manual recovery is required; it is not an importable project."))
+                                    .clicked()
+                            {
+                                let result = self.preserve_full_card_draft(l);
                                 self.set_failure(result);
                             }
                             if ui
@@ -751,7 +828,7 @@ impl CanvasState {
             media,
             editor: self.text_editor.as_mut(),
             inline_output: &mut inline_output,
-            blocked: blocked || self.media_viewer.is_some(),
+            blocked: blocked || self.media_viewer.is_some() || self.text_cancel,
         };
         let output = self
             .view
@@ -761,7 +838,7 @@ impl CanvasState {
         }
         for intent in output.intents {
             // The first completed mutation freezes this session until its durable acknowledgement.
-            let result = self.intent(database, intent);
+            let result = self.intent(database, ui.ctx(), intent);
             self.set_failure(result);
         }
         if let Some(output) = inline_output {
@@ -788,7 +865,7 @@ impl CanvasState {
                     "revision":self.snapshot.revision.info.revision, "canonical":self.snapshot.revision.content,
                     "pending":self.pending.is_some(), "failed":self.failed.is_some() || self.failure.is_some() || self.text_save_error,
                     "recovery":self.snapshot.draft.is_some(), "navigation_blocked":self.blocks_navigation(), "status":self.durability_status(),
-                    "editor":self.text_editor.as_ref().map(|editor| serde_json::json!({"node_id":editor.node_id(), "text":editor.text(), "dirty":editor.dirty(), "submitted":editor.has_submission(), "composing":self.text_composing})),
+                    "editor":self.text_editor.as_ref().map(|editor| serde_json::json!({"node_id":editor.node_id(), "text":editor.text(), "dirty":editor.dirty(), "submitted":editor.has_submission(), "awaiting_insertion":editor.awaits_insertion(), "composing":self.text_composing})),
                     "selected_nodes":self.view.selection().nodes,
                     "camera":{"center":[camera.center().x,camera.center().y],"zoom":camera.zoom()},
                     "viewport":rect(output.viewport),
@@ -806,6 +883,9 @@ impl CanvasState {
         self.view.cancel_transient();
     }
     fn submit_inline(&mut self, database: &Path) -> AppResult<()> {
+        if self.text_cancel {
+            return Err(PendingCanvas.into());
+        }
         let transaction = self
             .text_editor
             .as_mut()
@@ -826,7 +906,16 @@ impl CanvasState {
         if self.pending.is_some() {
             return Ok(());
         }
-        if self.failed.is_some() {
+        if self.text_cancel {
+            // Cancellation must not turn global Save/backup into a new write of discarded text.
+            return Err(PendingCanvas.into());
+        }
+        if self.failed.is_some()
+            || self
+                .text_editor
+                .as_ref()
+                .is_some_and(TextCardEditor::awaits_insertion)
+        {
             return self.retry(database);
         }
         if self.text_composing {
@@ -848,6 +937,10 @@ impl CanvasState {
         let Some(editor) = &self.text_editor else {
             return Ok(());
         };
+        if editor.awaits_insertion() {
+            // No autosave or focus handoff may certify an unacknowledged empty card.
+            return Ok(());
+        }
         if self.text_cancel || (self.text_done && !editor.dirty()) {
             self.finish_inline();
             return Ok(());
@@ -899,12 +992,85 @@ impl CanvasState {
         file.sync_all()?;
         Ok(())
     }
-    fn preserve_pending(&mut self, language: Language) -> AppResult<()> {
-        let latest = if let Some(editor) = &self.text_editor {
-            Some(self.session.prepare(editor.transaction(), &self.dialect)?)
-        } else {
-            None
+    /// A lossless diagnostic fallback even when a candidate exceeds Canvas limits.
+    /// Raw JSON stays a string; this record grants no replay authority or import guarantee.
+    fn card_recovery_record(&self) -> AppResult<String> {
+        let editor = self.text_editor.as_ref().ok_or(CanvasError::NoHistory)?;
+        let pending_node = editor.pending_node(&self.session);
+        let node = pending_node
+            .as_deref()
+            .or_else(|| self.session.document().node(editor.node_id()))
+            .ok_or_else(|| CanvasError::NotFound(editor.node_id().into()))?;
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "format": "writercraft-card-recovery", "version": 1,
+            "project_id": self.project_id, "board_id": self.snapshot.canvas.id,
+            "acknowledged_board_revision": self.snapshot.revision.info.revision,
+            "commit_outcome": if self.pending.is_some() || self.failure.is_some() || self.text_save_error {
+                "unacknowledged"
+            } else { "local-draft" },
+            "awaiting_insertion": editor.awaits_insertion(),
+            "base_board_json": self.session.document().raw_json(),
+            "original_card_json": node.raw_json(),
+            "latest_text": editor.text(),
+            "submitted_candidate_json": self.failed.as_ref().map(|candidate| candidate.document().raw_json()),
+            "recovery": "Manual recovery only. This is not an importable project or an acknowledged save. Separate project media is not bundled."
+        }))?)
+    }
+    fn write_full_card_draft(&mut self, path: &Path) -> AppResult<()> {
+        let record = self.card_recovery_record()?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(record.as_bytes())?;
+        file.flush()?;
+        file.sync_all()?;
+        // The next native draft change invalidates this permission in show().
+        self.failed_preserved = true;
+        Ok(())
+    }
+    fn preserve_full_card_draft(&mut self, language: Language) -> AppResult<()> {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(language.text("Preserve full card draft…"))
+            .set_file_name("card-recovery.json")
+            .add_filter("JSON", &["json"])
+            .save_file()
+        else {
+            return Ok(());
         };
+        self.write_full_card_draft(&path)
+    }
+    /// Recover an absent card and its latest text atomically while preserving raw metadata.
+    /// This is an export candidate, never acknowledgement of the original insertion.
+    fn latest_text_candidate(&self) -> AppResult<Option<PreparedChange>> {
+        let Some(editor) = &self.text_editor else {
+            return Ok(None);
+        };
+        let transaction = if editor.awaits_insertion() {
+            let node = editor
+                .pending_node(&self.session)
+                .ok_or(CanvasError::StaleBase)?;
+            CanvasTransaction::new(
+                self.session.identity(),
+                vec![
+                    CanvasCommand::InsertNode {
+                        node: NodeRecord::parse(node.raw_json(), self.session.limits())?,
+                        index: self.session.document().nodes().len(),
+                    },
+                    CanvasCommand::EditText {
+                        node_id: node.id().into(),
+                        expected: node.body().into(),
+                        text: editor.text().into(),
+                    },
+                ],
+            )
+        } else {
+            editor.transaction()
+        };
+        Ok(Some(self.session.prepare(transaction, &self.dialect)?))
+    }
+    fn preserve_pending(&mut self, language: Language) -> AppResult<()> {
+        let latest = self.latest_text_candidate()?;
         let prepared = latest
             .as_ref()
             .or(self.failed.as_ref())
@@ -1088,6 +1254,9 @@ struct CardBody<'a> {
     blocked: bool,
 }
 impl CanvasViewHost for CardBody<'_> {
+    fn pending_text_editor(&self) -> Option<&TextCardEditor> {
+        self.editor.as_deref()
+    }
     fn paint_body(
         &mut self,
         ui: &mut egui::Ui,
@@ -1354,7 +1523,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn new_card_should_activate_direct_editor_only_after_durable_creation_acknowledgement()
+    fn new_card_should_accept_native_input_before_durable_creation_and_keep_it_after_acknowledgement()
     -> TestResult {
         let directory = tempfile::tempdir()?;
         let database = directory.path().join("new-card.sqlite");
@@ -1369,17 +1538,60 @@ mod tests {
         state
             .view
             .set_camera(craft_canvas_model::Camera::new(center, 1.5)?);
-        state.add_text_in_view(&database)?;
-        assert!(state.text_editor.is_none());
+        state.fit_on_open = false;
+        let ctx = egui::Context::default();
+        let mut created = Ok(());
+        // The real activation pass has not mounted a TextEdit yet. The next pass
+        // carries the author's input; no blank editor frame may preinstall its filter.
+        let mut activation_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            created = state.add_text_in_view(&database, ui.ctx());
+        });
+        activation_output.textures_delta.clear();
+        activation_output.platform_output.commands.clear();
+        created?;
         assert!(state.pending.is_some());
+        assert!(
+            state
+                .text_editor
+                .as_ref()
+                .ok_or("editor")?
+                .awaits_insertion()
+        );
+        assert!(
+            state.blocks_navigation(),
+            "even an empty absent card is unacknowledged"
+        );
+        assert_eq!(state.session.document().nodes().len(), 1);
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![egui::Event::Text("First input 日本語 🪶".into())],
+            0.1,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "First input 日本語 🪶"
+        );
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![egui::Event::Paste(" — still saving".into())],
+            0.2,
+        );
+        let latest = "First input 日本語 🪶 — still saving";
+        assert_eq!(state.text_editor.as_ref().ok_or("editor")?.text(), latest);
+        assert_eq!(state.session.document().nodes().len(), 1);
         let deadline = Instant::now() + Duration::from_secs(5);
         while state.pending.is_some() && Instant::now() < deadline {
-            state.poll(&egui::Context::default())?;
+            state.poll(&ctx)?;
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(state.pending.is_none());
         let editor = state.text_editor.as_ref().ok_or("direct editor")?;
-        assert!(editor.text().is_empty());
+        assert!(!editor.awaits_insertion());
+        assert_eq!(editor.text(), latest);
         assert_eq!(
             state
                 .session
@@ -1391,7 +1603,10 @@ mod tests {
             center
         );
         assert!(state.view.selection().nodes.contains(editor.node_id()));
-        assert!(!state.blocks_navigation());
+        assert!(
+            state.blocks_navigation(),
+            "latest input has not been saved by the insertion ack"
+        );
         assert_eq!(
             workspace
                 .project_canvas(&project.id, &state.snapshot.canvas.id)?
@@ -1400,6 +1615,17 @@ mod tests {
                 .revision,
             2
         );
+        state.save_now(&database)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(&ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(state.pending.is_none());
+        assert!(!state.blocks_navigation());
+        let reopened = CanvasState::open(&workspace, &project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(reopened.session.document().nodes()[1].body(), latest);
+        assert_eq!(reopened.snapshot.revision.info.revision, 3);
         Ok(())
     }
     #[test]
@@ -1445,28 +1671,515 @@ mod tests {
         ctx: &egui::Context,
         events: Vec<egui::Event>,
         time: f64,
-    ) {
+    ) -> egui::FullOutput {
         let tokens = theme::resolve(&ThemeSettings::default(), false);
-        let mut output = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    Vec2::new(1000., 680.),
-                )),
-                events,
-                time: Some(time),
-                focused: true,
-                ..Default::default()
-            },
-            |root| {
-                egui::CentralPanel::default().show(root, |ui| {
-                    state.show(ui, database, Language::English, tokens, false);
-                });
-            },
-        );
+        let mut input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                Vec2::new(1000., 680.),
+            )),
+            events,
+            time: Some(time),
+            focused: true,
+            ..Default::default()
+        };
+        state.prepare_input(ctx, &mut input, false);
+        let mut output = ctx.run_ui(input, |root| {
+            egui::CentralPanel::default().show(root, |ui| {
+                state.show(ui, database, Language::English, tokens, false);
+            });
+        });
         output.textures_delta.clear();
         output.platform_output.commands.clear();
+        output
     }
+    #[test]
+    fn failed_absent_card_should_preserve_latest_text_and_unknown_fields_then_retry_exact_insertion()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("absent-card.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic absent card recovery")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let raw = r#"{"id":"new-card","type":"text","x":0,"y":0,"width":300,"height":180,"text":"","future":{"number":9007199254740993123,"opaque":[true,null]}}"#;
+        let node = NodeRecord::parse(raw, state.session.limits())?;
+        state.text_editor = Some(TextCardEditor::pending_insertion(&state.session, node)?);
+        let original = state.insertion_transaction()?;
+        let original_prepared = state.session.prepare(original, &state.dialect)?;
+        // Fail before producing a durable candidate; even an empty draft still blocks navigation.
+        assert!(
+            deliver(
+                &mut state,
+                CommitCompletion {
+                    prepared: None,
+                    result: Err("synthetic preparation failure".into()),
+                    checkpoint_version: None,
+                }
+            )
+            .is_err()
+        );
+        assert!(state.failed.is_none());
+        assert!(state.blocks_navigation());
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() = "Latest draft 日本語 🪶".into();
+        let candidate = state.latest_text_candidate()?.ok_or("recovery candidate")?;
+        let restored =
+            CanvasDocument::parse(candidate.document().raw_json(), state.session.limits())?;
+        let restored_node = restored.node("new-card").ok_or("restored card")?;
+        assert_eq!(restored_node.body(), "Latest draft 日本語 🪶");
+        assert_eq!(
+            restored_node
+                .field("future")
+                .ok_or("unknown extension")?
+                .get(),
+            r#"{"number":9007199254740993123,"opaque":[true,null]}"#
+        );
+        assert_eq!(
+            state.session.document().nodes().len(),
+            1,
+            "recovery is not canonical acknowledgement"
+        );
+        assert!(
+            state
+                .text_editor
+                .as_ref()
+                .ok_or("editor")?
+                .awaits_insertion()
+        );
+        state.retry(&database)?;
+        let ctx = egui::Context::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(&ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(state.pending.is_none());
+        assert_eq!(
+            state.session.document().raw_json(),
+            original_prepared.document().raw_json()
+        );
+        assert_eq!(
+            state
+                .session
+                .document()
+                .node("new-card")
+                .ok_or("saved card")?
+                .body(),
+            ""
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Latest draft 日本語 🪶"
+        );
+        assert!(
+            state.blocks_navigation(),
+            "only the original insertion was retried"
+        );
+        Ok(())
+    }
+    #[test]
+    fn capacity_refused_card_should_export_lossless_recovery_before_reloading_saved_board()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("capacity.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic capacity recovery")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let limits = CanvasLimits {
+            max_nodes: 1,
+            ..CanvasLimits::default()
+        };
+        state.session = Arc::new(CanvasSession::new(
+            CanvasDocument::parse(state.session.document().raw_json(), &limits)?,
+            limits,
+        )?);
+        let raw = r#"{"id":"over-capacity","type":"text","x":0,"y":0,"width":300,"height":180,"text":"","unknown":{"value":9007199254740993123}}"#;
+        state.text_editor = Some(TextCardEditor::pending_insertion(
+            &state.session,
+            NodeRecord::parse(raw, state.session.limits())?,
+        )?);
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
+            "Never lose 日本語 e\u{301} 🪶".into();
+        let transaction = state.insertion_transaction()?;
+        let completion = prepare_and_save(
+            Arc::clone(&state.session),
+            &database,
+            &project.id,
+            &state.snapshot.canvas.id,
+            state.snapshot.revision.clone(),
+            PendingOperation::Transaction(transaction),
+        );
+        assert!(
+            completion.prepared.is_none(),
+            "actual model capacity refusal"
+        );
+        assert!(deliver(&mut state, completion).is_err());
+        assert!(state.latest_text_candidate().is_err());
+        assert!(state.reload_saved(&database).is_err());
+        let path = directory.path().join("card-recovery.json");
+        std::fs::write(&path, "Existing file must remain unchanged")?;
+        assert!(state.write_full_card_draft(&path).is_err());
+        assert!(!state.failed_preserved);
+        assert_eq!(
+            std::fs::read_to_string(&path)?,
+            "Existing file must remain unchanged"
+        );
+        let path = directory.path().join("complete-card-recovery.json");
+        state.write_full_card_draft(&path)?;
+        let restored: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        assert_eq!(restored["format"], "writercraft-card-recovery");
+        assert_eq!(restored["original_card_json"], raw);
+        assert_eq!(restored["latest_text"], "Never lose 日本語 e\u{301} 🪶");
+        assert_eq!(
+            restored["base_board_json"],
+            state.session.document().raw_json()
+        );
+        assert_eq!(restored["commit_outcome"], "unacknowledged");
+        assert_eq!(state.session.document().nodes().len(), 1);
+        assert!(state.failed_preserved);
+        // A successful export is no longer complete after actual subsequent native input.
+        let ctx = egui::Context::default();
+        show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![egui::Event::Text(" later".into())],
+            0.1,
+        );
+        assert!(!state.failed_preserved);
+        assert!(state.reload_saved(&database).is_err());
+        let path = directory.path().join("latest-card-recovery.json");
+        state.write_full_card_draft(&path)?;
+        state.reload_saved(&database)?;
+        assert!(state.text_editor.is_none());
+        assert!(!state.blocks_navigation());
+        assert_eq!(state.snapshot.revision.content, graph());
+        Ok(())
+    }
+    #[test]
+    fn existing_card_recovery_should_keep_submitted_candidate_and_later_text_separate() -> TestResult
+    {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("existing-recovery.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic existing card recovery")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let mut editor = TextCardEditor::new(&state.session, "card")?;
+        *editor.text_mut() = "Submitted source".into();
+        let prepared = state.session.prepare(editor.submit()?, &state.dialect)?;
+        let submitted_raw = prepared.document().raw_json().to_owned();
+        *editor.text_mut() = "Later source 日本語".into();
+        state.text_editor = Some(editor);
+        assert!(
+            deliver(
+                &mut state,
+                CommitCompletion {
+                    prepared: Some(prepared),
+                    result: Err("synthetic persistence failure".into()),
+                    checkpoint_version: None,
+                }
+            )
+            .is_err()
+        );
+        let path = directory.path().join("existing-card-recovery.json");
+        state.write_full_card_draft(&path)?;
+        let restored: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        assert_eq!(restored["latest_text"], "Later source 日本語");
+        assert_eq!(restored["submitted_candidate_json"], submitted_raw);
+        assert_eq!(
+            restored["base_board_json"],
+            state.session.document().raw_json()
+        );
+        assert_eq!(restored["awaiting_insertion"], false);
+        assert!(state.failed_preserved);
+        Ok(())
+    }
+    fn activate_card(
+        state: &mut CanvasState,
+        database: &Path,
+        ctx: &egui::Context,
+    ) -> AppResult<()> {
+        let mut result = Ok(());
+        let mut activation_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            result = state.intent(
+                database,
+                ui.ctx(),
+                CanvasIntent::EditText {
+                    base: state.session.identity(),
+                    node_id: "card".into(),
+                },
+            );
+        });
+        activation_output.textures_delta.clear();
+        activation_output.platform_output.commands.clear();
+        result
+    }
+    #[test]
+    fn done_acknowledgement_should_not_drop_input_arriving_before_the_same_frames_editor_pass()
+    -> TestResult {
+        for creating in [false, true] {
+            for event in [
+                egui::Event::Text(" later".into()),
+                egui::Event::Paste(" later".into()),
+                egui::Event::Ime(egui::ImeEvent::Preedit {
+                    text: "にほん".into(),
+                    active_range_chars: Some(0..3),
+                }),
+            ] {
+                let directory = tempfile::tempdir()?;
+                let database = directory.path().join("done-ack.sqlite");
+                let workspace = Workspace::open(&database)?;
+                let project = workspace.create_project("Synthetic Done acknowledgement race")?;
+                let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+                let mut state = CanvasState::from_snapshot(&project.id, board)?;
+                let ctx = egui::Context::default();
+                let transaction = if creating {
+                    let node = NodeRecord::text(
+                        "pending-card".into(),
+                        WorldRect {
+                            x: 0.0,
+                            y: 0.0,
+                            width: 300.0,
+                            height: 180.0,
+                        },
+                        String::new(),
+                        state.session.limits(),
+                    )?;
+                    let mut editor = TextCardEditor::pending_insertion(&state.session, node)?;
+                    let mut activated = Ok(());
+                    let mut activation_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                        activated = editor.begin_inline(ui.ctx());
+                    });
+                    activation_output.textures_delta.clear();
+                    activation_output.platform_output.commands.clear();
+                    activated?;
+                    state.text_editor = Some(editor);
+                    state.insertion_transaction()?
+                } else {
+                    activate_card(&mut state, &database, &ctx)?;
+                    show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+                    let editor = state.text_editor.as_mut().ok_or("editor")?;
+                    *editor.text_mut() = "Saved".into();
+                    editor.submit()?
+                };
+                let prepared = state.session.prepare(transaction, &state.dialect)?;
+                state.text_done = true;
+                let completion = persist_candidate(
+                    &database,
+                    &project.id,
+                    &state.snapshot.canvas.id,
+                    state.snapshot.revision.clone(),
+                    prepared,
+                );
+                // App order is raw input -> poll persistence -> paint/consume native input.
+                // Done must not remove the editor during that middle step.
+                deliver(&mut state, completion)?;
+                assert!(state.text_editor.is_some(), "creating={creating}");
+                let ime = matches!(event, egui::Event::Ime(_));
+                show_card_frame(&mut state, &database, &ctx, vec![event], 0.1);
+                let expected_prefix = if creating { "" } else { "Saved" };
+                let editor = state.text_editor.as_ref().ok_or("retained editor")?;
+                assert!(editor.text().starts_with(expected_prefix));
+                assert!(
+                    editor
+                        .text()
+                        .ends_with(if ime { "にほん" } else { " later" })
+                );
+                if ime {
+                    assert!(state.text_composing);
+                    assert!(
+                        state.pending.is_none(),
+                        "preedit must not be saved as committed text"
+                    );
+                    show_card_frame(
+                        &mut state,
+                        &database,
+                        &ctx,
+                        vec![egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))],
+                        0.2,
+                    );
+                    assert!(
+                        state
+                            .text_editor
+                            .as_ref()
+                            .ok_or("editor")?
+                            .text()
+                            .ends_with("日本語")
+                    );
+                    show_card_frame(&mut state, &database, &ctx, vec![], 0.3);
+                }
+                assert!(
+                    state.pending.is_some(),
+                    "Done saves the latest committed input"
+                );
+                let latest = state
+                    .text_editor
+                    .as_ref()
+                    .ok_or("editor")?
+                    .text()
+                    .to_owned();
+                let node_id = state
+                    .text_editor
+                    .as_ref()
+                    .ok_or("editor")?
+                    .node_id()
+                    .to_owned();
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while state.pending.is_some() && Instant::now() < deadline {
+                    state.poll(&ctx)?;
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                assert!(state.pending.is_none());
+                // Completion is considered only after a native frame with no new input.
+                assert!(state.text_editor.is_some());
+                show_card_frame(&mut state, &database, &ctx, vec![], 0.4);
+                assert!(state.text_editor.is_none());
+                let reopened =
+                    CanvasState::open(&workspace, &project.id, &state.snapshot.canvas.id)?;
+                assert_eq!(
+                    reopened
+                        .session
+                        .document()
+                        .node(&node_id)
+                        .ok_or("saved card")?
+                        .body(),
+                    latest
+                );
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn pending_cancel_should_freeze_native_input_until_the_original_save_acknowledges() -> TestResult
+    {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("cancel-pending.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic cancelled card")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.text_editor = Some(TextCardEditor::new(&state.session, "card")?);
+        let ctx = egui::Context::default();
+        show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+        let editor = state.text_editor.as_mut().ok_or("editor")?;
+        *editor.text_mut() = "Submitted source 日本語".into();
+        let transaction = editor.submit()?;
+        let prepared = state.session.prepare(transaction, &state.dialect)?;
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
+            "Later draft to discard 🪶".into();
+        let (sender, receiver) = mpsc::channel();
+        state.pending = Some(receiver);
+        state.text_cancel = true;
+        assert_eq!(state.durability_status(), "Finishing cancellation…");
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![
+                egui::Event::Text("Must not be accepted".into()),
+                egui::Event::Paste("Nor pasted".into()),
+                egui::Event::Ime(egui::ImeEvent::Commit("禁止".into())),
+            ],
+            1.,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Later draft to discard 🪶"
+        );
+        assert!(state.blocks_navigation());
+        sender
+            .send(persist_candidate(
+                &database,
+                &project.id,
+                &state.snapshot.canvas.id,
+                state.snapshot.revision.clone(),
+                prepared,
+            ))
+            .map_err(|_| "completion")?;
+        state.poll(&ctx)?;
+        assert!(state.text_editor.is_none());
+        let reopened = workspace.project_canvas(&project.id, &state.snapshot.canvas.id)?;
+        assert_eq!(
+            reopened.revision.content["nodes"][0]["text"],
+            "Submitted source 日本語"
+        );
+        assert!(!state.blocks_navigation());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_cancel_should_retain_exact_draft_and_retry_only_the_original_candidate() -> TestResult
+    {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("cancel-failure.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic cancellation failure")?;
+        let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        state.text_editor = Some(TextCardEditor::new(&state.session, "card")?);
+        let ctx = egui::Context::default();
+        show_card_frame(&mut state, &database, &ctx, vec![], 0.);
+        let editor = state.text_editor.as_mut().ok_or("editor")?;
+        *editor.text_mut() = "Original submitted request".into();
+        let transaction = editor.submit()?;
+        let prepared = state.session.prepare(transaction, &state.dialect)?;
+        *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
+            "Retained recovery draft 🪶".into();
+        state.text_cancel = true;
+        assert!(
+            deliver(
+                &mut state,
+                CommitCompletion {
+                    prepared: Some(prepared),
+                    result: Err(std::io::Error::other("Synthetic save failure").into()),
+                    checkpoint_version: None
+                }
+            )
+            .is_err()
+        );
+        assert!(state.save_now(&database).is_err());
+        assert!(state.pending.is_none());
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![egui::Event::Text("Rejected later input".into())],
+            1.,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("editor")?.text(),
+            "Retained recovery draft 🪶"
+        );
+        assert_eq!(state.durability_status(), "Attention needed");
+        assert!(state.blocks_navigation());
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .content,
+            graph()
+        );
+        state.retry(&database)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.pending.is_some() && Instant::now() < deadline {
+            state.poll(&ctx)?;
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(state.pending.is_none());
+        assert!(state.text_editor.is_none());
+        assert_eq!(
+            workspace
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?
+                .revision
+                .content["nodes"][0]["text"],
+            "Original submitted request"
+        );
+        Ok(())
+    }
+
     #[test]
     fn actual_host_card_input_should_accept_native_paste_and_done_without_opening_a_source_modal()
     -> TestResult {
@@ -1476,15 +2189,9 @@ mod tests {
         let project = workspace.create_project("Synthetic native card input")?;
         let board = workspace.create_project_canvas(&project.id, "Board", graph())?;
         let mut state = CanvasState::from_snapshot(&project.id, board)?;
-        state.intent(
-            &database,
-            CanvasIntent::EditText {
-                base: state.session.identity(),
-                node_id: "card".into(),
-            },
-        )?;
-        assert!(!state.modal_open());
         let ctx = egui::Context::default();
+        activate_card(&mut state, &database, &ctx)?;
+        assert!(!state.modal_open());
         show_card_frame(&mut state, &database, &ctx, vec![], 0.);
         let key = |key, modifiers| egui::Event::Key {
             key,
@@ -1590,13 +2297,7 @@ mod tests {
         app.open_project(project.clone())?;
         app.open_canvas(&board.canvas.id)?;
         let state = app.canvas.as_mut().ok_or("canvas")?;
-        state.intent(
-            &database,
-            CanvasIntent::EditText {
-                base: state.session.identity(),
-                node_id: "card".into(),
-            },
-        )?;
+        activate_card(state, &database, &ctx)?;
         *state.text_editor.as_mut().ok_or("editor")?.text_mut() =
             "Global Save routes to this card".into();
         app.poll_canvas(&ctx);

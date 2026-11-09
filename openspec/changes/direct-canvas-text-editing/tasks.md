@@ -13,8 +13,8 @@ Host source commits: 0f3ee84 (direct card integration and checkpoint CAS), 9a4d5
 
 ## Remaining immediate-creation acceptance
 
-- [ ] Correct generic creation-frame focus and exact owned-key handling; inspect FullOutput/IME with first-frame input and no hidden warmup.
-- [ ] Qualify the corrected exact generic revision on hosted platforms before adopting it.
+- [x] Correct generic creation-frame focus and exact owned-key handling; inspect FullOutput/IME with first-frame input and no hidden warmup.
+- [x] Qualify the corrected exact generic revision on hosted platforms before adopting it (`4be05e9`, run42560855344, Linux/macOS/Windows).
 - [ ] Integrate the same provisional editor before insertion acknowledgement and the supported host raw-input hook.
 - [ ] Preserve/retry pending insertion with or without a prepared candidate, including empty drafts and exact original raw records.
 - [ ] Freeze input on pending Cancel; retain explicit waiting/failure/preservation; verify latest-source Done and composition.
