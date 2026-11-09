@@ -480,7 +480,7 @@ impl ProjectOutline {
                 ui.ctx(),
                 "hierarchy",
                 serde_json::json!({
-                    "project_id":self.project_id,"query":self.query,"selected_document":selected,
+                    "project_id":self.project_id,"query":self.query,"selected_document":selection.document,
                     "visible":self.visible.iter().map(|&(index,depth)| {
                         let node=&self.nodes[index];
                         serde_json::json!({"logical_id":node.logical_id,"document_id":node.document_id,"title":node.title,"depth":depth,"expanded":!(if self.query.is_empty(){&self.collapsed}else{&self.search_collapsed}).contains(&index)})
