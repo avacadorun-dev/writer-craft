@@ -674,6 +674,153 @@ impl Workspace {
         Ok(())
     }
 
+    /// Remove one mark while retaining optional authored draft metadata in its tombstone.
+    /// The draft and deletion commit together; unchanged assignments do not require a catalog.
+    pub fn remove_annotation_with_draft(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        body: Option<&str>,
+        tags: Option<&[String]>,
+        labels: Option<&crate::ProjectLabelCatalog>,
+    ) -> Result<PassageAnnotation> {
+        self.remove_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            None,
+            body,
+            tags,
+            labels,
+        )
+    }
+
+    /// Remove only one local assignment, saving its pending note draft in the same transaction.
+    /// An emptied tag-only mark is tombstoned with its previous assignments for exact recovery.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Revision and catalog guards stay explicit at the shared command boundary"
+    )]
+    pub fn remove_annotation_label_with_draft(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        label: &str,
+        body: Option<&str>,
+        tags: Option<&[String]>,
+        labels: &crate::ProjectLabelCatalog,
+    ) -> Result<PassageAnnotation> {
+        self.remove_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            Some(label),
+            body,
+            tags,
+            Some(labels),
+        )
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The shared transaction accepts both guarded local removal forms"
+    )]
+    fn remove_markup(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        label: Option<&str>,
+        body: Option<&str>,
+        tags: Option<&[String]>,
+        labels: Option<&crate::ProjectLabelCatalog>,
+    ) -> Result<PassageAnnotation> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let before = read_annotation(&transaction, id, false)?;
+        let document = read_document(&transaction, &before.document_id)?;
+        require_revision(&document, expected_document_revision)?;
+        rich_tree(&document)?;
+        if before.revision != expected_annotation_revision {
+            return Err(StudioError::AnnotationConflict {
+                expected: expected_annotation_revision,
+                actual: before.revision,
+            });
+        }
+        let mut after = before.clone();
+        if let Some(tags) = tags {
+            validate_tags(tags)?;
+            after.tags = tags.to_vec();
+        }
+        if let Some(body) = body {
+            if body.trim().chars().count() > crate::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS {
+                return Err(StudioError::Validation(
+                    "The pending note is too long; preserve its text before removing the mark"
+                        .into(),
+                ));
+            }
+            after.note = body.trim().into();
+        }
+        let changed_assignments = after.tags != before.tags || label.is_some();
+        if changed_assignments {
+            let labels = labels.ok_or_else(|| {
+                StudioError::Validation(
+                    "Review the project label picker before removing changed assignments".into(),
+                )
+            })?;
+            crate::project_labels::guard_assignments(
+                &transaction,
+                &document.project_id,
+                labels,
+                &after.tags,
+                false,
+            )?;
+        }
+        if let Some(label) = label {
+            if !after.tags.iter().any(|name| name == label) {
+                return Err(StudioError::Validation(
+                    "This label is no longer assigned to the mark; refresh its note".into(),
+                ));
+            }
+            let prior_tags = after.tags.clone();
+            after.tags.retain(|name| name != label);
+            if after.tags.is_empty() && after.note.trim().is_empty() {
+                after.deleted = true;
+                after.tags = prior_tags;
+            }
+        } else {
+            after.deleted = true;
+        }
+        if !after.deleted {
+            normalize_markup_note(&after.note, &after.tags)?;
+        }
+        if changed_assignments {
+            // Materialize compatible legacy definitions before their final active usage
+            // disappears; this never retires a project definition or rewrites other notes.
+            crate::project_labels::ensure_assignments(
+                &transaction,
+                &document.project_id,
+                &after.tags,
+                false,
+            )?;
+        }
+        if before != after {
+            after.revision = next_revision(before.revision)?;
+            after.base_revision = document.revision;
+            store_annotation(
+                &transaction,
+                &before,
+                &after,
+                if after.deleted { "delete" } else { "update" },
+            )?;
+            save_attachment(&transaction, &after, document.revision)?;
+        }
+        transaction.commit()?;
+        Ok(after)
+    }
+
     /// Restore a deleted mark by identity. Changed manuscript content keeps its old quote
     /// detached until the author explicitly selects a current range for reattachment.
     pub fn restore_annotation(
