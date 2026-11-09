@@ -329,6 +329,33 @@ mod tests {
                 self.app.error.as_ref().map(|error| &error.details)
             );
         }
+
+        fn settled_manuscript_scroll(&mut self) -> AppResult<f32> {
+            let mut previous = None;
+            let mut stable_frames = 0;
+            // Native caret reveal uses egui's animated scroll target (up to 0.3 s).
+            // Observe completion instead of treating the second 0.1 s frame as a bookmark.
+            for _ in 0..16 {
+                self.render();
+                let current = self
+                    .app
+                    .rich
+                    .as_ref()
+                    .ok_or("rich session")?
+                    .measured_navigation_scroll_offset()
+                    .ok_or("measured manuscript scroll")?;
+                if current.is_finite() && current > 0.0 && previous == Some(current) {
+                    stable_frames += 1;
+                    if stable_frames == 3 {
+                        return Ok(current);
+                    }
+                } else {
+                    stable_frames = 0;
+                }
+                previous = Some(current);
+            }
+            Err("manuscript scroll did not settle within the bounded frame budget".into())
+        }
     }
 
     #[test]
@@ -348,15 +375,13 @@ mod tests {
         let rich = fixture.app.rich.as_mut().ok_or("rich session")?;
         rich.session.set_selection(selection.clone())?;
         rich.session.request_scroll_to_caret();
-        fixture.render();
+        let scroll = fixture.settled_manuscript_scroll()?;
+        // A no-action control frame must preserve the measured baseline before removal.
         fixture.render();
         let rich = fixture.app.rich.as_ref().ok_or("rich session")?;
         let revision = rich.session.revision();
-        let scroll = rich.measured_navigation_scroll_offset();
-        assert!(
-            scroll.is_some_and(|scroll| scroll > 0.0),
-            "fixture must measure a scrolled manuscript"
-        );
+        assert_eq!(rich.measured_navigation_scroll_offset(), Some(scroll));
+        assert_eq!(rich.session.selection(), Some(&selection));
         let note = fixture.note.clone();
         fixture.draft(&note, "She keeps the log to protect Lev.")?;
         fixture.app.quick_remove_note(&note)?;
@@ -369,17 +394,27 @@ mod tests {
                 .annotations(&fixture.document.id)?
                 .is_empty()
         );
+        // Keep observing long enough to catch a new delayed scroll from deletion itself.
+        for _ in 0..5 {
+            fixture.render();
+            let rich = fixture.app.rich.as_ref().ok_or("rich session")?;
+            assert_eq!(rich.session.selection(), Some(&selection));
+            assert_eq!(rich.session.revision(), revision);
+            assert_eq!(rich.measured_navigation_scroll_offset(), Some(scroll));
+        }
         fixture.app.undo_quick_markup()?;
         let restored = fixture.app.workspace.annotation(&note.id)?;
         assert_eq!(restored.id, note.id);
         assert_eq!(restored.note, "She keeps the log to protect Lev.");
         assert_eq!(restored.tags, note.tags);
         assert_eq!(restored.anchor, note.anchor);
-        fixture.render();
-        let rich = fixture.app.rich.as_ref().ok_or("rich session")?;
-        assert_eq!(rich.session.selection(), Some(&selection));
-        assert_eq!(rich.session.revision(), revision);
-        assert_eq!(rich.measured_navigation_scroll_offset(), scroll);
+        for _ in 0..5 {
+            fixture.render();
+            let rich = fixture.app.rich.as_ref().ok_or("rich session")?;
+            assert_eq!(rich.session.selection(), Some(&selection));
+            assert_eq!(rich.session.revision(), revision);
+            assert_eq!(rich.measured_navigation_scroll_offset(), Some(scroll));
+        }
         assert_eq!(
             fixture.app.workspace.document(&fixture.document.id)?,
             fixture.document
