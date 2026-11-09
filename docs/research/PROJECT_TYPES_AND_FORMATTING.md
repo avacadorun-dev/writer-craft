@@ -146,3 +146,38 @@ All four are draft research scenarios, with no native pass recorded. Public fixt
 Use the existing PT IDs in `docs/design/ROLE_JOURNEYS.md` for complete cross-surface acceptance, alongside the separate exhaustive capability inventory. Add a per-finding evidence kind (direct request / observed session / first-hand report / vendor documentation / design inference), source/date, falsifiable benefit hypothesis, contrary case, selection decision, test criterion and observed outcome. Do not relabel a proposed story as a completed user session. Existing comparison references remain initial evidence; no new interviews or representative demand estimates are claimed.
 
 Source baseline, explicitly requested enhancement and unselected hypothesis are separate statuses. H-LINK alternatives, specialized screenplay elements and creation-profile refinements remain pending decisions until researched and selected; source document references/promotion/types remain mandatory baseline #17. Research informs how a workflow becomes coherent without deleting its required abilities. #14 acceptance needs the justified choices and verified selected implementation, not only this document.
+
+
+## Kind audit verdicts and legacy mapping — 2026-11-09 decision record
+
+Each original kind is classified by its real audience/task distinction and mapped to the minimal mechanism that preserves it. Verdicts are evidence-labeled: [vendor documentation], [design inference], [first-hand report] from the comparison table above; no hands-on competitor evaluation is claimed.
+
+| Original kind | Distinction it carries | Verdict | Mechanism |
+|---|---|---|---|
+| `novel` | Long-form prose, chapter hierarchy, revision milestones | Backward-compatibility data only | Import whitelist + verbatim manifest preservation; native creation stays kindless |
+| `story` | Shorter prose, fewer structural expectations | Backward-compatibility data only | Same as `novel`; no separate behavior in the native app |
+| `screenplay` | Scene/element semantics, pagination by dialogue | Unselected hypothesis for alpha.3 | Element mode is not implemented; imported structure preserved as data |
+| `nonfiction` | Section/reference-oriented hierarchy | Backward-compatibility data only | Same import-preservation contract |
+| `game_design` | Entity/state/quest records alongside prose | Baseline via board/document types (owned by #17) | Existing card/relation types and promotion; no new entity engine |
+| `free` | No imposed structure | Current native creation default | Native projects export as `kind:"free"`, flat `document` hierarchy |
+| `custom` (+ custom schemas) | Owner-defined types/fields | Baseline, preserved losslessly | Unknown fields/types round-trip; schema extension requires explicit compatible migration |
+
+Decision: the seven keys are an import-compatibility inventory, not a validated creation taxonomy. Native project creation remains kindless; no reclassification happens on export; original manifests travel verbatim through `.wstudio` v1–8 and canonical format-2. A creation selector is an unselected hypothesis — adding one is a product decision requiring its own evidence, not proof of professional workflow completeness.
+
+## Baseline / requested / unselected classification
+
+- **Baseline (mandatory, tracked elsewhere):** seven-kind import contract above; existing document cards, references, promotion, rename/move and export/restore semantics (source document references and promotion belong to #17's board baseline).
+- **Requested enhancement (selected for alpha.3):** direct object sizing — image/visual-block exact-size with aspect lock and table column resize — implemented as guarded commands on the already-round-tripped `width`/`height`/`colwidth`/`align` attributes; no schema extension, so the v1–8 and editor-schema 1–4 contracts stay untouched. Connected-writing relationship scenarios PT-LINK-01/02, PT-CHAR-01, PT-LORE-01 remain draft research records; only navigation semantics are baseline, synchronization models stay unselected.
+- **Unselected hypothesis (alpha.4 material):** creation taxonomy selector; screenplay element mode; per-kind output/compile profiles; automatic board↔document/character/lore synchronization (H-LINK model choice beyond navigation); competitor-app hands-on evaluation; persona/task validation.
+
+## Formatting needs matrix (selected scope)
+
+| Capability | Evidence kind | Source | Selected? |
+|---|---|---|---|
+| Image exact width/height with aspect lock | Vendor documentation | Word resize docs; Scrivener image handling | Yes — alpha.3 |
+| Table column resize (drag + exact-size keyboard entry) | Vendor documentation + observed native parity need | Original editor colwidth support | Yes — alpha.3 |
+| One-gesture Undo, cancel/stale/read-only safety, durable save/reopen | Design inference from shared command rules | Existing guarded-command contract | Yes — acceptance criteria |
+| Screenplay element pagination | Unselected | — | No |
+| Compile/output profiles | Unselected | — | No |
+
+Implementation boundary: sizing commands reuse existing canonical attributes (`colwidth`, image `width`/`height`); unknown-field and original-media preservation is inherited from the round-trip suites; no `.wstudio`/schema version change is introduced.

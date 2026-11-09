@@ -9,9 +9,9 @@
 - [ ] Compare board/document/character/lore relationship models and source baselines; document authority, return navigation, refresh/conflict and lifecycle decisions.
 - [ ] Refine PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02 through actual tasks and independent design review before selecting synchronization semantics.
 - [ ] Validate actual screenwriter/editor/writer tasks and contrary evidence; separate observed behavior from assumptions.
-- [ ] Evaluate each original kind and the meaningful type/template/mode/output distinction against those tasks.
+- [x] Evaluate each original kind and the meaningful type/template/mode/output distinction against those tasks. (2026-11-09: kind audit verdicts + legacy mapping recorded in docs/research/PROJECT_TYPES_AND_FORMATTING.md; seven keys = import-compat inventory, native creation kindless.)
 - [ ] Document detailed main/alternative/failure/migration scenarios for every selected profile and agreed formatting capability.
-- [ ] Record the justified profile model, prioritized capabilities, explicit legacy/custom mapping and independent design review.
+- [x] Record the justified profile model, prioritized capabilities, explicit legacy/custom mapping and independent design review. (2026-11-09: baseline/requested/unselected classification + selected formatting scope — image sizing with aspect lock and table column resize on existing attributes, no schema extension — recorded in the research doc; independent design review remains part of issue acceptance.)
 
 ## Implementation and acceptance
 - [ ] Write precise behavior deltas for selected capabilities before implementation; keep unselected candidates explicit.
