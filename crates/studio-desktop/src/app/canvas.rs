@@ -3683,41 +3683,64 @@ impl StudioApp {
             }
         };
         let l = self.language;
-        ui.horizontal(|ui| {
-            ui.add_space(8.0);
-            icons::icon(ui, Icon::Board, 20.0, tokens.muted);
-            ui.label(RichText::new(l.text("Boards")).size(13.0).strong());
+        let id = ui.make_persistent_id(("navigator-boards", &project.id));
+        let state = egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            id,
+            self.canvas.is_some(),
+        );
+        let mut toggle = false;
+        let mut created = false;
+        let mut header = state.show_header(ui, |ui| {
+            toggle = ui
+                .add(
+                    egui::Button::new(RichText::new(l.text("Boards")).size(13.0).strong())
+                        .frame(false)
+                        .min_size(Vec2::new(0.0, 30.0)),
+                )
+                .clicked();
+            ui.label(
+                RichText::new(boards.len().to_string())
+                    .size(12.0)
+                    .color(tokens.muted),
+            );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if icons::icon_button(ui, Icon::Plus, l.text("Add board")).clicked() {
                     let result = self.create_board();
+                    created = result.is_ok();
                     self.record_error(result);
                 }
             });
         });
+        if toggle {
+            header.toggle();
+        }
+        if created {
+            header.set_open(true);
+        }
         let mut selected = None;
-        egui::ScrollArea::vertical()
-            .id_salt("canvas-navigation")
-            .max_height(180.0)
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for board in boards {
-                    let active = self
-                        .canvas
-                        .as_ref()
-                        .is_some_and(|state| state.snapshot.canvas.id == board.id);
-                    if nav_row(ui, Icon::Board, &board.title, active, tokens).clicked() {
-                        selected = Some(board.id);
+        header.body_unindented(|ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("canvas-navigation")
+                .max_height(132.0)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    for board in boards {
+                        let active = self
+                            .canvas
+                            .as_ref()
+                            .is_some_and(|state| state.snapshot.canvas.id == board.id);
+                        if nav_row(ui, Icon::Board, &board.title, active, tokens).clicked() {
+                            selected = Some(board.id);
+                        }
                     }
-                }
-            });
+                });
+        });
         if let Some(id) = selected {
             let result = self.open_canvas(&id);
             self.record_error(result);
         }
-        ui.add_space(12.0);
-        ui.separator();
-        ui.add_space(12.0);
     }
     pub(super) fn poll_canvas(&mut self, ctx: &egui::Context) {
         let Some(state) = &mut self.canvas else {

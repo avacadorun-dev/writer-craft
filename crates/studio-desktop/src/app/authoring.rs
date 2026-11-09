@@ -741,28 +741,11 @@ pub(super) fn toolbar(
                         rich.session.request_canvas_focus(ui.ctx());
                     }
                 }
-                if !minimal
-                    && icons::icon_button(ui, Icon::Search, l.text("Find in document")).clicked()
-                {
-                    rich.find_requested = true;
-                }
                 let more = icons::icon_button(ui, Icon::More, l.text("More formatting"));
                 egui::Popup::menu(&more).show(|ui| {
                     egui::ScrollArea::vertical()
                         .max_height((ui.ctx().content_rect().height() - 120.0).max(160.0))
                         .show(ui, |ui| {
-                            if icons::labeled_button(
-                                ui,
-                                Icon::Search,
-                                l.text("Find in document"),
-                                false,
-                            )
-                            .clicked()
-                            {
-                                rich.find_requested = true;
-                                ui.close();
-                            }
-                            ui.separator();
                             if minimal {
                                 for (mark, label) in [
                                     ("bold", "Bold"),

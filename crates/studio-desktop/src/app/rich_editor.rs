@@ -258,7 +258,10 @@ impl StudioApp {
             return Err(super::project_tree::TrashedDocument.into());
         }
         let outline = super::project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
-        let mut tree_ui = super::project_tree::TreeUi::with_nodes(nodes);
+        let mut tree_ui = super::project_tree::TreeUi::with_structure(
+            nodes,
+            self.workspace.project_structure(&project.id)?,
+        );
         tree_ui.selected = tree_ui
             .nodes
             .iter()
@@ -496,7 +499,7 @@ impl StudioApp {
         } else {
             bounds.width()
         };
-        let gutter = if floating { 28.0 } else { 0.0 };
+        let gutter = if floating { 16.0 } else { 0.0 };
         let surface_rect = egui::Rect::from_min_size(
             egui::pos2(bounds.center().x - width * 0.5, bounds.top() + gutter),
             egui::vec2(width, (bounds.height() - gutter * 2.0).max(0.0)),
@@ -583,7 +586,7 @@ impl StudioApp {
                                 ui.add_space(((available - width) * 0.5).max(0.0));
                                 ui.vertical(|ui| {
                                     ui.set_width(width);
-                                    ui.add_space(28.0);
+                                    ui.add_space(18.0);
                                     if rich.read_only {
                                         ui.label(
                                             RichText::new(l.text(if rich.recovery_read_only {

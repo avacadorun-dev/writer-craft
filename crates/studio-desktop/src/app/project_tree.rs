@@ -9,6 +9,7 @@ impl std::fmt::Display for TrashedDocument {
         f.write_str("The requested document or its parent is in Trash")
     }
 }
+
 impl std::error::Error for TrashedDocument {}
 
 #[derive(Clone)]
@@ -21,6 +22,58 @@ pub(super) enum TreeAction {
     Move(String),
     Trash(String),
     Restore(String),
+    Drop(Box<TreeDrop>),
+    BeginDrag(Box<super::project_navigation::OutlineDrag>, egui::Context),
+}
+
+#[derive(Clone)]
+pub(super) struct TreeDrop {
+    pub(super) project: String,
+    pub(super) structure: ImportedProjectStructure,
+    pub(super) original: ProjectTreeNode,
+    pub(super) targets: Vec<ProjectTreeNode>,
+    pub(super) parent: Option<String>,
+    pub(super) before: Option<String>,
+}
+
+struct TreeSaveAck {
+    document: String,
+    before: i64,
+    after: i64,
+}
+
+fn checked_drop_node<'a>(
+    project: &str,
+    expected: &ProjectTreeNode,
+    nodes: &'a [ProjectTreeNode],
+) -> studio_core::Result<&'a ProjectTreeNode> {
+    nodes
+        .iter()
+        .find(|node| node.logical_id == expected.logical_id && *node == expected)
+        .ok_or_else(|| studio_core::StudioError::ProjectNodeChanged {
+            project_id: project.into(),
+            node_id: expected.logical_id.clone(),
+        })
+}
+
+fn node_after_own_save(
+    project: &str,
+    original: &ProjectTreeNode,
+    nodes: &[ProjectTreeNode],
+    acknowledgement: Option<&TreeSaveAck>,
+) -> studio_core::Result<ProjectTreeNode> {
+    let mut expected = original.clone();
+    if let Some(saved) = acknowledgement
+        && original.document_id.as_deref() == Some(saved.document.as_str())
+        && original.metadata["currentRevision"].as_i64() == Some(saved.before)
+        && saved.after > saved.before
+    {
+        // Only this acknowledged text revision may advance. Parent, title, order and every
+        // extension field still match the drag snapshot; an external edit is never refreshed away.
+        expected.metadata["currentRevision"] = serde_json::json!(saved.after);
+    }
+    checked_drop_node(project, &expected, nodes)?;
+    Ok(expected)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -48,6 +101,7 @@ struct TreeDialog {
 #[derive(Default)]
 pub(super) struct TreeUi {
     pub(super) nodes: Vec<ProjectTreeNode>,
+    pub(super) structure: Option<ImportedProjectStructure>,
     paths: std::collections::HashMap<String, String>,
     pub(super) selected: Option<String>,
     dialog: Option<TreeDialog>,
@@ -60,6 +114,15 @@ impl TreeUi {
             paths: node_paths(&nodes),
             nodes,
             ..Self::default()
+        }
+    }
+    pub(super) fn with_structure(
+        nodes: Vec<ProjectTreeNode>,
+        structure: ImportedProjectStructure,
+    ) -> Self {
+        Self {
+            structure: Some(structure),
+            ..Self::with_nodes(nodes)
         }
     }
     pub(super) fn modal_open(&self) -> bool {
@@ -139,7 +202,7 @@ fn allowed_kinds(
     allowed_for_kind(structure, parent_kind, parent.is_none())
 }
 
-fn allowed_for_kind(
+pub(super) fn allowed_for_kind(
     structure: &ImportedProjectStructure,
     parent_kind: Option<&str>,
     root: bool,
@@ -188,6 +251,121 @@ fn type_label<'a>(native_labels: bool, key: &'a str, stored: &'a str, l: Languag
 }
 
 impl StudioApp {
+    fn save_tree_context(&mut self, project: &str) -> AppResult<Option<TreeSaveAck>> {
+        let saving = self
+            .document
+            .as_ref()
+            .filter(|document| self.dirty.is_some() && document.project_id == project)
+            .map(|document| (document.id.clone(), document.revision));
+        self.save_explicit()?;
+        if self.dirty.is_some() {
+            return Err(studio_core::StudioError::Validation(
+                "Finish saving the current text before moving this item".into(),
+            )
+            .into());
+        }
+        Ok(saving.and_then(|(id, revision)| {
+            self.document.as_ref().and_then(|document| {
+                (document.id == id && document.project_id == project).then_some(TreeSaveAck {
+                    document: id,
+                    before: revision,
+                    after: document.revision,
+                })
+            })
+        }))
+    }
+
+    fn begin_tree_drag(
+        &mut self,
+        mut drag: super::project_navigation::OutlineDrag,
+        ctx: &egui::Context,
+    ) -> AppResult<()> {
+        if self.project.as_ref().map(|project| project.id.as_str()) != Some(drag.project.as_str()) {
+            return Err("tree_document_scope_changed".into());
+        }
+        let structure = self.workspace.project_structure(&drag.project)?;
+        if structure != drag.structure {
+            return Err(studio_core::StudioError::ProjectStructureConflict {
+                expected: drag.structure.revision,
+                actual: structure.revision,
+            }
+            .into());
+        }
+        let before = self.workspace.initialize_project_tree(&drag.project)?;
+        checked_drop_node(&drag.project, &drag.original, &before)?;
+        // A clean drag source cannot race the editor's ordinary 650 ms autosave during hover.
+        // This acknowledges authored text only; hierarchy mutation still waits for release.
+        let saved = self.save_tree_context(&drag.project)?;
+        let after = self.workspace.initialize_project_tree(&drag.project)?;
+        drag.original = node_after_own_save(&drag.project, &drag.original, &after, saved.as_ref())?;
+        self.refresh_project_tree()?;
+        if ctx.input(|input| input.pointer.primary_down() && !input.key_pressed(egui::Key::Escape))
+        {
+            egui::DragAndDrop::set_payload(ctx, drag);
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+
+    fn apply_tree_drop(&mut self, request: &TreeDrop) -> AppResult<()> {
+        if self.project.as_ref().map(|project| project.id.as_str())
+            != Some(request.project.as_str())
+        {
+            return Err("tree_document_scope_changed".into());
+        }
+        let structure = self.workspace.project_structure(&request.project)?;
+        if structure != request.structure {
+            return Err(studio_core::StudioError::ProjectStructureConflict {
+                expected: request.structure.revision,
+                actual: structure.revision,
+            }
+            .into());
+        }
+        let before = self.workspace.initialize_project_tree(&request.project)?;
+        checked_drop_node(&request.project, &request.original, &before)?;
+        for target in &request.targets {
+            checked_drop_node(&request.project, target, &before)?;
+        }
+        let acknowledgement = self.save_tree_context(&request.project)?;
+        let after = self.workspace.initialize_project_tree(&request.project)?;
+        let original = node_after_own_save(
+            &request.project,
+            &request.original,
+            &after,
+            acknowledgement.as_ref(),
+        )?;
+        let targets = request
+            .targets
+            .iter()
+            .map(|target| {
+                node_after_own_save(&request.project, target, &after, acknowledgement.as_ref())
+            })
+            .collect::<studio_core::Result<Vec<_>>>()?;
+        let structure = self.workspace.project_structure(&request.project)?;
+        if structure != request.structure {
+            return Err(studio_core::StudioError::ProjectStructureConflict {
+                expected: request.structure.revision,
+                actual: structure.revision,
+            }
+            .into());
+        }
+        let moved = self.workspace.move_project_tree_node_at_snapshot(
+            &request.structure,
+            &original,
+            &targets,
+            request.parent.as_deref(),
+            request.before.as_deref(),
+        )?;
+        // A durable drop is consumed once even if refreshing its presentation fails.
+        if let Err(error) = self.acknowledge_tree_change(Operation::Move, &moved) {
+            self.error = Some(UiError {
+                msgid: "The item was saved. Refresh the project to see it.",
+                details: error.to_string(),
+            });
+        }
+        Ok(())
+    }
+
     pub(super) fn refresh_project_tree(&mut self) -> AppResult<()> {
         let Some(project) = self.project.as_ref() else {
             return Ok(());
@@ -197,10 +375,17 @@ impl StudioApp {
         self.project_outline.refresh(&project.id, &nodes)?;
         self.tree_ui.paths = node_paths(&nodes);
         self.tree_ui.nodes = nodes;
+        self.tree_ui.structure = Some(self.workspace.project_structure(&project.id)?);
         Ok(())
     }
 
     pub(super) fn tree_action(&mut self, action: TreeAction) -> AppResult<()> {
+        if let TreeAction::BeginDrag(drag, ctx) = action {
+            return self.begin_tree_drag(*drag, &ctx);
+        }
+        if let TreeAction::Drop(request) = action {
+            return self.apply_tree_drop(&request);
+        }
         self.save_explicit()?;
         self.refresh_project_tree()?;
         let project = self
@@ -254,7 +439,12 @@ impl StudioApp {
             | TreeAction::Move(id)
             | TreeAction::Trash(id)
             | TreeAction::Restore(id) => id,
-            TreeAction::Create(_) | TreeAction::OpenDocument(_, _) => return Ok(()),
+            TreeAction::Create(_)
+            | TreeAction::OpenDocument(_, _)
+            | TreeAction::Drop(_)
+            | TreeAction::BeginDrag(_, _) => {
+                return Ok(());
+            }
         };
         let node = self
             .tree_ui
@@ -619,5 +809,91 @@ impl StudioApp {
                 self.record_error(result);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+    type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    #[test]
+    fn acknowledged_text_save_can_move_once_but_cannot_refresh_away_a_foreign_rename() -> TestResult
+    {
+        let workspace = studio_core::Workspace::memory()?;
+        let project = workspace.create_project("Drop acknowledgement")?;
+        let document = workspace.create_document(&project.id, "Scene", "Before the move.")?;
+        let folder =
+            workspace.create_project_tree_node(&project.id, 1, None, "folder", "Chapter")?;
+        let structure = workspace.project_structure(&project.id)?;
+        let before = workspace.initialize_project_tree(&project.id)?;
+        let original = before
+            .iter()
+            .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            .ok_or("missing scene")?;
+        let saved = workspace.save_document(
+            &document.id,
+            document.revision,
+            "Draft saved before dragging.",
+        )?;
+        let acknowledgement = TreeSaveAck {
+            document: document.id.clone(),
+            before: document.revision,
+            after: saved.revision,
+        };
+        let after = workspace.initialize_project_tree(&project.id)?;
+        assert!(checked_drop_node(&project.id, original, &after).is_err());
+        let updated = node_after_own_save(&project.id, original, &after, Some(&acknowledgement))?;
+        let moved = workspace.move_project_tree_node_at_snapshot(
+            &structure,
+            &updated,
+            std::slice::from_ref(&folder),
+            Some(&folder.logical_id),
+            None,
+        )?;
+        assert_eq!(moved.metadata["parentId"], folder.logical_id);
+        assert_eq!(
+            workspace.document(&document.id)?.body,
+            "Draft saved before dragging."
+        );
+        assert!(
+            workspace
+                .move_project_tree_node_at_snapshot(
+                    &structure,
+                    &updated,
+                    std::slice::from_ref(&folder),
+                    Some(&folder.logical_id),
+                    None
+                )
+                .is_err()
+        );
+
+        let saved_again =
+            workspace.save_document(&document.id, saved.revision, "Another acknowledged draft.")?;
+        let after_save = workspace.initialize_project_tree(&project.id)?;
+        let current = after_save
+            .iter()
+            .find(|node| node.logical_id == moved.logical_id)
+            .ok_or("missing moved scene")?;
+        workspace.rename_project_tree_node(&project.id, current, "A concurrent title")?;
+        let acknowledgement = TreeSaveAck {
+            document: document.id.clone(),
+            before: saved.revision,
+            after: saved_again.revision,
+        };
+        assert!(
+            node_after_own_save(
+                &project.id,
+                &moved,
+                &workspace.initialize_project_tree(&project.id)?,
+                Some(&acknowledgement)
+            )
+            .is_err()
+        );
+        assert_eq!(
+            workspace.document(&document.id)?.title,
+            "A concurrent title"
+        );
+        Ok(())
     }
 }

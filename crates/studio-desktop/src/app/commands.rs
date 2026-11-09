@@ -11,7 +11,7 @@ impl StudioApp {
             egui::containers::panel::PanelState::load(&ctx, egui::Id::new("inspector"))
                 .map_or(320.0, |state| state.outer_rect.width().clamp(280.0, 460.0));
         egui::Panel::top("commands")
-            .exact_size(48.0)
+            .exact_size(36.0)
             .resizable(false)
             .frame(egui::Frame::new().fill(t.panel))
             .show(ui, |ui| {
@@ -31,7 +31,7 @@ impl StudioApp {
                 }
                 ui.scope_builder(
                     egui::UiBuilder::new()
-                        .max_rect(identity.shrink2(egui::vec2(12.0, 5.0)))
+                        .max_rect(identity.shrink2(egui::vec2(12.0, 3.0)))
                         .layout(Layout::left_to_right(Align::Center)),
                     |ui| {
                         ui.set_clip_rect(identity);
@@ -39,9 +39,9 @@ impl StudioApp {
                             ui.add_space(76.0);
                         }
                         ui.spacing_mut().item_spacing.x = 8.0;
-                        crate::brand::mark(ui, 32.0);
+                        crate::brand::mark(ui, 24.0);
                         ui.add(
-                            egui::Label::new(RichText::new("WriterCraft").size(17.0).strong())
+                            egui::Label::new(RichText::new("WriterCraft").size(15.0).strong())
                                 .truncate(),
                         )
                         .on_hover_text("WriterCraft");
@@ -58,7 +58,7 @@ impl StudioApp {
                 }
                 ui.scope_builder(
                     egui::UiBuilder::new()
-                        .max_rect(commands.shrink2(egui::vec2(12.0, 5.0)))
+                        .max_rect(commands.shrink2(egui::vec2(12.0, 3.0)))
                         .layout(Layout::left_to_right(Align::Center)),
                     |ui| {
                         ui.set_clip_rect(commands);

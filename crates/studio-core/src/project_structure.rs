@@ -322,12 +322,64 @@ impl Workspace {
         parent: Option<&str>,
         before: Option<&str>,
     ) -> Result<ProjectTreeNode> {
+        self.move_project_tree_node_checked(project, expected, parent, before, None)
+    }
+
+    /// Commit a move against the exact schema and destination snapshots shown to the author.
+    /// Source, parent, sibling and additional hovered targets are checked under the same
+    /// write transaction as placement, so a concurrent change cannot redirect the drop.
+    pub fn move_project_tree_node_at_snapshot(
+        &self,
+        expected_structure: &ImportedProjectStructure,
+        expected: &ProjectTreeNode,
+        expected_targets: &[ProjectTreeNode],
+        parent: Option<&str>,
+        before: Option<&str>,
+    ) -> Result<ProjectTreeNode> {
+        for id in [parent, before].into_iter().flatten() {
+            if id != expected.logical_id
+                && !expected_targets
+                    .iter()
+                    .any(|target| target.logical_id == id)
+            {
+                return invalid("Capture the destination again before moving this item");
+            }
+        }
+        self.move_project_tree_node_checked(
+            &expected_structure.project_id,
+            expected,
+            parent,
+            before,
+            Some((expected_structure, expected_targets)),
+        )
+    }
+
+    fn move_project_tree_node_checked(
+        &self,
+        project: &str,
+        expected: &ProjectTreeNode,
+        parent: Option<&str>,
+        before: Option<&str>,
+        destination: Option<(&ImportedProjectStructure, &[ProjectTreeNode])>,
+    ) -> Result<ProjectTreeNode> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         require_project(&transaction, project)?;
         let mut current = guarded_node(&transaction, project, expected)?;
         require_active_branch(&transaction, project, &current)?;
         let structure = require_structure(&transaction, project)?;
+        if let Some((expected_structure, targets)) = destination {
+            if structure != *expected_structure {
+                return Err(StudioError::ProjectStructureConflict {
+                    expected: expected_structure.revision,
+                    actual: structure.revision,
+                });
+            }
+            for target in targets {
+                let target = guarded_node(&transaction, project, target)?;
+                require_active_branch(&transaction, project, &target)?;
+            }
+        }
         let kind = current.metadata["kind"]
             .as_str()
             .ok_or_else(|| StudioError::CorruptData("Project node kind is missing".into()))?;
@@ -356,11 +408,7 @@ impl Workspace {
         }
         let mut siblings: Vec<_> = nodes
             .into_iter()
-            .filter(|node| {
-                node.logical_id != current.logical_id
-                    && node.metadata["parentId"].as_str() == parent
-                    && !is_trashed(node)
-            })
+            .filter(|node| node.metadata["parentId"].as_str() == parent && !is_trashed(node))
             .collect();
         for node in &siblings {
             position(node)?;
@@ -378,6 +426,12 @@ impl Workspace {
                 .then(a.ordinal.cmp(&b.ordinal))
                 .then(a.logical_id.cmp(&b.logical_id))
         });
+        let previous_index = siblings
+            .iter()
+            .position(|node| node.logical_id == current.logical_id);
+        if let Some(index) = previous_index {
+            siblings.remove(index);
+        }
         let index = match before {
             Some(id) => siblings
                 .iter()
@@ -389,6 +443,12 @@ impl Workspace {
                 })?,
             None => siblings.len(),
         };
+        if previous_index == Some(index) {
+            // A drop into its existing slot does not rewrite snapshots or invalidate
+            // another author's captured tree merely to restate the current order.
+            transaction.commit()?;
+            return Ok(current);
+        }
         current.metadata["parentId"] = json!(parent);
         current.metadata["updatedAt"] = json!(timestamp(&transaction)?);
         siblings.insert(index, current);

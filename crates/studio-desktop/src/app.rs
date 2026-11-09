@@ -402,6 +402,7 @@ impl StudioApp {
         self.save()?;
         let documents = self.workspace.list_documents(&project.id)?;
         let nodes = self.workspace.initialize_project_tree(&project.id)?;
+        let structure = self.workspace.project_structure(&project.id)?;
         let outline = project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
         let first = documents
             .iter()
@@ -431,7 +432,7 @@ impl StudioApp {
         }
         self.documents = documents;
         self.project_outline = outline;
-        self.tree_ui = project_tree::TreeUi::with_nodes(nodes);
+        self.tree_ui = project_tree::TreeUi::with_structure(nodes, structure);
         self.tree_ui.selected = self
             .document
             .as_ref()
