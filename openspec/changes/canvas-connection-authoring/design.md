@@ -5,3 +5,12 @@ Keep the acknowledged CanvasSession as authority. Place connection UI in a priva
 Host tool clicks capture the tool before toolbar processing, require press and release inside the allocated clipped board on its active UI layer, and use egui click recognition to exclude drags. Clear transient press on release, tool switch, cancellation or blocked input. Resolve overlapping cards in reverse paint order. Preserve the Select tool's existing empty-board double click. A temporary connection line is paint-only. Existing edges are reachable through a bounded, localized connection list with a label editor and delete action.
 
 Follow native-canvas-integration authority and F-42/F-45. Engine mechanics remain in craft-canvas; app-specific selection, labels and localization stay here. No public raw user fixtures.
+
+
+## B15 omission review: endpoints and visual semantics
+
+Independent original-source audit at app6832125/engine69f2382 confirms four-side CardHandles, reconnection, same-card/different-handle loops, smooth-step paths, directional markers and double-clickable labels. Whole-card same-card refusal cannot qualify explicit side workflows. The existing model already supplies exact ConnectorEndpoint/ReconnectEdge and parsed arrow ends; reuse those operations for the host properties draft. Preserve omitted sides as captured data rather than migrating imported fields implicitly.
+
+The host owns native creation handles and the compact connection properties editor, extending the existing base-bound label draft. Guarded Save batches deliberate endpoint/label edits into one board transaction and closes only on the exact durable acknowledgement; Cancel and reload/recovery retain their established semantics. Keep all menu, keyboard and direct-label entries on this single authority.
+
+Generic smooth-step geometry, arrow rendering, edge hit-testing and edge-only keyboard deletion belong in CraftCanvas. Add derived route/label geometry to the native view output so host label placement and engine edge hit regions agree. Qualify the engine revision on hosted checks before adoption. Source defaults are rendering behavior, never a reason to rewrite unknown or omitted canonical fields. B13 edge colors and B16 relation-type assignment remain explicit cross-row obligations; this change does not accept those rows by inference.

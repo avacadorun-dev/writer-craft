@@ -23,3 +23,24 @@ Authors SHALL select existing board connections, edit Unicode labels, cancel uns
 #### Scenario: Cancel or stale label edit
 - WHEN a label edit is cancelled or its captured board base is stale
 - THEN canonical content remains unchanged and stale unsaved text stays available for deliberate recovery
+
+
+### Requirement: Source-compatible connection endpoints
+
+Connection creation SHALL expose the four side anchors of each connectable card. Authors SHALL be able to reconnect either end of an existing connection through a guarded native editor. An operation SHALL capture the exact prior node and optional side; changing one end SHALL preserve the connection identity, other end, label, colors, relation metadata and unknown fields. Same-card connections between different explicit side handles SHALL remain authorable. Cancelled and stale edits SHALL NOT mutate canonical content.
+
+#### Scenario: Connect and reconnect explicit side handles
+- WHEN an author connects two chosen side handles, edits one endpoint, saves and uses Undo/Redo
+- THEN the visible route reflects the acknowledged endpoint sides and the unchanged connection data survives every revision and reopen
+
+#### Scenario: Same-card loop and stale endpoint
+- WHEN an author connects different handles of one card or edits an endpoint after its captured base is replaced
+- THEN the distinct-handle loop is valid, while the stale edit refuses without losing the copyable draft
+
+### Requirement: Reachable connection interaction and visual semantics
+
+Stored connections SHALL show source-compatible routed paths and source/target arrow markers without rewriting imported omitted fields. Painting and pointer selection SHALL share derived geometry, preserve node hit priority and respect viewport clipping/zoom. Authors SHALL select an edge directly and delete edge-only selection from the keyboard; double-clicking its visible label SHALL open the same guarded editor as its contextual menu entry.
+
+#### Scenario: Select, edit and delete a routed connection
+- WHEN an author selects the rendered connection, double-clicks its label or deletes an edge-only selection
+- THEN the exact targeted connection responds without dragging/deleting unrelated cards, and its label remains positioned on the route

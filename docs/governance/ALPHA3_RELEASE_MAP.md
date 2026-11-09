@@ -47,6 +47,8 @@ Closed 2026-11-09 under lean verification: all block commands reachable in the g
 
 Inventory B01–B26. Builds on the qualified #15 input engine but requires its own exact native evidence and independent omission review of the inventory. #15 or #10 completion does not accept #17.
 
+Current bounded progress (2026-11-09): input routing and compiled Canvas inline/cancel/clipped captures pass at68ddfd8; connection selection/label/delete integration6832125 is under hosted/native review. Endpoint/anchor/marker behavior and the remaining B01–B26 scope are still pending. See the latest alpha.3 progress record; this is not issue acceptance.
+
 ### P8 — #11 portable exports with assets
 
 Adopt `docs/verification/PORTABILITY_ALPHA3_HANDOFF.md`; selected format-2 privacy/reference closure, conservative recovery, paused restore confirmation, independent reader/native/private/large-workload evidence.
