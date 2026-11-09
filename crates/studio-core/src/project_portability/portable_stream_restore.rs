@@ -37,6 +37,13 @@ impl ProjectImportWorker {
             .ok_or_else(|| StudioError::Validation("Native project metadata is missing".into()))?;
         let logical = id(&project_record, "logicalId")?;
         let title = text(&project_record, "title", 120)?;
+        let labels = project_record
+            .get("labelCatalog")
+            .map(|value| json_object(stream, value, super::MAX_PROJECT_MANIFEST_BYTES as u64))
+            .transpose()?;
+        if let Some(labels) = &labels {
+            crate::project_labels::validate_catalog(labels)?;
+        }
         let raw = match stream.header.source_original() {
             Some(reference) => String::from_utf8(load(
                 stream,
@@ -65,6 +72,9 @@ impl ProjectImportWorker {
         restore_assets(&transaction, &imported.project_id, stream, cancel)?;
         restore_canvases(&transaction, &imported.project_id, stream, cancel)?;
         restore_notes(&transaction, &imported.project_id, stream, cancel)?;
+        if let Some(labels) = &labels {
+            crate::project_labels::restore_catalog(&transaction, &imported.project_id, labels)?;
+        }
         restore_opaque(&transaction, &imported.project_id, stream, cancel)?;
         restore_preservation(&transaction, &imported.project_id, stream, cancel)?;
         imported.node_count = checked_count(
@@ -1109,7 +1119,7 @@ fn restore_preservation(
 }
 fn known_fields(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
-        "project" => &["logicalId", "title"],
+        "project" => &["logicalId", "title", "labelCatalog"],
         "nodes" => &[
             "logicalId",
             "nativeHandle",

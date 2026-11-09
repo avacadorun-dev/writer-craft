@@ -497,8 +497,10 @@ fn schema_eight_upgrade_should_preserve_canonical_data_and_create_an_empty_revie
     };
     {
         let raw = rusqlite::Connection::open(&path).unwrap();
-        raw.execute_batch("DROP TABLE rich_proposals; PRAGMA user_version=8;")
-            .unwrap();
+        raw.execute_batch(
+            "DROP TABLE project_label_catalog; DROP TABLE rich_proposals; PRAGMA user_version=8;",
+        )
+        .unwrap();
     }
     let workspace = Workspace::open(path).unwrap();
     assert_eq!(workspace.document(&document.id).unwrap(), document);

@@ -190,6 +190,7 @@ pub struct ProjectTagSnapshot {
     project_id: String,
     tag: String,
     targets: Vec<ProjectAnnotationSummary>,
+    catalog: crate::ProjectLabelCatalog,
 }
 impl ProjectTagSnapshot {
     /// Exact case-sensitive label being changed.
@@ -198,13 +199,27 @@ impl ProjectTagSnapshot {
     }
     /// Number of active passage records that the operation will change.
     pub fn count(&self) -> usize {
-        self.targets.len()
+        self.targets
+            .iter()
+            .filter(|target| !target.annotation.deleted)
+            .count()
+    }
+    /// Deleted current records also renamed, while their previous history remains immutable.
+    pub fn deleted_count(&self) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| target.annotation.deleted)
+            .count()
     }
     /// Records that would become empty and therefore move to deleted markup.
     pub fn tag_only_count(&self) -> usize {
         self.targets
             .iter()
-            .filter(|target| target.annotation.tags.len() == 1 && target.annotation.note.is_empty())
+            .filter(|target| {
+                !target.annotation.deleted
+                    && target.annotation.tags.len() == 1
+                    && target.annotation.note.is_empty()
+            })
             .count()
     }
 }
@@ -431,12 +446,53 @@ impl Workspace {
         note: &str,
         tags: &[String],
     ) -> Result<PassageAnnotation> {
+        self.create_markup(document_id, expected_revision, anchor, note, tags, None)
+    }
+
+    /// Create markup from an exact reviewed label picker; renamed/retired labels never reappear.
+    pub fn create_tagged_annotation_with_labels(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+        anchor: AnnotationAnchor,
+        note: &str,
+        tags: &[String],
+        labels: &crate::ProjectLabelCatalog,
+    ) -> Result<PassageAnnotation> {
+        self.create_markup(
+            document_id,
+            expected_revision,
+            anchor,
+            note,
+            tags,
+            Some(labels),
+        )
+    }
+
+    fn create_markup(
+        &self,
+        document_id: &str,
+        expected_revision: i64,
+        anchor: AnnotationAnchor,
+        note: &str,
+        tags: &[String],
+        labels: Option<&crate::ProjectLabelCatalog>,
+    ) -> Result<PassageAnnotation> {
         validate_tags(tags)?;
         let note = normalize_markup_note(note, tags)?;
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let document = read_document(&transaction, document_id)?;
         require_revision(&document, expected_revision)?;
+        if let Some(labels) = labels {
+            crate::project_labels::guard_assignments(
+                &transaction,
+                &document.project_id,
+                labels,
+                tags,
+                false,
+            )?;
+        }
         let anchor = verified_anchor(&rich_tree(&document)?, &anchor)?;
         let result = PassageAnnotation {
             id: uuid::Uuid::new_v4().to_string(),
@@ -450,6 +506,7 @@ impl Workspace {
             anchor_status: AnchorStatus::Attached,
             deleted: false,
         };
+        crate::project_labels::ensure_assignments(&transaction, &document.project_id, tags, false)?;
         transaction.execute("INSERT INTO document_annotations(id,document_id,revision,annotation_json) VALUES(?1,?2,1,?3)", params![result.id, document_id, serde_json::to_string(&result)?])?;
         append_event(&transaction, None, &result, "create")?;
         save_attachment(&transaction, &result, expected_revision)?;
@@ -508,6 +565,45 @@ impl Workspace {
         patch: AnnotationPatch,
         tags: Option<Vec<String>>,
     ) -> Result<PassageAnnotation> {
+        self.update_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            patch,
+            tags,
+            None,
+        )
+    }
+
+    /// Save an authored picker draft only while its exact project label catalog remains current.
+    pub fn update_annotation_markup_with_labels(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        patch: AnnotationPatch,
+        tags: Option<Vec<String>>,
+        labels: &crate::ProjectLabelCatalog,
+    ) -> Result<PassageAnnotation> {
+        self.update_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            patch,
+            tags,
+            Some(labels),
+        )
+    }
+
+    fn update_markup(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        patch: AnnotationPatch,
+        tags: Option<Vec<String>>,
+        labels: Option<&crate::ProjectLabelCatalog>,
+    ) -> Result<PassageAnnotation> {
         if patch.note.is_none() && patch.status.is_none() && tags.is_none() {
             return Err(StudioError::Validation("Annotation update is empty".into()));
         }
@@ -516,6 +612,7 @@ impl Workspace {
             expected_document_revision,
             expected_annotation_revision,
             "update",
+            labels,
             |_, annotation| {
                 if let Some(tags) = tags {
                     validate_tags(&tags)?;
@@ -547,6 +644,7 @@ impl Workspace {
             expected_document_revision,
             expected_annotation_revision,
             "reattach",
+            None,
             |document, annotation| {
                 annotation.anchor = verified_anchor(&rich_tree(document)?, &anchor)?;
                 annotation.anchor_status = AnchorStatus::Attached;
@@ -567,6 +665,7 @@ impl Workspace {
             expected_document_revision,
             expected_annotation_revision,
             "delete",
+            None,
             |_, annotation| {
                 annotation.deleted = true;
                 Ok(())
@@ -583,6 +682,37 @@ impl Workspace {
         expected_document_revision: i64,
         expected_annotation_revision: i64,
     ) -> Result<PassageAnnotation> {
+        self.restore_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            None,
+        )
+    }
+
+    /// Restore after disclosing any retained labels/colors under the same catalog snapshot.
+    pub fn restore_annotation_with_labels(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        labels: &crate::ProjectLabelCatalog,
+    ) -> Result<PassageAnnotation> {
+        self.restore_markup(
+            id,
+            expected_document_revision,
+            expected_annotation_revision,
+            Some(labels),
+        )
+    }
+
+    fn restore_markup(
+        &self,
+        id: &str,
+        expected_document_revision: i64,
+        expected_annotation_revision: i64,
+        labels: Option<&crate::ProjectLabelCatalog>,
+    ) -> Result<PassageAnnotation> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let before = read_annotation(&transaction, id, true)?;
@@ -591,6 +721,15 @@ impl Workspace {
         }
         let document = read_document(&transaction, &before.document_id)?;
         require_revision(&document, expected_document_revision)?;
+        if let Some(labels) = labels {
+            crate::project_labels::guard_assignments(
+                &transaction,
+                &document.project_id,
+                labels,
+                &before.tags,
+                true,
+            )?;
+        }
         let tree = rich_tree(&document)?;
         if before.revision != expected_annotation_revision {
             return Err(StudioError::AnnotationConflict {
@@ -607,6 +746,12 @@ impl Workspace {
         }
         after.revision = next_revision(before.revision)?;
         after.base_revision = document.revision;
+        crate::project_labels::ensure_assignments(
+            &transaction,
+            &document.project_id,
+            &after.tags,
+            true,
+        )?;
         store_annotation(&transaction, &before, &after, "restore")?;
         save_attachment(&transaction, &after, document.revision)?;
         transaction.commit()?;
@@ -619,10 +764,11 @@ impl Workspace {
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Deferred)?;
         super::require_project(&transaction, project_id)?;
+        let catalog = crate::project_labels::read_catalog(&transaction, project_id)?;
         let targets = tag_targets(&transaction, project_id, tag)?;
-        if targets.is_empty() {
+        if !catalog.labels().iter().any(|label| label.name == tag) {
             return Err(StudioError::Validation(
-                "This tag has no current passages".into(),
+                "This project label is not active; restore it before changing it".into(),
             ));
         }
         transaction.commit()?;
@@ -630,6 +776,7 @@ impl Workspace {
             project_id: project_id.into(),
             tag: tag.into(),
             targets,
+            catalog,
         })
     }
 
@@ -640,9 +787,6 @@ impl Workspace {
         replacement: &str,
     ) -> Result<usize> {
         validate_tags(&[replacement.to_owned()])?;
-        if replacement == snapshot.tag {
-            return Ok(0);
-        }
         self.change_project_tag(snapshot, Some(replacement))
     }
 
@@ -660,20 +804,25 @@ impl Workspace {
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         super::require_project(&transaction, &snapshot.project_id)?;
+        crate::project_labels::guard_catalog(&transaction, &snapshot.catalog)?;
         if tag_targets(&transaction, &snapshot.project_id, &snapshot.tag)? != snapshot.targets {
             return Err(StudioError::Validation(
                 "The tagged passages changed; review the project tag again".into(),
             ));
         }
-        if let Some(replacement) = replacement
-            && !tag_targets(&transaction, &snapshot.project_id, replacement)?.is_empty()
-        {
-            return Err(StudioError::Validation(
-                "That tag already exists; choose a distinct name".into(),
-            ));
+        let catalog = crate::project_labels::changed_definition(
+            &snapshot.catalog,
+            &snapshot.tag,
+            replacement,
+        )?;
+        if replacement == Some(snapshot.tag.as_str()) {
+            return Ok(0);
         }
         for target in &snapshot.targets {
             let before = &target.annotation;
+            if replacement.is_none() && before.deleted {
+                continue;
+            }
             let document = read_document(&transaction, &before.document_id)?;
             require_revision(&document, target.document_revision)?;
             rich_tree(&document)?;
@@ -694,17 +843,26 @@ impl Workspace {
                 }
             }
             after.revision = next_revision(before.revision)?;
-            after.base_revision = document.revision;
+            if !before.deleted {
+                after.base_revision = document.revision;
+            }
             store_annotation(
                 &transaction,
                 before,
                 &after,
-                if after.deleted { "delete" } else { "update" },
+                if replacement.is_none() && after.deleted {
+                    "delete"
+                } else {
+                    "update"
+                },
             )?;
-            save_attachment(&transaction, &after, document.revision)?;
+            if !before.deleted {
+                save_attachment(&transaction, &after, document.revision)?;
+            }
         }
+        crate::project_labels::commit_catalog(&transaction, &snapshot.catalog, catalog)?;
         transaction.commit()?;
-        Ok(snapshot.targets.len())
+        Ok(snapshot.count())
     }
 
     /// Read append-only history, including the history of explicitly deleted notes.
@@ -742,6 +900,7 @@ impl Workspace {
         expected_document_revision: i64,
         expected_annotation_revision: i64,
         source: &str,
+        labels: Option<&crate::ProjectLabelCatalog>,
         change: impl FnOnce(&Document, &mut PassageAnnotation) -> Result<()>,
     ) -> Result<PassageAnnotation> {
         let mut connection = self.connection()?;
@@ -762,7 +921,24 @@ impl Workspace {
         }
         let mut after = before.clone();
         change(&document, &mut after)?;
+        if let Some(labels) = labels {
+            crate::project_labels::guard_assignments(
+                &transaction,
+                &document.project_id,
+                labels,
+                &after.tags,
+                false,
+            )?;
+        }
         if before != after {
+            if !after.deleted {
+                crate::project_labels::ensure_assignments(
+                    &transaction,
+                    &document.project_id,
+                    &after.tags,
+                    false,
+                )?;
+            }
             after.revision = next_revision(before.revision)?;
             after.base_revision = document.revision;
             store_annotation(&transaction, &before, &after, source)?;
@@ -977,7 +1153,7 @@ fn tag_targets(
     project_id: &str,
     tag: &str,
 ) -> Result<Vec<ProjectAnnotationSummary>> {
-    Ok(project_annotations(connection, project_id, false)?
+    Ok(project_annotations(connection, project_id, true)?
         .into_iter()
         .filter(|item| item.annotation.tags.iter().any(|label| label == tag))
         .collect())
@@ -1116,13 +1292,46 @@ fn store_annotation(
     after: &PassageAnnotation,
     source: &str,
 ) -> Result<()> {
-    let count = connection.execute("UPDATE document_annotations SET revision=?2,deleted=?3,annotation_json=?4 WHERE id=?1 AND revision=?5", params![after.id, after.revision, after.deleted, serde_json::to_string(after)?, before.revision])?;
+    let before_raw: String = connection.query_row(
+        "SELECT annotation_json FROM document_annotations WHERE id=?1",
+        [&before.id],
+        |row| row.get(0),
+    )?;
+    let mut value: serde_json::Value = serde_json::from_str(&before_raw)?;
+    let known = serde_json::to_value(after)?;
+    let fields = known
+        .as_object()
+        .ok_or_else(|| StudioError::CorruptData("Annotation state is not an object".into()))?;
+    for (key, replacement) in fields {
+        if key == "anchor" && value[key].is_object() {
+            let anchor = value[key].as_object_mut().ok_or_else(|| {
+                StudioError::CorruptData("Annotation anchor is not an object".into())
+            })?;
+            // Deserialize accepts these legacy aliases; retaining both spellings would make
+            // the next read a duplicate-field error. Only known aliases are canonicalized.
+            anchor.remove("blockId");
+            anchor.remove("exactText");
+            let replacement = replacement.as_object().ok_or_else(|| {
+                StudioError::CorruptData("Updated annotation anchor is not an object".into())
+            })?;
+            anchor.extend(
+                replacement
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone())),
+            );
+        } else {
+            value[key] = replacement.clone();
+        }
+    }
+    let after_raw = serde_json::to_string(&value)?;
+    let count = connection.execute("UPDATE document_annotations SET revision=?2,deleted=?3,annotation_json=?4 WHERE id=?1 AND revision=?5", params![after.id, after.revision, after.deleted, after_raw, before.revision])?;
     if count != 1 {
         return Err(StudioError::CorruptData(
             "annotation changed under transaction lock".into(),
         ));
     }
-    append_event(connection, Some(before), after, source)
+    connection.execute("INSERT INTO document_annotation_history(annotation_id,annotation_revision,document_revision,source,before_json,after_json) VALUES(?1,?2,?3,?4,?5,?6)", params![after.id,after.revision,after.base_revision,source,before_raw,after_raw])?;
+    Ok(())
 }
 
 fn save_attachment(

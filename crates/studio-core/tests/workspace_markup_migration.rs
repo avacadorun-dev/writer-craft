@@ -60,6 +60,7 @@ fn version_nine_upgrade_preserves_annotation_and_history_bytes() -> TestResult {
         "UPDATE document_annotation_history SET after_json=?1 WHERE annotation_id=?2",
         params![legacy, annotation.id],
     )?;
+    raw.execute_batch("DROP TABLE project_label_catalog")?;
     raw.pragma_update(None, "user_version", 9_i64)?;
     let before = annotation_bytes(&raw)?;
     drop(raw);
@@ -73,7 +74,7 @@ fn version_nine_upgrade_preserves_annotation_and_history_bytes() -> TestResult {
     assert_eq!(annotation_bytes(&raw)?, before);
     assert_eq!(
         raw.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?,
-        10
+        11
     );
     Ok(())
 }

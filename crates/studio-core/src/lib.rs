@@ -7,6 +7,7 @@ mod annotations;
 mod assets;
 mod assistant_selection;
 mod daily_controls;
+mod project_labels;
 mod project_portability;
 mod project_structure;
 mod rich;
@@ -28,6 +29,7 @@ pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
     find_first_text_match, rich_document_statistics,
 };
+pub use project_labels::{ProjectLabel, ProjectLabelCatalog, ProjectLabelColor};
 pub use project_portability::{
     EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary, ImportAssetSource,
     ImportedProject, ImportedProjectAnnotation, MAX_EVIDENCE_METADATA_BYTES,
@@ -63,7 +65,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -357,6 +359,7 @@ impl Workspace {
             transaction.execute_batch(include_str!("project_portability.sql"))?;
             transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
             transaction.execute_batch(include_str!("rich_review.sql"))?;
+            transaction.execute_batch(include_str!("project_labels.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -389,6 +392,11 @@ impl Workspace {
             // Version 10 adds author tags to existing annotation JSON. No row rewrite:
             // old notes default to no tags, and older binaries must refuse this database
             // rather than deserialize and silently discard tags on their next save.
+            if version < 11 {
+                // Definitions remain separate: opening an old workspace never rewrites notes,
+                // assignment strings or immutable annotation history to materialize defaults.
+                transaction.execute_batch(include_str!("project_labels.sql"))?;
+            }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         transaction.commit()?;

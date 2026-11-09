@@ -381,7 +381,15 @@ fn export_project(connection: &Connection, project: &str, output: &mut Builder) 
         )
         .optional()?
         .unwrap_or_else(|| project.to_owned());
-    output.record("project", json!({"logicalId":logical,"title":title}))
+    // Keep unused/retired definitions and extension data outside the bounded metadata record.
+    let labels = serde_json::to_vec(&crate::project_labels::capture_catalog(
+        connection, project,
+    )?)?;
+    let label_catalog = output.bytes(&labels, super::MAX_PROJECT_MANIFEST_BYTES as u64)?;
+    output.record(
+        "project",
+        json!({"logicalId":logical,"title":title,"labelCatalog":label_catalog}),
+    )
 }
 fn export_nodes(connection: &Connection, project: &str, output: &mut Builder) -> Result<()> {
     let mut statement = connection.prepare("SELECT n.logical_id,n.native_document_id,n.raw_json,n.ordinal,d.title,d.revision FROM project_nodes n LEFT JOIN documents d ON d.id=n.native_document_id AND d.project_id=n.project_id WHERE n.project_id=?1 ORDER BY n.ordinal")?;

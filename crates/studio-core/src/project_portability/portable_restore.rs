@@ -60,6 +60,7 @@ pub struct ValidatedPortableProjectImport {
     notes: Vec<NativeNote>,
     opaque: Vec<OpaqueDocument>,
     quarantine: Vec<Quarantine>,
+    labels: Option<Value>,
 }
 impl ValidatedPortableProjectImport {
     /// Validate a bounded historical format-1 companion before any workspace writes.
@@ -191,6 +192,10 @@ impl ValidatedPortableProjectImport {
         let aliases = validate_aliases(&native, &source.manifest)?;
         let notes = validate_notes(&native, &source.manifest, &aliases)?;
         let opaque = validate_opaque(&native, &aliases)?;
+        let labels = native.get("projectLabels").cloned();
+        if let Some(labels) = &labels {
+            crate::project_labels::validate_catalog(labels)?;
+        }
         if let Some(raw) = native_raw {
             split_quarantine("portable.native", raw.get(), &mut quarantine)?;
         }
@@ -226,6 +231,7 @@ impl ValidatedPortableProjectImport {
             notes,
             opaque,
             quarantine,
+            labels,
         })
     }
     /// The validated saved source representation, with aliases confined to this source namespace.
@@ -553,6 +559,9 @@ impl ProjectImportWorker {
         }
         for note in &project.notes {
             restore_note(&transaction, &result.project_id, note, &node_ids, cancel)?;
+        }
+        if let Some(labels) = &project.labels {
+            crate::project_labels::restore_catalog(&transaction, &result.project_id, labels)?;
         }
         for record in &project.quarantine {
             cancel.check()?;

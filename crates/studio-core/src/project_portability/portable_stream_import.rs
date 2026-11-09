@@ -253,6 +253,7 @@ fn reference(value: &Value) -> Result<PortableObjectReference> {
 }
 fn reference_fields(domain: &str) -> &'static [&'static str] {
     match domain {
+        "project" => &["labelCatalog"],
         "nodes" => &["metadata"],
         "documentRevisions" => &["body", "richContent"],
         "opaqueDocuments" => &["original"],

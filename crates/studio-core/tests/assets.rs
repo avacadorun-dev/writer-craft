@@ -416,7 +416,7 @@ fn schema_four_migration_preserves_existing_rich_notes_drafts_and_history() {
     };
     let raw = rusqlite::Connection::open(&path).unwrap();
     raw.execute_batch(
-        "DROP TABLE rich_proposals; DROP TABLE project_evidence_references; DROP TABLE project_evidence_objects; DROP TABLE project_annotation_projections; DROP TABLE project_quarantined_recovery; DROP TABLE project_canvas_drafts; DROP TABLE project_canvas_revisions; DROP TABLE project_canvases; DROP TABLE project_asset_metadata; DROP TABLE project_source_records; DROP TABLE project_nodes; DROP TABLE project_resource_aliases; DROP TABLE project_portability; DROP TABLE rich_draft_annotations; DROP TABLE project_assets; PRAGMA user_version=4;",
+        "DROP TABLE project_label_catalog; DROP TABLE rich_proposals; DROP TABLE project_evidence_references; DROP TABLE project_evidence_objects; DROP TABLE project_annotation_projections; DROP TABLE project_quarantined_recovery; DROP TABLE project_canvas_drafts; DROP TABLE project_canvas_revisions; DROP TABLE project_canvases; DROP TABLE project_asset_metadata; DROP TABLE project_source_records; DROP TABLE project_nodes; DROP TABLE project_resource_aliases; DROP TABLE project_portability; DROP TABLE rich_draft_annotations; DROP TABLE project_assets; PRAGMA user_version=4;",
     )
     .unwrap();
     drop(raw);

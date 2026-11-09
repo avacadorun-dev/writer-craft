@@ -658,6 +658,7 @@ fn refresh_canvases(connection: &Connection, project: &str, manifest: &mut Value
 }
 
 fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value, bool)> {
+    let labels = crate::project_labels::capture_catalog(connection, project)?;
     let mut statement=connection.prepare("SELECT a.id,a.document_id,a.annotation_json,p.logical_id,p.native_projection_json FROM document_annotations a JOIN documents d ON d.id=a.document_id LEFT JOIN project_annotation_projections p ON p.project_id=d.project_id AND p.native_annotation_id=a.id WHERE d.project_id=?1 ORDER BY a.rowid")?;
     let rows = statement
         .query_map([project], |row| {
@@ -680,7 +681,8 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(opaque_statement);
-    let mut changed = !opaque_rows.is_empty();
+    let mut changed =
+        !opaque_rows.is_empty() || labels != json!({"schemaVersion":1,"revision":0,"labels":[]});
     let opaque_documents=opaque_rows.into_iter().map(|(document,raw)|->Result<Value>{Ok(json!({"nativeDocumentId":document,"readOnly":true,"sourceJsonRaw":raw,"sourceJson":serde_json::from_str::<Value>(&raw)?}))}).collect::<Result<Vec<_>>>()?;
     let mut annotations = Vec::new();
     for (native, document, raw, logical, baseline) in rows {
@@ -755,7 +757,7 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
     changed |= !rows.is_empty();
     let proposals=rows.into_iter().map(|(id,document,base,before,after,reason,status,applied,undone,anchor,before_hash,after_hash)|->Result<Value>{Ok(json!({"nativeId":id,"nativeDocumentId":document,"baseRevision":base,"before":before,"after":after,"reason":reason,"status":status,"appliedRevision":applied,"undoneRevision":undone,"anchor":serde_json::from_str::<Value>(&anchor)?,"beforeHash":before_hash,"afterHash":after_hash}))}).collect::<Result<Vec<_>>>()?;
     Ok((
-        json!({"authority":"untrusted-on-import","opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
+        json!({"authority":"untrusted-on-import","projectLabels":labels,"opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
         changed,
     ))
 }
