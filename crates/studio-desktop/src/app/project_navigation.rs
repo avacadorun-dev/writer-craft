@@ -1406,11 +1406,13 @@ mod tests {
             ],
             ..Default::default()
         };
-        let _ = ctx.run_ui(input, |ui| {
+        let mut output = ctx.run_ui(input, |ui| {
             assert!(!egui::DragAndDrop::has_payload_of_type::<OutlineDrag>(
                 ui.ctx()
             ));
         });
+        // This headless input test has no GPU to consume font texture uploads.
+        output.textures_delta.clear();
         Ok(())
     }
 }
