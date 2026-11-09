@@ -1584,6 +1584,142 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn externally_advanced_durable_head_should_refuse_live_inline_save_and_retry_without_losing_either_version()
+    -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("inline-stale-head.sqlite");
+        let workspace = Workspace::open(&database)?;
+        let project = workspace.create_project("Synthetic live inline revision conflict")?;
+        let mut original = graph();
+        original["future"] =
+            json!({"exact":9007199254740993123u64,"opaque":[null,true,{"keep":"board"}]});
+        original["nodes"][0]["future"] =
+            json!({"exact":9007199254740993u64,"opaque":[{"keep":"card"},null]});
+        let board = workspace.create_project_canvas(&project.id, "Board", original.clone())?;
+        let mut state = CanvasState::from_snapshot(&project.id, board)?;
+        let base = state.session.identity();
+        let base_raw = state.session.document().raw_json().to_owned();
+        let ctx = egui::Context::default();
+        activate_card(&mut state, &database, &ctx)?;
+        let submitted = "My local 日本語 🪶";
+        show_card_frame(
+            &mut state,
+            &database,
+            &ctx,
+            vec![
+                egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::COMMAND,
+                },
+                egui::Event::Paste(submitted.into()),
+            ],
+            0.1,
+        );
+        assert_eq!(
+            state.text_editor.as_ref().ok_or("inline editor")?.text(),
+            submitted
+        );
+        assert!(state.pending.is_none());
+
+        // Advance the saved graph through an independent workspace, not a foreign draft token.
+        let other_workspace = Workspace::open(&database)?;
+        let mut external = original.clone();
+        external["nodes"][0]["text"] = json!("Externally saved text");
+        external["future"]["external"] =
+            json!({"exact":9007199254740995u64,"keep":["external",null]});
+        external["nodes"][0]["future"]["external"] = json!({"keep":true});
+        let advanced = other_workspace.save_project_canvas(
+            &project.id,
+            &state.snapshot.canvas.id,
+            1,
+            external.clone(),
+        )?;
+        assert_eq!(advanced.info.revision, 2);
+        let mut submitted_graph = original.clone();
+        submitted_graph["nodes"][0]["text"] = json!(submitted);
+        let latest = "My local 日本語 🪶; typed during stale save e\u{301}";
+
+        for retry in [false, true] {
+            if retry {
+                state.retry(&database)?;
+            } else {
+                state.save_now(&database)?;
+                // Completion has not been polled: the same live native editor still accepts input.
+                show_card_frame(
+                    &mut state,
+                    &database,
+                    &ctx,
+                    vec![egui::Event::Text(
+                        "; typed during stale save e\u{301}".into(),
+                    )],
+                    0.2,
+                );
+            }
+            assert!(state.pending.is_some());
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut refusal = None;
+            while state.pending.is_some() && Instant::now() < deadline {
+                if let Err(error) = state.poll(&ctx) {
+                    refusal = Some(error);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            let refusal = refusal.ok_or("stale inline save did not report a conflict")?;
+            assert!(matches!(
+                refusal.downcast_ref::<studio_core::StudioError>(),
+                Some(studio_core::StudioError::RevisionConflict {
+                    expected: 1,
+                    actual: 2
+                })
+            ));
+            assert!(state.pending.is_none());
+            assert!(state.blocks_navigation() && state.text_save_error);
+            assert_eq!(state.durability_status(), "Attention needed");
+            assert_eq!(state.session.identity(), base);
+            assert_eq!(state.session.document().raw_json(), base_raw);
+            assert_eq!(state.snapshot.revision.info.revision, 1);
+            assert_eq!(state.snapshot.revision.content, original);
+            let editor = state.text_editor.as_ref().ok_or("retained inline editor")?;
+            assert_eq!(editor.text(), latest);
+            assert!(editor.dirty() && editor.has_submission());
+            let failed = state
+                .failed
+                .as_ref()
+                .ok_or("retained submitted candidate")?;
+            assert_eq!(failed.base(), base);
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(failed.document().raw_json())?,
+                submitted_graph,
+            );
+            let reopened = Workspace::open(&database)?
+                .project_canvas(&project.id, &state.snapshot.canvas.id)?;
+            assert_eq!(reopened.revision.info.revision, 2);
+            assert_eq!(reopened.revision.content, external);
+            assert!(reopened.draft.is_none());
+            assert_eq!(
+                workspace
+                    .project_canvas_history(&project.id, &state.snapshot.canvas.id, None, 10)?
+                    .len(),
+                2,
+            );
+        }
+        let preservation = state
+            .latest_text_candidate()?
+            .ok_or("latest draft preservation")?;
+        let mut latest_graph = original;
+        latest_graph["nodes"][0]["text"] = json!(latest);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(preservation.document().raw_json())?,
+            latest_graph,
+        );
+        Ok(())
+    }
+
+    #[test]
     fn new_card_should_accept_native_input_before_durable_creation_and_keep_it_after_acknowledgement()
     -> TestResult {
         let directory = tempfile::tempdir()?;
