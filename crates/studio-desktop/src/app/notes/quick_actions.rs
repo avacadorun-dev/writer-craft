@@ -476,7 +476,7 @@ mod tests {
         assert_eq!(fixture.app.workspace.annotation(&note.id)?, resolved);
         let history = fixture.app.workspace.annotation_history(&note.id)?;
         assert_eq!(history.len(), 2);
-        let event = history.last().ok_or("resolved note history")?;
+        let event = history.first().ok_or("resolved note history")?;
         assert_eq!(event.before.as_ref(), Some(&note));
         assert_eq!(event.after, resolved);
         assert!(!fixture.app.notes.drafts.contains_key(&note.id));
@@ -552,7 +552,7 @@ mod tests {
         assert!(!reopened.deleted);
         let history = fixture.app.workspace.annotation_history(&note.id)?;
         assert_eq!(history.len(), 3);
-        let event = history.last().ok_or("reopened note history")?;
+        let event = history.first().ok_or("reopened note history")?;
         assert_eq!(event.before.as_ref(), Some(&resolved));
         assert_eq!(event.after, reopened);
         fixture.app.refresh_notes()?;
