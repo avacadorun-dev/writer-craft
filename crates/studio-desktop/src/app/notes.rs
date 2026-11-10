@@ -3572,14 +3572,14 @@ mod tests {
         for (width, font_scale, selected) in [(320.0, 1.0, true), (224.0, 1.35, false)] {
             let ctx = egui::Context::default();
             let tokens = theme::apply(&ctx, &theme::ThemeSettings::default());
-            let mut style = (*ctx.style()).clone();
+            let mut style = (*ctx.style_of(ctx.theme())).clone();
             style.spacing.interact_size.y *= font_scale;
             style.spacing.button_padding *= font_scale;
             for font in style.text_styles.values_mut() {
                 font.size *= font_scale;
             }
             style.interaction.selectable_labels = true;
-            ctx.set_style(style);
+            ctx.set_style_of(ctx.theme(), style);
             let frame = |events, time| {
                 let mut bounds = egui::Rect::NOTHING;
                 let mut clicked = false;
