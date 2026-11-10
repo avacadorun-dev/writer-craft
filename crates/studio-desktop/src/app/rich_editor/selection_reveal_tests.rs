@@ -371,11 +371,17 @@ fn exact_navigation_restore_wins_over_pending_reveal_and_host_animation_without_
     assert!(moving.offset > later.offset);
     let bookmark = NavigationReturn::capture(&fixture.app)?;
     let saved = moving.offset;
+    let painted_selection = moving.selected()?;
 
     // Both the engine flag and a previously submitted egui animation are live here.
     fixture.rich_mut()?.session.request_scroll_to_selection();
     fixture.rich_mut()?.restore_navigation_scroll(saved)?;
     fixture.assert_offset_for_five_frames(saved)?;
+    assert_eq!(
+        fixture.render(vec![])?.selected()?,
+        painted_selection,
+        "Restore must return the painted passage to the same position, not the animation's next offset"
+    );
     fixture.assert_author_state(&tree, revision, &selected, Some(manuscript))?;
 
     let moving_again = fixture.start_far_reveal(&selected)?;
@@ -390,6 +396,7 @@ fn exact_navigation_restore_wins_over_pending_reveal_and_host_animation_without_
         Some(&fixture.origin.id)
     );
     fixture.assert_offset_for_five_frames(saved)?;
+    assert_eq!(fixture.render(vec![])?.selected()?, painted_selection);
     fixture.assert_author_state(&tree, revision, &selected, host_focus)?;
     Ok(())
 }

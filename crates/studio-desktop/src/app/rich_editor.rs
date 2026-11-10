@@ -616,10 +616,13 @@ impl StudioApp {
                         ui.available_rect_before_wrap().size(),
                         restoring_scroll,
                     );
-                    let scroll = rich
-                        .manuscript_scroll_area(ui)
+                    rich.manuscript_scroll_area(ui)
                         .auto_shrink([false, false])
-                        .show(ui, |ui| {
+                        .show_viewport(ui, |ui, viewport| {
+                            // egui advances its animation state after creating this viewport.
+                            // A return bookmark must describe what was actually painted.
+                            rich.capture_scroll_offset = viewport.min.y;
+                            rich.measured_scroll_offset = Some(viewport.min.y);
                             let available = ui.available_width();
                             let width = (available - 56.0).clamp(160.0, measure.max(160.0));
                             ui.horizontal(|ui| {
@@ -744,8 +747,6 @@ impl StudioApp {
                                 });
                             });
                         });
-                    rich.capture_scroll_offset = scroll.state.offset.y;
-                    rich.measured_scroll_offset = Some(scroll.state.offset.y);
                 });
         });
         if let Some(project) = &self.project {
