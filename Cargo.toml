@@ -24,9 +24,9 @@ eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "a
 egui = "=0.36.2"
 rfd = "=0.18.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
-craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae" }
-craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae", features = ["wordcraft-canvas", "native-clipboard"] }
-craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "fd96a30cd650b47ef2f889120aaf0da537b201ae" }
+craft-editor-model = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "ec0c7e6d7dc75b80619a15b48501f5ab240babaa" }
+craft-editor-egui = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "ec0c7e6d7dc75b80619a15b48501f5ab240babaa", features = ["wordcraft-canvas", "native-clipboard"] }
+craft-editor-render = { git = "https://github.com/avacadorun-dev/craft-editor", rev = "ec0c7e6d7dc75b80619a15b48501f5ab240babaa" }
 craft-canvas-model = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "6b68eb4e84aa41b713a148e6a456048f3c1168f9" }
 craft-canvas-egui = { git = "https://github.com/avacadorun-dev/craft-canvas", rev = "6b68eb4e84aa41b713a148e6a456048f3c1168f9" }
 craft-media-preview = { git = "https://github.com/avacadorun-dev/craft-media-preview", rev = "f3705126177b694c4609f4e66799021000618bee", default-features = false, features = ["images", "pdf"] }

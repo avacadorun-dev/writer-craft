@@ -2,6 +2,9 @@
 //! This integration does not assert completion of the full-editor-parity release gate.
 #[path = "authoring.rs"]
 mod authoring;
+#[cfg(test)]
+#[path = "rich_editor/selection_reveal_tests.rs"]
+mod selection_reveal_tests;
 use super::*;
 use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::CanvasStyle};
 use craft_editor_model as tables;
@@ -26,6 +29,7 @@ pub(super) struct RichState {
     capture_scroll_offset: f32,
     measured_scroll_offset: Option<f32>,
     navigation_scroll_offset: Option<f32>,
+    measured_viewport: Option<egui::Vec2>,
     capture_text_visible: bool,
     statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
@@ -74,6 +78,7 @@ impl RichState {
             capture_scroll_offset: 0.0,
             measured_scroll_offset: None,
             navigation_scroll_offset: None,
+            measured_viewport: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         }))
@@ -103,11 +108,36 @@ impl RichState {
         self.session.request_scroll_to_caret();
         Ok(())
     }
-    fn manuscript_scroll_area(&mut self) -> egui::ScrollArea {
-        let area = egui::ScrollArea::vertical().id_salt(("rich-scroll", self.session.options.id));
+    fn manuscript_scroll_area(&mut self, ui: &egui::Ui) -> egui::ScrollArea {
+        let salt = ("rich-scroll", self.session.options.id);
+        let area = egui::ScrollArea::vertical().id_salt(salt);
         match self.navigation_scroll_offset.take() {
-            Some(offset) => area.vertical_scroll_offset(offset),
+            Some(offset) => {
+                // A saved bookmark overrides pending engine reveals AND host-owned animation.
+                // Reset only this manuscript's presentation state, leaving its session intact.
+                self.session.cancel_scroll_request();
+                let mut state = egui::scroll_area::State::default();
+                state.offset.y = offset;
+                state.store(ui.ctx(), ui.make_persistent_id(salt));
+                area.vertical_scroll_offset(offset)
+            }
             None => area,
+        }
+    }
+    fn reveal_after_viewport_change(&mut self, extent: egui::Vec2, restoring_scroll: bool) {
+        let changed = self
+            .measured_viewport
+            .replace(extent)
+            .is_some_and(|prior| prior != extent);
+        if changed
+            && !restoring_scroll
+            && !self.session.is_composing()
+            && self
+                .session
+                .selection()
+                .is_some_and(|selection| selection.anchor != selection.head)
+        {
+            self.session.request_scroll_to_selection();
         }
     }
     /// Last measured native manuscript scroll offset, never an invented initial bookmark.
@@ -119,6 +149,7 @@ impl RichState {
         if !offset.is_finite() || offset < 0.0 {
             return Err("invalid_navigation_scroll_offset".into());
         }
+        self.session.cancel_scroll_request();
         self.navigation_scroll_offset = Some(offset);
         Ok(())
     }
@@ -190,6 +221,7 @@ impl RichState {
             capture_scroll_offset: 0.0,
             measured_scroll_offset: None,
             navigation_scroll_offset: None,
+            measured_viewport: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         })
@@ -576,8 +608,15 @@ impl StudioApp {
                     if !media_ready {
                         ui.ctx().request_repaint_after(Duration::from_millis(50));
                     }
+                    let restoring_scroll = rich.navigation_scroll_offset.is_some();
+                    // Track the host pane, not the internal width that changes when a scrollbar
+                    // reappears after bookmark restoration. That must not submit a later reveal.
+                    rich.reveal_after_viewport_change(
+                        ui.available_rect_before_wrap().size(),
+                        restoring_scroll,
+                    );
                     let scroll = rich
-                        .manuscript_scroll_area()
+                        .manuscript_scroll_area(ui)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             let available = ui.available_width();

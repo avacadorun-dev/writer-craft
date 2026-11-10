@@ -20,7 +20,8 @@
     "F54-COLOR-01: review subdued, legible named label colors with stable hue meaning across all seven main palettes using representative Light/Dark captures; selected states remain readable and color is never the sole meaning cue. Pre-F54 e4157d1 captures do not accept this rework.",
     "Exact-source hosted checks, native installer qualification and final independent matching-source acceptance remain required.",
     "F55-CORRECTION-01: independently verify one-action local mark/label removal, nearby guarded Undo and the simplified correction loop; retain authored drafts, exact text/caret and project-wide scope distinctions.",
-    "F55-NATIVE-REWORK: candidate 18afda6 independently rejected for clipped short selected ranges and note chips outside row geometry; correct these and phantom Resume after completed Apply, then repeat actual native interaction review. Earlier captures 001–020 are historical partial evidence, not acceptance."
+    "F55-NATIVE-REWORK: candidate 18afda6 independently rejected for clipped short selected ranges and note chips outside row geometry; correct these and phantom Resume after completed Apply, then repeat actual native interaction review. Earlier captures 001–020 are historical partial evidence, not acceptance.",
+    "F56-NOTE-COMPLETION: independently verify Apply → resolve the exact note → next/end → reopen, including retained drafts, stale refusal and distinct manuscript Undo; passing source tests do not accept the native workflow."
   ],
   "requirements": [
     "docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md",

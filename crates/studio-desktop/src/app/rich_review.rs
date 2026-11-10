@@ -532,7 +532,7 @@ impl StudioApp {
             anchor: point(from),
             head: point(to),
         })?;
-        session.request_scroll_to_caret();
+        session.request_scroll_to_selection();
         self.focus_manuscript = true;
         Ok(())
     }
@@ -748,7 +748,7 @@ impl StudioApp {
                 .as_mut()
                 .ok_or("Open a structured document for review.")?;
             rich.session.set_selection(selection)?;
-            rich.session.request_scroll_to_caret();
+            rich.session.request_scroll_to_selection();
         }
         if self.refresh_rich_proposals().is_err() || self.load_rich_proposal(id).is_err() {
             return Err("The edit was saved, but the panel could not refresh. Reopen the document before continuing.".into());

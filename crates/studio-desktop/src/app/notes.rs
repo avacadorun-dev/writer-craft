@@ -893,7 +893,7 @@ impl StudioApp {
         {
             rich.session
                 .set_selection(selection_for(note, rich.session.document())?)?;
-            rich.session.request_scroll_to_caret();
+            rich.session.request_scroll_to_selection();
             self.focus_manuscript = true;
         }
         Ok(())
