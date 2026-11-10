@@ -1,5 +1,11 @@
 # Active release: 0.1.0-alpha.3
 
+## Latest milestone boundary — authoring and final manuscript delivery (2026-11-10)
+
+The [alpha.3 milestone](ALPHA3_MILESTONE.md) is authoritative: retain the manually accepted twelve-case author workflow at15bc85a; finish #7, #18, mandatory #20 single-manuscript Markdown/assets and #19 editable DOCX. #21 EPUB is a nonblocking stretch goal, subject to exact Rust-backend and real output qualification. Preserve TXT. WIP remains one product issue at a time.
+
+New Canvas work/integration, full parity and complete project migration/recovery are outside this release gate. Broad #4/#10/#11/#14/#17 remain open without an alpha.3 milestone assignment; the selected delivered #14 slice remains in the release. #11's full canonical project restore is preserved as deferred work, not replaced by manuscript export. `structured-writing-alpha` remains pending until the final exact candidate passes its separate gate; historical full-parity plans below do not override this boundary.
+
 ## Latest authorized boundary — 2026-11-09 (F-49)
 
 Release a coherent engineering alpha.3 from the existing implementation plus a completed non-Canvas character/screenwriting workflow and other verified unblocked fixes. Full Canvas is deferred while a separate agent develops production CraftCanvas. The [handoff](../verification/ALPHA3_NON_CANVAS_HANDOFF.md) and [current release map override](ALPHA3_RELEASE_MAP.md) supersede the historical all-parity requirements below as release prerequisites, while preserving them as eventual product obligations.
@@ -8,7 +14,7 @@ The release agent must specify the actual bounded scope and its independent exac
 
 ### Selected scope — structured-writing-alpha (F-50–F-52)
 
-The [structured writing plan](ALPHA3_STRUCTURED_WRITING_PLAN.md) selects full tree/document lifecycle, author-defined exact passage markup and reference consultation in a substantial coherent story, followed sequentially by #7 existing formula/Mermaid re-editing and #11 readable/canonical handoff. Project-kind taxonomy remains undecided. Actual native interaction and a capture-by-capture visual/usability review are required; compiler results or seeded projects cannot substitute. The current `UX_GATE.json` is the separate **pending** `structured-writing-alpha` gate. The alpha.3 full-parity gate is retained at `UX_GATE_ALPHA3_FULL_PARITY_PENDING.json`; its obligations are not removed or accepted.
+The [structured writing plan](ALPHA3_STRUCTURED_WRITING_PLAN.md) selects full tree/document lifecycle, author-defined exact passage markup and reference consultation in a substantial coherent story, followed by #7 existing formula/Mermaid re-editing, #18 home/library and mandatory #20/#19 manuscript delivery under the latest milestone boundary. Project-kind taxonomy remains undecided. Actual native interaction and a capture-by-capture visual/usability review are required; compiler results or seeded projects cannot substitute. The current `UX_GATE.json` is the separate **pending** `structured-writing-alpha` gate. The alpha.3 full-parity gate is retained at `UX_GATE_ALPHA3_FULL_PARITY_PENDING.json`; its obligations are not removed or accepted.
 
 ## Historical full-parity alpha.3 boundary (superseded as release prerequisite)
 

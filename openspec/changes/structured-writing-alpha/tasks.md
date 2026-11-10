@@ -14,8 +14,10 @@
 - [x] Complete F-56 applied correction → resolve exact note → next/end, with draft/stale guards and reopen evidence.
 - [x] Perform A3-WRITE-01/A3-MARK-01 through the native interface on the substantial acceptance manuscript.
 - [x] Obtain independent same-issue exact-candidate acceptance and audit #14/#10 remaining scope.
-- [ ] Complete and independently verify #7 before advancing to #11.
-- [ ] Complete A3-HANDOFF-01 against actual native export/restore and audit #11.
+- [ ] Complete and independently verify #7, then #18 home/library.
+- [ ] Complete A3-HANDOFF-01: #20 ordered single-manuscript Markdown/assets, then #19 editable DOCX with actual independent-reader evidence.
+- [ ] Record the #21 EPUB stretch ship/defer decision; move it out of the milestone at freeze if unqualified.
+- [ ] Preserve broad #11 canonical project recovery as pending outside this release; manuscript delivery does not close it.
 - [ ] Freeze and independently accept structured-writing-alpha; retain pending full parity.
 - [ ] Build/install-verify packages on GitHub, update compiled screenshots and publish alpha.3 without changing alpha.1/alpha.2.
 

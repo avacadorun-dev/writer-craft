@@ -3,6 +3,7 @@
   "scope": "structured-writing-alpha",
   "boundary": "Selected non-Canvas engineering prerelease contract, not accepted evidence or full-editor-parity. UX_GATE.json remains authoritative. Full Canvas #17, full parity #4 and unfinished broad issue criteria remain open.",
   "contract_inputs": [
+    "docs/governance/ALPHA3_MILESTONE.md",
     "docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md",
     "docs/governance/NEXT_RELEASE.md",
     "docs/design/UX_ACCEPTANCE.md",
@@ -121,6 +122,75 @@
     },
     {
       "id": "A3-HANDOFF-01",
+      "title": "Deliver the selected ordered manuscript as DOCX and Markdown",
+      "issues": [
+        19,
+        20
+      ],
+      "requirements": "Export the deliberately selected manuscript in displayed tree order as one editable DOCX and one UTF-8 Markdown document with portable relative assets. Inspect actual output in independent readers and disclose supported rich-content fallbacks/refusals and annotation privacy. Preserve the workspace, rich source, history and original assets. Complete canonical project recovery remains deferred in #11; optional EPUB #21 is not a release prerequisite.",
+      "required_paths": [
+        "manuscript-scope-order-and-annotation-privacy",
+        "native-ordered-markdown-and-portable-assets",
+        "native-editable-docx-and-independent-reader",
+        "moved-markdown-assets-open-in-independent-reader",
+        "cancel-output-without-misleading-success"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "failed-export-no-published-partial-output",
+          "title": "Failed exports do not publish incomplete output, overwrite unrelated files or acknowledge success",
+          "native_os_required": false
+        },
+        {
+          "id": "snapshot-order-and-source-preservation",
+          "title": "A consistent selected-revision compilation preserves displayed order and source rich JSON, identities, histories and original asset bytes; stale or unsupported content receives explicit preflight handling",
+          "native_os_required": false
+        }
+      ]
+    },
+    {
+      "id": "F52-VISUAL-01",
+      "title": "Independently review every visited native surface and dialog",
+      "issues": [
+        14,
+        7,
+        18,
+        19,
+        20
+      ],
+      "requirements": "The report must declare a complete visited_surfaces index, surface_results with passed dispositions, concrete assessments and capture paths present in the hashed gate evidence, and an explicit unvisited_surfaces list. Include all additional dialogs actually visited, beyond the required surface groups below. Each result identifies its relevant A3 journey IDs. State actual platform coverage. Blocking findings require rework and fresh compiled observation; command success alone does not establish visual acceptance.",
+      "required_paths": [
+        "complete-visited-surface-capture-index",
+        "action-grouping-and-discoverability",
+        "spacing-and-content-density",
+        "pane-and-modal-bounds",
+        "hierarchy-keyboard-focus-and-icon-recognition",
+        "blocking-findings-reworked-and-reobserved"
+      ],
+      "required_surfaces": [
+        "library-and-project-creation",
+        "manuscript-tree-and-editor",
+        "hierarchy-create-rename-move",
+        "trash-and-restore",
+        "reference-consultation-and-return",
+        "passage-markup-editor",
+        "project-markup-results",
+        "project-label-lifecycle",
+        "existing-formula-mermaid-edit",
+        "reader-export",
+        "sequential-markup-review-and-inline-replacement",
+        "docx-export-and-result",
+        "compiled-markdown-export-and-assets",
+        "responsive-home-and-project-continuation"
+      ]
+    }
+  ],
+  "deferred_project_recovery": {
+    "issue": 11,
+    "status": "pending",
+    "decision": "Explicit 2026-11-10 milestone boundary: the previous A3-HANDOFF-01 canonical-export/independent-restore journey remains a broad #11 obligation outside this release. Manuscript DOCX/Markdown delivery cannot satisfy it.",
+    "previous_contract": {
+      "id": "A3-HANDOFF-01",
       "title": "Deliver readable work and restore a complete independent copy",
       "issues": [
         11
@@ -145,38 +215,6 @@
           "native_os_required": false
         }
       ]
-    },
-    {
-      "id": "F52-VISUAL-01",
-      "title": "Independently review every visited native surface and dialog",
-      "issues": [
-        14,
-        7,
-        11
-      ],
-      "requirements": "The report must declare a complete visited_surfaces index, surface_results with passed dispositions, concrete assessments and capture paths present in the hashed gate evidence, and an explicit unvisited_surfaces list. Include all additional dialogs actually visited, beyond the required surface groups below. Each result identifies its relevant A3 journey IDs. State actual platform coverage. Blocking findings require rework and fresh compiled observation; command success alone does not establish visual acceptance.",
-      "required_paths": [
-        "complete-visited-surface-capture-index",
-        "action-grouping-and-discoverability",
-        "spacing-and-content-density",
-        "pane-and-modal-bounds",
-        "hierarchy-keyboard-focus-and-icon-recognition",
-        "blocking-findings-reworked-and-reobserved"
-      ],
-      "required_surfaces": [
-        "library-and-project-creation",
-        "manuscript-tree-and-editor",
-        "hierarchy-create-rename-move",
-        "trash-and-restore",
-        "reference-consultation-and-return",
-        "passage-markup-editor",
-        "project-markup-results",
-        "project-label-lifecycle",
-        "existing-formula-mermaid-edit",
-        "reader-export",
-        "canonical-export-and-restore",
-        "sequential-markup-review-and-inline-replacement"
-      ]
     }
-  ]
+  }
 }

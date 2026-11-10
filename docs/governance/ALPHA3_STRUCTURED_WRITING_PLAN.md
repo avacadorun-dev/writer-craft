@@ -1,6 +1,6 @@
 # Alpha.3 structured writing delivery
 
-Selected 2026-11-09 after F-49/F-50/F-51. Active application issue: #14. This plan supersedes a literal character-form deliverable. It does not replace the pending full migration inventory or authorize Canvas engine changes.
+Selected 2026-11-09 after F-49/F-50/F-51; milestone updated 2026-11-10. Selected #14 workflow accepted at15bc85a; next product issue is #7. The latest [milestone](ALPHA3_MILESTONE.md) defines required final-manuscript formats and the separate acceptance gate. This plan supersedes a literal character-form deliverable. It does not replace the pending full migration inventory or authorize Canvas engine changes.
 
 ## Outcome and sequence
 
@@ -10,7 +10,7 @@ Deliver `structured-writing-alpha`: an author can organize, draft, annotate, rev
 2. Complete hierarchy-led creation and full document/folder lifecycle under #14: read, create, edit, rename, move/reorder, trash and restore. Reuse original free folder/document/note semantics for native projects and saved schemas for imported projects. Preserve stable identity, current text, histories, annotations and unknown data.
 3. Complete author-defined passage tags and notes under the same #14 task: create/read/update/delete, project-wide filtering, exact occurrence navigation and return. F-54 adds reusable project label names/colors and a compact note inspector; no automated entity extraction or guessed relationships.
 4. Independently accept the complete structured drafting/marking task on an exact hosted native candidate. Keep #14 open for unfulfilled research, sizing and board-related criteria. Only after this active issue slice is accepted, fix and verify #7 double-click/context/keyboard source editing.
-5. Select #11 as the next independent issue: finish the existing readable Markdown/assets and canonical folder/restore path needed by this manuscript. Verify actual native export/import, privacy scope, hierarchy/annotation preservation and an independent restored copy. Close only criteria actually completed.
+5. After #7, finish #18 home/library, then #20 compiled Markdown/assets and #19 editable DOCX, one at a time using shared manuscript selection/order/revision planning. Verify actual native export and independent reader artifacts; preserve TXT. Assess #21 EPUB only as a qualified nonblocking stretch goal. Broad #11 canonical project recovery stays open outside this release gate.
 6. Freeze the release source, verify the complete working project on it, obtain independent `structured-writing-alpha` acceptance, package native installers on GitHub, update actual compiled screenshots and publish alpha.3. Preserve alpha.1/alpha.2. Full parity #4 and Canvas #17 remain open.
 
 Root owns app integration, hosted dispatch, exact native observation and release. Delegation names one active issue, owned files and a stop condition. Rust builds/tests/packages run only on GitHub. Public CI fixtures remain invented and contain no private manuscripts. The running Preview68db76e, user projects and CraftCanvas checkout are untouched.
@@ -25,9 +25,9 @@ Joins PT-NOV-01 and the non-Canvas consultation part of PT-CHAR-01/PT-KNOW-01. S
 
 Joins PT-EDIT-01/PT-KNOW-01 and the explicitly requested manual tagging extension. Select an exact occurrence, attach author-defined tags and an optional continuity note, then mark related occurrences in other scenes. Filter the project by a tag, inspect a result in its document, revise, return, change/remove a tag and delete/restore the relevant note through the supported lifecycle. A repeated name never substitutes for the captured identity/range. Deleted text produces an explicit detached state. Define a project label and its color before assigning it, recognize the same color in text and the note list, and revise the shared label deliberately. Multiple labels remain named and ordered, with the first driving the text mark. Save/reopen and canonical transfer retain labels (including unused definitions), tags, anchors and note history. This is author-controlled markup, not NER inference or automatic character synchronization.
 
-### A3-HANDOFF-01 — deliver and recover the organized work
+### A3-HANDOFF-01 — deliver the final manuscript
 
-Joins the selected #11/PT-MIG-01/PT-NONF-01 transfer path. Export the intended manuscript/reference scope as readable Markdown with actual assets, inspect the resulting organization, and separately export/restore a complete canonical project. The restored copy must retain tree order, stable logical references, rich text, passage tags/notes, histories and original assets. Explain any reader-format limitation and private annotation inclusion before exporting. Cancel/failed output must not publish a misleading partial success.
+The 2026-11-10 milestone decision selects #20/#19: choose the manuscript documents/subtree, inspect chapter inclusion and tree order, then export one readable Markdown document with portable assets and one editable DOCX. Inspect the real artifacts in independent readers, with explicit rich-content limits and annotation privacy. Cancel/failed output cannot publish a partial success or mutate the source. The previous complete canonical export/independent-restore path remains required by broad #11 outside this release gate; manuscript delivery does not satisfy it. Optional #21 EPUB does not block the mandatory formats.
 
 ### A3-REEDIT-01 — revise an existing technical/story object
 

@@ -5,17 +5,18 @@
   "reviewer": "independent desktop UI/UX reviewer (character_journey_review; exact native review pending)",
   "scope": "structured-writing-alpha",
   "version": "0.1.0-alpha.3",
-  "version_status": "Selected #14 author workflow manually accepted by the owner at15bc85a; #7/#11/#18 and final candidate acceptance remain pending.",
+  "version_status": "Selected #14 author workflow manually accepted at15bc85a; required #7/#18/#19/#20 and final exact-candidate acceptance remain pending. #21 EPUB is nonblocking.",
   "source_fingerprint": null,
   "source_fingerprint_status": "Pending completed immutable candidate; working and uncommitted data do not grant acceptance.",
   "blockers": [
     "A3-REEDIT-01: complete issue #7 double-click, exact object context menu and keyboard re-editing; verify Apply/Cancel/history/reopen on the resulting candidate.",
-    "A3-HANDOFF-01: finish issue #11 readable export and canonical restore, including active/unused project labels, hierarchy, history, references and actual assets.",
+    "A3-HANDOFF-01: complete #20 one ordered Markdown manuscript with portable assets and #19 editable DOCX; verify actual native output, independent readers, privacy, supported-content limits, cancellation and source preservation. Broad #11 canonical recovery remains deferred, not accepted.",
     "A3-HOME-01: implement and verify the requested responsive home/library body in issue #18 with optimized artwork and truthful project continuation.",
     "F52-VISUAL-01: review changed remaining surfaces on the concrete completed candidate; selected #14 surfaces and the12-case author workflow are owner-accepted at15bc85a.",
     "Exact-source hosted checks, native installer qualification and final independent matching-source structured-writing-alpha release acceptance remain required."
   ],
   "requirements": [
+    "docs/governance/ALPHA3_MILESTONE.md",
     "docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md",
     "docs/design/STRUCTURED_WRITING_ACCEPTANCE.json",
     "openspec/changes/structured-writing-alpha/",
@@ -44,8 +45,9 @@
       4,
       17,
       10,
-      14
+      14,
+      11
     ],
-    "note": "All unverified source and journey obligations remain open; this bounded scope does not accept full-editor-parity or complete Canvas."
+    "note": "All unverified source and journey obligations remain open, including full portable-project/canonical recovery #11. The 2026-11-10 milestone selects final-manuscript delivery instead; it does not accept full-editor-parity, complete Canvas or project restoration."
   }
 }

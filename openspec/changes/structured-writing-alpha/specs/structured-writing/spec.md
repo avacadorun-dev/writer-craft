@@ -175,3 +175,19 @@ The Trash view SHALL disclose when an item cannot be restored until its ancestor
 #### Scenario: Restore an independently trashed child
 - **WHEN** both its parent and the independently deleted child are in Trash
 - **THEN** the unavailable child explains the parent-first order; restoring the parent leaves that child deleted until its own explicit restore
+
+### Requirement: Final manuscript delivery
+
+Authors SHALL export a selected manuscript in displayed tree order as one editable DOCX and one UTF-8 Markdown document with portable relative assets. Output profiles MUST disclose unsupported content and annotation inclusion. Exports MUST preserve source data and refuse or safely handle stale snapshots, missing assets and destination conflicts without false success. Complete canonical project recovery remains a deferred #11 obligation; EPUB is optional for this release.
+
+#### Scenario: Hand a multi-chapter manuscript to a reader
+- **WHEN** an author selects a manuscript subtree, reviews its included documents and exports DOCX or Markdown
+- **THEN** the actual artifact SHALL contain exactly the selected material in the shown order, open in an independently checked reader and leave source text, structure, history and original assets unchanged
+
+#### Scenario: Move a Markdown manuscript and its assets
+- **WHEN** the exported Markdown document and sibling assets folder move together to another directory
+- **THEN** included local resources SHALL resolve through safe relative links without requiring the source workspace
+
+#### Scenario: Export cannot finish safely
+- **WHEN** output is cancelled, cannot be written, or preflight detects unsupported content without an accepted fallback
+- **THEN** the application SHALL retain the source and authored work, explain the result and publish neither incomplete output nor a success acknowledgement

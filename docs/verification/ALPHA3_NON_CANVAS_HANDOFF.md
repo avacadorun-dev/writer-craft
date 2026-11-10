@@ -1,10 +1,14 @@
 # Alpha.3 non-Canvas execution handoff
 
+## Latest milestone decision — 2026-11-10
+
+Read [ALPHA3_MILESTONE.md](../governance/ALPHA3_MILESTONE.md) before the historical queue below. The accepted twelve-case #14 slice is the delivered baseline; remaining sequence is #7 → #18 → mandatory #20 compiled Markdown/assets → #19 editable DOCX, then optional #21 EPUB. Broad #4/#10/#11/#14/#17 stay open outside the milestone. Complete canonical restore is deferred under #11; final-manuscript export does not complete it. The named release gate remains pending, and Canvas qualification/preview/project/#10 protections remain unchanged.
+
 Prepared 2026-11-09 under explicit F-49 authorization. This is an execution handoff, not a completed release. Continue the current checkout and reconcile newer commits/agents before editing. Repository: `avacadorun-dev/writer-craft`; branch: `feature/alpha3-parity`. Never create `codex/` branches.
 
 ## Latest owner acceptance and manual-QA direction — 2026-11-10
 
-The owner has now manually passed all12 supplied authoring scenarios on exact `15bc85a16149c7161f07d45f123bd16830693ee4` (successful Verify42751543437 and Preview42751537846,297desktop tests). Read ALPHA3_OWNER_ACCEPTANCE_15BC85A.md for exact attribution/scope. The selected #14 workflow is accepted for advancement, while broad #14 and full #4/#17 remain open. Active application issue is now #7 direct formula/Mermaid re-editing; #11 and #18 follow.
+The owner has now manually passed all12 supplied authoring scenarios on exact `15bc85a16149c7161f07d45f123bd16830693ee4` (successful Verify42751543437 and Preview42751537846,297desktop tests). Read ALPHA3_OWNER_ACCEPTANCE_15BC85A.md for exact attribution/scope. The selected #14 workflow is accepted for advancement, while broad #14 and full #4/#17 remain open. Next application product issue is #7 direct formula/Mermaid re-editing; the later milestone decision above selects #18 and #20/#19 next.
 
 Stop the slow automated click-through. The owner will test concise changed-feature cases; do not implement the parked drag trace or rerun the whole12-case matrix. Acceptance15bc85a and its private workspace are owner-used: no further UI control/replacement/restart without a new explicit request. All older protected windows and the #10 diff remain protected. Final structured-writing-alpha release readiness is still pending the remaining deliverables and final candidate qualification.
 

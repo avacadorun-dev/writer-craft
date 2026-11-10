@@ -6,7 +6,7 @@ The native navigator displays imported hierarchy but new projects and Add docume
 
 ## What changes
 
-Mount source-backed folder/document/note organization and full recoverable CRUD; preserve imported schemas. Add exact reference consultation/return and manual passage tags with project-wide results. Qualify A3-WRITE-01/A3-MARK-01 on a coherent substantial manuscript through native interaction. The later #11 acceptance verifies its readable/canonical handoff, and #7 retains its separate existing-block correction.
+Mount source-backed folder/document/note organization and full recoverable CRUD; preserve imported schemas. Add exact reference consultation/return and manual passage tags with project-wide results. Qualify A3-WRITE-01/A3-MARK-01 on a coherent substantial manuscript through native interaction. The 2026-11-10 milestone selects later #20/#19 final-manuscript Markdown/DOCX delivery, with #21 EPUB optional; broad #11 readable/canonical project recovery remains pending outside this release gate. #7 retains its separate existing-block correction, and #18 its home/library deliverable. See docs/governance/ALPHA3_MILESTONE.md.
 
 F-54 native feedback refines the same outcome: reclaim full tree-row title width through right-click/keyboard actions, replace raw tag text entry with reusable project label names/colors, and make the note inspector compact and understandable. Label colors must be subdued and compatible with the main appearance palettes. Keep the full direct drag behavior selected by F-53.
 

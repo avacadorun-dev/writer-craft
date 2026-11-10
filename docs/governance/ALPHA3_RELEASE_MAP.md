@@ -1,6 +1,12 @@
 # Alpha.3 release work map
 
-Owner-approved 2026-11-09. This is the single authoritative sequence for closing milestone `0.1.0-alpha.3` (issues #2, #4, #6, #7, #8, #9, #10, #11, #12, #14, #15, #17). It refines the queue in `ALPHA3_DELIVERY.md` with an explicit, non-contradictory order so no issue starves and no issue is closed before its complete criteria.
+## Latest milestone boundary — authoring and final manuscript delivery (2026-11-10)
+
+The [alpha.3 milestone](ALPHA3_MILESTONE.md) is authoritative: retain the manually accepted twelve-case author workflow at15bc85a; finish #7, #18, mandatory #20 single-manuscript Markdown/assets and #19 editable DOCX. #21 EPUB is a nonblocking stretch goal, subject to exact Rust-backend and real output qualification. Preserve TXT. WIP remains one product issue at a time.
+
+New Canvas work/integration, full parity and complete project migration/recovery are outside this release gate. Broad #4/#10/#11/#14/#17 remain open without an alpha.3 milestone assignment; the selected delivered #14 slice remains in the release. #11's full canonical project restore is preserved as deferred work, not replaced by manuscript export. `structured-writing-alpha` remains pending until the final exact candidate passes its separate gate; historical full-parity plans below do not override this boundary.
+
+The latest override above defines the bounded milestone. The historical P0–P11 sequence retains eventual product obligations without requiring their completion in this release. No issue closes before its complete criteria are verified.
 
 ## Current priority override — production CraftCanvas (F-48)
 
@@ -16,7 +22,7 @@ Two separate workstreams are authorized: CraftCanvas follows its own sequential 
 
 ## Latest acceptance execution override — manual author verification
 
-On 2026-11-10 the owner stopped repeated automated native click-through, tested the supplied12-case checklist himself on `15bc85a`, and reported every scenario passing. See [the exact acceptance record](../verification/ALPHA3_OWNER_ACCEPTANCE_15BC85A.md). This accepts the selected #14 author workflow for advancement to #7, followed by #11 and #18; broad issue criteria and the final release gate remain open. Use existing hosted checks, focused defect regressions and concise owner-facing cases for each completed candidate. Do not rebuild an exhaustive UI matrix or add drag tracing to qualify an already manually accepted task.
+On 2026-11-10 the owner stopped repeated automated native click-through, tested the supplied12-case checklist himself on `15bc85a`, and reported every scenario passing. See [the exact acceptance record](../verification/ALPHA3_OWNER_ACCEPTANCE_15BC85A.md). This accepts the selected #14 author workflow for advancement to #7. The later milestone decision above selects #18 and #20/#19 next; broad issue criteria and the final release gate remain open. Use existing hosted checks, focused defect regressions and concise owner-facing cases for each completed candidate. Do not rebuild an exhaustive UI matrix or add drag tracing to qualify an already manually accepted task.
 
 ## Standing rules
 
