@@ -25,7 +25,7 @@ impl StudioApp {
             .markup_id
             .as_ref()
             .filter(|active| *active == id)
-            .and_then(|_| self.rich_review.markup_revision)
+            .and(self.rich_review.markup_revision)
             .or_else(|| {
                 self.rich_review
                     .applied_markup
