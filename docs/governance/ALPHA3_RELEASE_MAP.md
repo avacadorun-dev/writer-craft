@@ -14,6 +14,10 @@ The subsequent explicit instruction authorizes another agent to complete a coher
 
 Two separate workstreams are authorized: CraftCanvas follows its own sequential issues; the WriterCraft agent owns application integration and release with one active app issue at a time. The historical P0–P11 inventory below remains required eventual parity, not the new alpha.3 release checklist. Choose and document a named bounded alpha.3 scope/gate with exact native evidence; do not mark `full-editor-parity` accepted to release a subset. Resume Canvas integration only after the engine handoff. Preserve alpha.1/alpha.2 and the running preview.
 
+## Latest acceptance execution override — manual author verification
+
+On 2026-11-10 the owner stopped repeated automated native click-through, tested the supplied12-case checklist himself on `15bc85a`, and reported every scenario passing. See [the exact acceptance record](../verification/ALPHA3_OWNER_ACCEPTANCE_15BC85A.md). This accepts the selected #14 author workflow for advancement to #7, followed by #11 and #18; broad issue criteria and the final release gate remain open. Use existing hosted checks, focused defect regressions and concise owner-facing cases for each completed candidate. Do not rebuild an exhaustive UI matrix or add drag tracing to qualify an already manually accepted task.
+
 ## Standing rules
 
 - **Owner decision 2026-11-09 — lean verification:** stop building exhaustive new test matrices. Verify each issue with the existing hosted checks, targeted real/native checks and quick compiled inspection; record honest evidence and remaining gaps in the issue. Defects found later are handled as separate issues (owner-filed), not as release blockers. Deep engine/app test suites are added only when a real defect needs a regression.

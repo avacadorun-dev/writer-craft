@@ -5,25 +5,15 @@
   "reviewer": "independent desktop UI/UX reviewer (character_journey_review; exact native review pending)",
   "scope": "structured-writing-alpha",
   "version": "0.1.0-alpha.3",
-  "version_status": "Owner-authorized bounded alpha.3 candidate; implementation and native acceptance are in progress.",
+  "version_status": "Selected #14 author workflow manually accepted by the owner at15bc85a; #7/#11/#18 and final candidate acceptance remain pending.",
   "source_fingerprint": null,
   "source_fingerprint_status": "Pending completed immutable candidate; working and uncommitted data do not grant acceptance.",
   "blockers": [
-    "A3-WRITE-01: complete the substantial native-authored hierarchy, drafting, reference consultation, exact return and reopen session.",
-    "A3-MARK-01: independently observe author-defined markup and complete guarded lifecycle across the same story.",
-    "A3-REEDIT-01: complete issue #7 double-click, context-menu and keyboard re-editing with Apply/Cancel/history/reopen evidence.",
-    "A3-HANDOFF-01: finish issue #11 readable export and canonical restore through native UI with preservation evidence.",
-    "F52-VISUAL-01: capture and independently review every visited surface; resolve blocking spacing, grouping, icon and usability findings.",
-    "F54-TREE-01: remove persistent per-row Add/More controls and reclaim title width; independently verify exact-row right-click and persistent keyboard context menus while preserving direct drag, disclosure and cancellation.",
-    "F54-LABELS-01: independently observe reusable project label creation, assignment, recoloring, renaming, removal/recovery and reopen with exact manuscript/sidebar color identity; corroborate schema11 old-writer protection, stale guards and canonical preservation of unused/retired definitions.",
-    "F54-NOTES-01: replace the ambiguous quote/note/tag presentation and blank list reserve with compact distinct content; verify primary-label ordering, exact overlapping/repeated-passage activation and draft preservation on the fresh candidate.",
-    "F54-COLOR-01: review subdued, legible named label colors with stable hue meaning across all seven main palettes using representative Light/Dark captures; selected states remain readable and color is never the sole meaning cue. Pre-F54 e4157d1 captures do not accept this rework.",
-    "Exact-source hosted checks, native installer qualification and final independent matching-source acceptance remain required.",
-    "F55-CORRECTION-01: independently verify one-action local mark/label removal, nearby guarded Undo and the simplified correction loop; retain authored drafts, exact text/caret and project-wide scope distinctions.",
-    "F55-NATIVE-REWORK: candidate 18afda6 independently rejected for clipped short selected ranges and note chips outside row geometry; correct these and phantom Resume after completed Apply, then repeat actual native interaction review. Earlier captures 001–020 are historical partial evidence, not acceptance.",
-    "F56-NOTE-COMPLETION: independently verify Apply → resolve the exact note → next/end → reopen, including retained drafts, stale refusal and distinct manuscript Undo; passing source tests do not accept the native workflow.",
-    "F55-REVIEW-INTENT: d07c883 native Review advances without the authored instruction; show the current saved/retained note and verify fresh compiled readability with primary actions reachable.",
-    "F54-RESTORE-REASON: d07c883 native child restoration exposes generic validation rather than the parent-first recovery order; verify localized unavailable-ancestor handling without losing deleted data."
+    "A3-REEDIT-01: complete issue #7 double-click, exact object context menu and keyboard re-editing; verify Apply/Cancel/history/reopen on the resulting candidate.",
+    "A3-HANDOFF-01: finish issue #11 readable export and canonical restore, including active/unused project labels, hierarchy, history, references and actual assets.",
+    "A3-HOME-01: implement and verify the requested responsive home/library body in issue #18 with optimized artwork and truthful project continuation.",
+    "F52-VISUAL-01: review changed remaining surfaces on the concrete completed candidate; selected #14 surfaces and the12-case author workflow are owner-accepted at15bc85a.",
+    "Exact-source hosted checks, native installer qualification and final independent matching-source structured-writing-alpha release acceptance remain required."
   ],
   "requirements": [
     "docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md",
@@ -31,9 +21,11 @@
     "openspec/changes/structured-writing-alpha/",
     "docs/design/UX_ACCEPTANCE.md"
   ],
-  "evidence": [],
+  "evidence": [
+    "docs/verification/ALPHA3_OWNER_ACCEPTANCE_15BC85A.md"
+  ],
   "interaction_evidence": null,
-  "review_date": "2026-11-09",
+  "review_date": "2026-11-10",
   "historical_acceptance": {
     "path": "docs/design/UX_GATE_ALPHA2_ACCEPTED.json",
     "version": "0.1.0-alpha.2",

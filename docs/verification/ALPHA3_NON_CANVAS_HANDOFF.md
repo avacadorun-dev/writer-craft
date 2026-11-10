@@ -2,6 +2,12 @@
 
 Prepared 2026-11-09 under explicit F-49 authorization. This is an execution handoff, not a completed release. Continue the current checkout and reconcile newer commits/agents before editing. Repository: `avacadorun-dev/writer-craft`; branch: `feature/alpha3-parity`. Never create `codex/` branches.
 
+## Latest owner acceptance and manual-QA direction — 2026-11-10
+
+The owner has now manually passed all12 supplied authoring scenarios on exact `15bc85a16149c7161f07d45f123bd16830693ee4` (successful Verify42751543437 and Preview42751537846,297desktop tests). Read ALPHA3_OWNER_ACCEPTANCE_15BC85A.md for exact attribution/scope. The selected #14 workflow is accepted for advancement, while broad #14 and full #4/#17 remain open. Active application issue is now #7 direct formula/Mermaid re-editing; #11 and #18 follow.
+
+Stop the slow automated click-through. The owner will test concise changed-feature cases; do not implement the parked drag trace or rerun the whole12-case matrix. Acceptance15bc85a and its private workspace are owner-used: no further UI control/replacement/restart without a new explicit request. All older protected windows and the #10 diff remain protected. Final structured-writing-alpha release readiness is still pending the remaining deliverables and final candidate qualification.
+
 ## Current native checkpoint — 2026-11-10
 
 Reconcile newer HEAD before continuing. Source `d07c883` passed Preview42745782500 and Verify42745789174. A new isolated candidate (all previous user-used windows protected) authored the substantial original13-folder/18-document project through native UI; captures001–118 and exact identity/durable records are retained under the d07c883 acceptance directory. It was saved, quit normally and reopened; a closed preservation copy hashes `18aa532ec34dcd0f4d315b3f0656312f0a562ff9fced8692be1c45cc8d711177`. Continue that UI-authored project rather than seed or recreate it.
