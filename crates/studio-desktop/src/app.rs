@@ -958,6 +958,9 @@ const COMMITTED_LABEL_MESSAGES: &[&str] = &[
 ];
 
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    if let Some(error) = error.downcast_ref::<project_tree::RestoreBlocked>() {
+        return error.msgid();
+    }
     if error.is::<project_tree::TrashedDocument>() {
         return "This document is in Trash. Restore its branch before opening it.";
     }

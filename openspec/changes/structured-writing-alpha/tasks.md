@@ -10,6 +10,7 @@
 - [x] Implement compatible author-defined passage tags and project result lifecycle.
 - [ ] Verify targeted semantic preservation/refusal checks on GitHub without including the retained #10 diff.
 - [ ] Resolve compiled F-55 B1 selected-range visibility, B2 note-row chip containment and C1 phantom Resume; repeat native and independent review.
+- [ ] Correct the native walkthrough findings: show the current authored instruction in Review and explain unavailable-parent restoration; repeat changed native surfaces.
 - [ ] Complete F-56 applied correction → resolve exact note → next/end, with draft/stale guards and reopen evidence.
 - [ ] Perform A3-WRITE-01/A3-MARK-01 through the native interface on the substantial acceptance manuscript.
 - [ ] Obtain independent same-issue exact-candidate acceptance and audit #14/#10 remaining scope.

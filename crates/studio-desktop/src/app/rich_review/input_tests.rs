@@ -115,9 +115,13 @@ impl Fixture {
     }
 
     fn render_panel(&mut self, events: Vec<Event>) -> egui::FullOutput {
+        self.render_panel_at(events, egui::vec2(400.0, 600.0))
+    }
+
+    fn render_panel_at(&mut self, events: Vec<Event>, size: egui::Vec2) -> egui::FullOutput {
         self.time += 0.1;
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(400.0, 600.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
             focused: true,
             time: Some(self.time),
             events,
@@ -139,11 +143,16 @@ impl Fixture {
 }
 
 fn painted_text(output: &egui::FullOutput, text: &str) -> Option<Rect> {
-    fn visit(shape: &egui::epaint::Shape, text: &str, clip: Rect) -> Option<Rect> {
+    painted_text_bounds(output, text).map(|(visible, _)| visible)
+}
+
+fn painted_text_bounds(output: &egui::FullOutput, text: &str) -> Option<(Rect, Rect)> {
+    fn visit(shape: &egui::epaint::Shape, text: &str, clip: Rect) -> Option<(Rect, Rect)> {
         match shape {
             egui::epaint::Shape::Text(shape) if shape.galley.job.text == text => {
-                let rect = shape.visual_bounding_rect().intersect(clip);
-                (rect.is_positive() && rect.is_finite()).then_some(rect)
+                let full = shape.visual_bounding_rect();
+                let visible = full.intersect(clip);
+                (visible.is_positive() && visible.is_finite()).then_some((visible, full))
             }
             egui::epaint::Shape::Vec(shapes) => {
                 shapes.iter().find_map(|shape| visit(shape, text, clip))
@@ -622,6 +631,13 @@ fn applied_note_can_be_resolved_with_one_visible_action_then_next_end_and_reopen
 {
     let mut fixture = Fixture::new()?;
     fixture.begin_queue()?;
+    fixture.app.rich_review.focus = false;
+    fixture.render_panel(vec![]);
+    let first_view = fixture.render_panel(vec![]);
+    let (visible, full) = painted_text_bounds(&first_view, &fixture.first_mark.note)
+        .ok_or("the first note's complete authored intent")?;
+    assert_eq!(visible, full, "A short author note must be fully readable");
+    assert!(painted_text(&first_view, &fixture.second_mark.note).is_none());
     // Refining only the first two scalars of the marked occurrence must keep its note/queue.
     fixture.select("p", 3, 5)?;
     fixture.app.capture_review_selection()?;
@@ -647,6 +663,10 @@ fn applied_note_can_be_resolved_with_one_visible_action_then_next_end_and_reopen
         fixture.app.document.as_ref().map(|d| &d.id),
         Some(&fixture.second.id)
     );
+    fixture.app.rich_review.focus = false;
+    let next_view = fixture.render_panel(vec![]);
+    assert!(painted_text(&next_view, &fixture.second_mark.note).is_some());
+    assert!(painted_text(&next_view, &fixture.first_mark.note).is_none());
     fixture.app.step_markup_review(false)?;
     assert_eq!(
         fixture.app.document.as_ref().map(|d| &d.id),
@@ -681,6 +701,89 @@ fn applied_note_can_be_resolved_with_one_visible_action_then_next_end_and_reopen
         second_applied
     );
     assert!(!fixture.app.rich_review.queue_finished);
+    Ok(())
+}
+
+#[test]
+fn a_long_author_note_scrolls_locally_while_primary_review_actions_remain_visible() -> AppResult<()>
+{
+    let mut fixture = Fixture::new()?;
+    let body = ["Mira is buying time, not agreeing to the repair."; 24].join("\n");
+    let note = fixture.app.workspace.update_annotation(
+        &fixture.first_mark.id,
+        fixture.first.revision,
+        fixture.first_mark.revision,
+        AnnotationPatch {
+            note: Some(body.clone()),
+            status: None,
+        },
+    )?;
+    fixture.begin_queue()?;
+    fixture.app.rich_review.focus = false;
+    let size = egui::vec2(280.0, 560.0);
+    fixture.render_panel_at(vec![], size);
+    let output = fixture.render_panel_at(vec![], size);
+    let (visible, full) = painted_text_bounds(&output, &body).ok_or("visible authored intent")?;
+    let apply = painted_text(&output, "Apply changes").ok_or("visible primary Apply")?;
+    assert!(
+        full.height() > visible.height() * 3.0,
+        "Long note must use a bounded viewport"
+    );
+    assert!(visible.bottom() < apply.top());
+    for label in ["Delete markup", "Apply changes", "Proposed text"] {
+        let control = painted_text(&output, label).ok_or_else(|| format!("visible {label}"))?;
+        assert!(Rect::from_min_size(Pos2::ZERO, size).contains_rect(control));
+    }
+    fixture.render_panel_at(
+        vec![
+            Event::PointerMoved(visible.center()),
+            Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -180.0),
+                phase: egui::TouchPhase::Move,
+                modifiers: Modifiers::NONE,
+            },
+        ],
+        size,
+    );
+    let mut scrolled = fixture.render_panel_at(vec![], size);
+    for _ in 0..4 {
+        scrolled = fixture.render_panel_at(vec![], size);
+    }
+    let (_, moved) = painted_text_bounds(&scrolled, &body).ok_or("locally scrolled author note")?;
+    assert!(
+        moved.top() < full.top() - 1.0,
+        "Wheel must reveal more of the note body"
+    );
+    assert_eq!(painted_text(&scrolled, "Apply changes"), Some(apply));
+    assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
+    assert_eq!(
+        fixture.app.workspace.document(&fixture.first.id)?,
+        fixture.first
+    );
+    Ok(())
+}
+
+#[test]
+fn tag_only_markup_does_not_reserve_an_empty_author_note_block() -> AppResult<()> {
+    let mut fixture = Fixture::new()?;
+    let note = fixture.app.workspace.create_tagged_annotation(
+        &fixture.first.id,
+        fixture.first.revision,
+        fixture.first_mark.anchor.clone(),
+        "",
+        &["Motivation".into()],
+    )?;
+    fixture
+        .app
+        .begin_markup_review(vec![note.id.clone()], &note.id)?;
+    fixture.app.rich_review.focus = false;
+    fixture.render_panel(vec![]);
+    let output = fixture.render_panel(vec![]);
+    assert!(painted_text(&output, "Author note").is_none());
+    assert!(painted_text(&output, "Author note · unsaved").is_none());
+    assert!(painted_text(&output, "Apply changes").is_some());
+    assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
     Ok(())
 }
 

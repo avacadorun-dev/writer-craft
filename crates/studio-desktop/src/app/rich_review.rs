@@ -804,19 +804,39 @@ impl StudioApp {
                         .truncate(),
                 );
             }
-            let note = queue
-                .ids
-                .get(queue.index)
+            // Previous/Next may have changed the target during this frame.
+            let note = self
+                .rich_review
+                .queue
+                .as_ref()
+                .and_then(|queue| queue.ids.get(queue.index))
                 .and_then(|id| self.workspace.annotation(id).ok())
                 .filter(|note| {
                     !note.deleted
-                        && note.status != studio_core::AnnotationStatus::Resolved
                         && self
                             .document
                             .as_ref()
                             .is_some_and(|document| document.id == note.document_id)
                 });
+            if let Some(note) = &note {
+                let linked =
+                    self.rich_review.markup_id.as_deref() == Some(note.id.as_str())
+                        || self
+                            .rich_review
+                            .applied_markup
+                            .as_ref()
+                            .is_some_and(|mark| {
+                                mark.note_id() == note.id
+                                    && self.rich_review.selected.as_ref().is_some_and(|proposal| {
+                                        proposal.summary.id == mark.proposal_id
+                                    })
+                            });
+                if linked {
+                    self.review_author_note(ui, note, t);
+                }
+            }
             if let Some(note) = note
+                && note.status != studio_core::AnnotationStatus::Resolved
                 && ui
                     .add_enabled_ui(self.can_edit_manuscript(), |ui| {
                         icons::labeled_button(ui, Icon::Trash, l.text("Delete markup"), false)
@@ -1086,6 +1106,51 @@ impl StudioApp {
             let result = self.load_rich_proposal(&id);
             self.record_error(result);
         }
+    }
+    fn review_author_note(
+        &self,
+        ui: &mut egui::Ui,
+        note: &studio_core::PassageAnnotation,
+        t: Tokens,
+    ) {
+        let (body, unsaved, conflicted) = self.notes.review_author_note(note);
+        if body.trim().is_empty() {
+            return;
+        }
+        let l = self.language;
+        let font = egui::FontId::proportional(13.0);
+        let max_height = ui.fonts_mut(|fonts| fonts.row_height(&font)) * 4.0;
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(l.text(if unsaved {
+                "Author note · unsaved"
+            } else {
+                "Author note"
+            }))
+            .size(12.0)
+            .strong()
+            .color(t.muted),
+        );
+        egui::ScrollArea::vertical()
+            .id_salt(("review-author-note", &note.document_id, &note.id))
+            .max_height(max_height)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                if conflicted {
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(
+                                l.text("This note changed elsewhere. Your draft is preserved."),
+                            )
+                            .size(11.0)
+                            .color(t.warning),
+                        )
+                        .wrap(),
+                    );
+                }
+                ui.add(egui::Label::new(RichText::new(body).font(font).color(t.text)).wrap());
+            });
+        ui.add_space(4.0);
     }
     fn rich_proposal_actions(&mut self, ui: &mut egui::Ui, proposal: &RichProposal, t: Tokens) {
         let l = self.language;

@@ -8,6 +8,12 @@ pub(super) struct AppliedMarkup {
     note: PassageAnnotation,
 }
 
+impl AppliedMarkup {
+    pub(super) fn note_id(&self) -> &str {
+        &self.note.id
+    }
+}
+
 impl StudioApp {
     /// Keep context only for a real current queue target containing this exact scalar selection.
     pub(super) fn current_review_markup_for_selection(

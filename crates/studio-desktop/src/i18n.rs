@@ -6130,6 +6130,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Author note · unsaved",
+        [
+            "Авторская заметка · не сохранена",
+            "Author note · unsaved",
+            "Autorennotiz · ungespeichert",
+            "Note d’auteur · non enregistrée",
+            "Nota del autor · sin guardar",
+            "Nota do autor · não salva",
+            "作者笔记 · 未保存",
+            "執筆メモ · 未保存",
+        ],
+    ),
+    (
         "Author note: {note}",
         [
             "Авторская заметка: {note}",

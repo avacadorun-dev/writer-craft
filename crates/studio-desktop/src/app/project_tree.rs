@@ -15,6 +15,29 @@ impl std::fmt::Display for TrashedDocument {
 
 impl std::error::Error for TrashedDocument {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RestoreBlocked {
+    ParentInTrash,
+    UnavailableBranch,
+}
+
+impl RestoreBlocked {
+    pub(super) fn msgid(self) -> &'static str {
+        match self {
+            Self::ParentInTrash => "Restore a parent before restoring an item inside it.",
+            Self::UnavailableBranch => "This branch is unavailable. Refresh the project.",
+        }
+    }
+}
+
+impl std::fmt::Display for RestoreBlocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.msgid())
+    }
+}
+
+impl std::error::Error for RestoreBlocked {}
+
 #[derive(Clone)]
 pub(super) enum TreeAction {
     Browse { id: String, mapped: bool },
@@ -138,6 +161,28 @@ pub(super) fn trashed(node: &ProjectTreeNode) -> bool {
     node.metadata["trashedAt"]
         .as_str()
         .is_some_and(|value| !value.is_empty())
+}
+
+fn restore_ancestors_available(
+    node: &ProjectTreeNode,
+    nodes: &[ProjectTreeNode],
+) -> Result<(), RestoreBlocked> {
+    let mut parent = node.metadata["parentId"].as_str();
+    let mut seen = std::collections::HashSet::from([node.logical_id.as_str()]);
+    while let Some(id) = parent {
+        if !seen.insert(id) {
+            return Err(RestoreBlocked::UnavailableBranch);
+        }
+        let ancestor = nodes
+            .iter()
+            .find(|candidate| candidate.logical_id == id)
+            .ok_or(RestoreBlocked::UnavailableBranch)?;
+        if trashed(ancestor) {
+            return Err(RestoreBlocked::ParentInTrash);
+        }
+        parent = ancestor.metadata["parentId"].as_str();
+    }
+    Ok(())
 }
 
 pub(super) fn document_is_active(nodes: &[ProjectTreeNode], document: &str) -> bool {
@@ -468,6 +513,12 @@ impl StudioApp {
             .find(|node| &node.logical_id == id)
             .cloned()
             .ok_or("tree_node_missing")?;
+        if matches!(action, TreeAction::Restore(_))
+            && let Err(error) = restore_ancestors_available(&node, &self.tree_ui.nodes)
+        {
+            self.tree_ui.trash_open = true;
+            return Err(error.into());
+        }
         self.tree_ui.selected = Some(node.logical_id.clone());
         if matches!(action, TreeAction::Open(_) | TreeAction::Reference(_)) {
             if trashed(&node) {
@@ -574,10 +625,25 @@ impl StudioApp {
                 &dialog.project,
                 dialog.original.as_ref().ok_or("tree_original_missing")?,
             )?,
-            Operation::Restore => self.workspace.restore_project_tree_node(
-                &dialog.project,
-                dialog.original.as_ref().ok_or("tree_original_missing")?,
-            )?,
+            Operation::Restore => {
+                match self.workspace.restore_project_tree_node(
+                    &dialog.project,
+                    dialog.original.as_ref().ok_or("tree_original_missing")?,
+                ) {
+                    Ok(restored) => restored,
+                    Err(error) => {
+                        // A parent can change after confirmation opens. The transaction remains
+                        // authoritative; refresh the list and explain this restore-specific refusal.
+                        self.refresh_project_tree()?;
+                        if matches!(&error, studio_core::StudioError::Validation(message)
+                            if message == "Restore the trashed project node before writing or adding children")
+                        {
+                            return Err(RestoreBlocked::ParentInTrash.into());
+                        }
+                        return Err(error.into());
+                    }
+                }
+            }
         };
         Ok(result)
     }
@@ -795,7 +861,13 @@ impl StudioApp {
                         }
                     }
                     Err(error) => {
-                        self.tree_ui.dialog = Some(dialog);
+                        if dialog.operation == Operation::Restore {
+                            // After dismissing the error, return to the actionable parent/child
+                            // list instead of the same confirmation that cannot succeed.
+                            self.tree_ui.trash_open = true;
+                        } else {
+                            self.tree_ui.dialog = Some(dialog);
+                        }
                         self.record_error(Err(error));
                     }
                 }
@@ -803,7 +875,7 @@ impl StudioApp {
                 self.tree_ui.dialog = Some(dialog);
             }
         }
-        if self.tree_ui.trash_open {
+        if self.tree_ui.trash_open && self.error.is_none() {
             let mut chosen = None;
             let mut close = false;
             let response = modal(ctx, l, "tree-trash", l.text("Trash"), 600.0, |ui| {
@@ -812,19 +884,39 @@ impl StudioApp {
                     .max_height((ctx.content_rect().height() - 300.0).max(100.0))
                     .show(ui, |ui| {
                         for node in self.tree_ui.nodes.iter().filter(|node| trashed(node)) {
+                            let blocked =
+                                restore_ancestors_available(node, &self.tree_ui.nodes).err();
                             ui.horizontal(|ui| {
-                                ui.add_sized(
-                                    [(ui.available_width() - 125.0).max(80.0), 40.0],
-                                    egui::Label::new(
-                                        self.tree_ui
-                                            .paths
-                                            .get(&node.logical_id)
-                                            .map(String::as_str)
-                                            .unwrap_or_else(|| node_title(node)),
-                                    )
-                                    .truncate(),
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2((ui.available_width() - 125.0).max(80.0), 40.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        ui.add(
+                                            egui::Label::new(
+                                                self.tree_ui
+                                                    .paths
+                                                    .get(&node.logical_id)
+                                                    .map(String::as_str)
+                                                    .unwrap_or_else(|| node_title(node)),
+                                            )
+                                            .truncate(),
+                                        );
+                                        if let Some(reason) = blocked {
+                                            ui.label(
+                                                RichText::new(l.text(reason.msgid()))
+                                                    .small()
+                                                    .color(t.muted),
+                                            );
+                                        }
+                                    },
                                 );
-                                if ui.button(l.text("Restore")).clicked() {
+                                if ui
+                                    .add_enabled(
+                                        blocked.is_none(),
+                                        egui::Button::new(l.text("Restore")),
+                                    )
+                                    .clicked()
+                                {
                                     chosen = Some(node.logical_id.clone());
                                 }
                             });
@@ -852,6 +944,156 @@ impl StudioApp {
 mod drop_tests {
     use super::*;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    #[test]
+    fn restore_availability_checks_all_ancestors_and_preserves_independent_trash() -> TestResult {
+        let workspace = studio_core::Workspace::memory()?;
+        let project = workspace.create_project("Restore order")?;
+        let outer =
+            workspace.create_project_tree_node(&project.id, 1, None, "folder", "Outtakes")?;
+        let inner = workspace.create_project_tree_node(
+            &project.id,
+            1,
+            Some(&outer.logical_id),
+            "folder",
+            "Earlier draft",
+        )?;
+        let child = workspace.create_project_tree_node(
+            &project.id,
+            1,
+            Some(&inner.logical_id),
+            "document",
+            "Ferry scene",
+        )?;
+        let child = workspace.trash_project_tree_node(&project.id, &child)?;
+        let outer = workspace.trash_project_tree_node(&project.id, &outer)?;
+        let mut nodes = workspace.project_tree(&project.id)?;
+        assert_eq!(
+            restore_ancestors_available(&child, &nodes),
+            Err(RestoreBlocked::ParentInTrash)
+        );
+        assert_eq!(restore_ancestors_available(&outer, &nodes), Ok(()));
+        // Legacy imports can leave the immediate parent active under a trashed ancestor.
+        nodes
+            .iter_mut()
+            .find(|node| node.logical_id == inner.logical_id)
+            .ok_or("inner folder")?
+            .metadata["trashedAt"] = serde_json::Value::Null;
+        assert_eq!(
+            restore_ancestors_available(&child, &nodes),
+            Err(RestoreBlocked::ParentInTrash)
+        );
+        nodes.retain(|node| node.logical_id != outer.logical_id);
+        assert_eq!(
+            restore_ancestors_available(&child, &nodes),
+            Err(RestoreBlocked::UnavailableBranch)
+        );
+        nodes
+            .iter_mut()
+            .find(|node| node.logical_id == inner.logical_id)
+            .ok_or("inner folder")?
+            .metadata["parentId"] = serde_json::json!(child.logical_id);
+        assert_eq!(
+            restore_ancestors_available(&child, &nodes),
+            Err(RestoreBlocked::UnavailableBranch)
+        );
+
+        workspace.restore_project_tree_node(&project.id, &outer)?;
+        let restored = workspace.project_tree(&project.id)?;
+        let retained = restored
+            .iter()
+            .find(|node| node.logical_id == child.logical_id)
+            .ok_or("independently trashed scene")?;
+        assert_eq!(retained, &child);
+        assert_eq!(restore_ancestors_available(retained, &restored), Ok(()));
+        Ok(())
+    }
+
+    #[test]
+    fn restore_preflight_and_later_parent_change_report_parent_first_without_mutation() -> TestResult
+    {
+        let directory = tempfile::tempdir()?;
+        let context = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(context);
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("restore.sqlite"),
+            false,
+            None,
+        )?;
+        let project = app.workspace.create_project("Restore order")?;
+        let folder =
+            app.workspace
+                .create_project_tree_node(&project.id, 1, None, "folder", "Outtakes")?;
+        let child = app.workspace.create_project_tree_node_with_format(
+            &project.id,
+            1,
+            Some(&folder.logical_id),
+            "document",
+            "Ferry scene",
+            studio_core::InitialManuscript::Plain,
+        )?;
+        let document = app
+            .workspace
+            .document(child.document_id.as_deref().ok_or("scene document")?)?;
+        let document = app.workspace.save_document(
+            &document.id,
+            document.revision,
+            "Asya waits for the last ferry.",
+        )?;
+        let child = app
+            .workspace
+            .project_tree(&project.id)?
+            .into_iter()
+            .find(|node| node.logical_id == child.logical_id)
+            .ok_or("current scene")?;
+        let child = app.workspace.trash_project_tree_node(&project.id, &child)?;
+        app.open_project(project.clone())?;
+        let history = app.workspace.revisions(&document.id)?;
+
+        // The list cache still shows an active parent, but the command refreshes before opening.
+        let folder = app
+            .workspace
+            .trash_project_tree_node(&project.id, &folder)?;
+        let before = app.workspace.project_tree(&project.id)?;
+        let error = app
+            .tree_action(TreeAction::Restore(child.logical_id.clone()))
+            .err()
+            .ok_or("unavailable parent must refuse")?;
+        assert_eq!(
+            error.downcast_ref::<RestoreBlocked>(),
+            Some(&RestoreBlocked::ParentInTrash)
+        );
+        assert!(app.tree_ui.dialog.is_none());
+        assert!(app.tree_ui.trash_open);
+        assert_eq!(app.workspace.project_tree(&project.id)?, before);
+
+        let folder = app
+            .workspace
+            .restore_project_tree_node(&project.id, &folder)?;
+        app.tree_action(TreeAction::Restore(child.logical_id.clone()))?;
+        let dialog = app.tree_ui.dialog.take().ok_or("restore confirmation")?;
+        // The same refusal must remain actionable if the parent changes after confirmation.
+        app.workspace
+            .trash_project_tree_node(&project.id, &folder)?;
+        let before = app.workspace.project_tree(&project.id)?;
+        let error = app
+            .apply_tree_dialog(&dialog)
+            .err()
+            .ok_or("changed parent must refuse")?;
+        assert_eq!(
+            error.downcast_ref::<RestoreBlocked>(),
+            Some(&RestoreBlocked::ParentInTrash)
+        );
+        assert_eq!(app.workspace.project_tree(&project.id)?, before);
+        assert_eq!(app.workspace.document(&document.id)?, document);
+        assert_eq!(app.workspace.revisions(&document.id)?, history);
+        assert_eq!(
+            restore_ancestors_available(&child, &app.tree_ui.nodes),
+            Err(RestoreBlocked::ParentInTrash)
+        );
+        Ok(())
+    }
 
     #[test]
     fn acknowledged_text_save_can_move_once_but_cannot_refresh_away_a_foreign_rename() -> TestResult

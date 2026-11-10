@@ -134,6 +134,20 @@ impl NotesState {
                 .values()
                 .any(|composer| composer.has_content())
     }
+    /// A read-only view of this exact note; displaying Review never consumes or rebases a draft.
+    pub(super) fn review_author_note<'a>(
+        &'a self,
+        note: &'a PassageAnnotation,
+    ) -> (&'a str, bool, bool) {
+        match self.drafts.get(&note.id).filter(|draft| {
+            draft.original.id == note.id
+                && draft.original.document_id == note.document_id
+                && draft.changed()
+        }) {
+            Some(draft) => (&draft.body, true, draft.original.revision != note.revision),
+            None => (&note.note, false, false),
+        }
+    }
     /// Return only document identities, never note bodies, for an explicit save/review prerequisite.
     pub(super) fn pending_documents(&self) -> Vec<String> {
         let mut documents = std::collections::BTreeSet::new();
@@ -3709,6 +3723,68 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn review_note_presentation_keeps_the_exact_dirty_body_and_its_stale_guard() -> TestResult {
+        let (workspace, document, note, _) = fixture()?;
+        let mut state = NotesState::default();
+        let body = "  Keep the unfinished question.\nDo not resolve the motive yet.  ";
+        state.drafts.insert(
+            note.id.clone(),
+            NoteDraft {
+                original: note.clone(),
+                body: body.into(),
+                tags: note.tags.join("\n"),
+                catalog: None,
+            },
+        );
+        assert_eq!(state.review_author_note(&note), (body, true, false));
+        let current = workspace.update_annotation(
+            &note.id,
+            document.revision,
+            note.revision,
+            AnnotationPatch {
+                note: Some("A later correction".into()),
+                status: None,
+            },
+        )?;
+        assert_eq!(state.review_author_note(&current), (body, true, true));
+        let draft = state.drafts.get(&note.id).ok_or("retained note draft")?;
+        assert_eq!(draft.original, note);
+        assert_eq!(draft.body, body);
+        assert_eq!(workspace.annotation(&note.id)?, current);
+        assert!(state.has_unsaved_drafts());
+        Ok(())
+    }
+    #[test]
+    fn review_note_presentation_uses_current_text_for_a_clean_or_foreign_cached_draft() -> TestResult
+    {
+        let (_, _, note, _) = fixture()?;
+        let mut state = NotesState::default();
+        state.drafts.insert(
+            note.id.clone(),
+            NoteDraft {
+                original: note.clone(),
+                body: note.note.clone(),
+                tags: note.tags.join("\n"),
+                catalog: None,
+            },
+        );
+        let mut current = note.clone();
+        current.revision += 1;
+        current.note = "Current intent".into();
+        assert_eq!(
+            state.review_author_note(&current),
+            ("Current intent", false, false)
+        );
+        let draft = state.drafts.get_mut(&note.id).ok_or("cached note")?;
+        draft.body = "A draft from another document".into();
+        draft.original.document_id = "another-document".into();
+        assert_eq!(
+            state.review_author_note(&current),
+            ("Current intent", false, false)
+        );
+        Ok(())
+    }
     #[test]
     fn refreshing_metadata_preserves_dirty_draft_and_detects_the_conflict() -> TestResult {
         let (workspace, document, note, _) = fixture()?;

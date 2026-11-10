@@ -128,6 +128,10 @@ The Review panel SHALL support previous/next navigation through captured marked 
 - **WHEN** an author starts review from filtered project markup and applies a replacement before advancing
 - **THEN** only that exact occurrence changes, the next mark opens by identity and Undo remains guarded by the applied revision
 
+#### Scenario: Read the instruction while advancing
+- **WHEN** previous/next opens another marked passage in Review
+- **THEN** its authored note remains readable beside the correction, including retained unsaved wording with an explicit status; long notes scroll locally without hiding Apply
+
 #### Scenario: Pause or navigate with unapplied wording
 - **WHEN** the author closes the panel or visits another marked passage before applying
 - **THEN** the authored replacement remains resumable against its captured revision without altering the manuscript or silently retargeting it
@@ -163,3 +167,11 @@ The applied Review result SHALL retain its originating note identity and offer d
 #### Scenario: Refuse stale resolution
 - **WHEN** note metadata, attachment or manuscript revision changed after the applied result
 - **THEN** resolution refuses without closing another note, losing pending authored data or replaying the already applied text mutation
+
+### Requirement: Explain unavailable hierarchy restoration
+
+The Trash view SHALL disclose when an item cannot be restored until its ancestor is available. A blocked restore MUST retain deleted data and expose the parent-first recovery action in the current UI language. A stale or failed operation SHALL NOT silently restore or retarget another item.
+
+#### Scenario: Restore an independently trashed child
+- **WHEN** both its parent and the independently deleted child are in Trash
+- **THEN** the unavailable child explains the parent-first order; restoring the parent leaves that child deleted until its own explicit restore

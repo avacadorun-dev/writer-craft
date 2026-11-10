@@ -391,6 +391,94 @@ fn dragging_title_or_row_padding_owns_outline_payload_and_escape_release_never_m
 }
 
 #[test]
+fn releasing_a_full_app_drag_into_a_populated_folder_commits_once_without_changing_manuscripts()
+-> AppResult<()> {
+    use super::super::project_navigation::OutlineDrag;
+    let mut fixture = Fixture::new()?;
+    let source = fixture.second.clone();
+    let project = source.project_id.clone();
+    let before = fixture.app.workspace.project_tree(&project)?;
+    let first_history = fixture.app.workspace.rich_revisions(&fixture.first.id)?;
+    let source_history = fixture.app.workspace.rich_revisions(&source.id)?;
+    let source_id = fixture.node_id(&source.id)?;
+    let (_, title) = fixture.title(&source)?;
+    let target = super::super::capture_connected_writing::test_observation(&fixture.ctx)
+        .0
+        .get(&format!("hierarchy.node.{}", fixture.parent))
+        .copied()
+        .ok_or("painted populated folder row")?
+        .center();
+    fixture.render(
+        vec![
+            Event::PointerMoved(title.center()),
+            pointer(title.center(), PointerButton::Primary, true),
+        ],
+        Modifiers::NONE,
+    );
+    fixture.render(vec![Event::PointerMoved(target)], Modifiers::NONE);
+    let payload = egui::DragAndDrop::payload::<OutlineDrag>(&fixture.ctx)
+        .ok_or("held movement must start the outline drag")?;
+    assert_eq!(payload.original.logical_id, source_id);
+    let hover = fixture.render(vec![], Modifiers::NONE);
+    assert!(painted_text(&hover, "Move inside Chapter one", None).is_some());
+    assert_eq!(fixture.app.workspace.project_tree(&project)?, before);
+
+    fixture.render(
+        vec![pointer(target, PointerButton::Primary, false)],
+        Modifiers::NONE,
+    );
+    assert!(!egui::DragAndDrop::has_payload_of_type::<OutlineDrag>(
+        &fixture.ctx
+    ));
+    let after = fixture.app.workspace.project_tree(&project)?;
+    assert_eq!(after.len(), before.len());
+    let moved = after
+        .iter()
+        .find(|node| node.logical_id == source_id)
+        .ok_or("same moved scene identity")?;
+    assert_eq!(moved.document_id.as_deref(), Some(source.id.as_str()));
+    assert_eq!(moved.metadata["parentId"], fixture.parent);
+    let first = after
+        .iter()
+        .find(|node| node.document_id.as_deref() == Some(fixture.first.id.as_str()))
+        .ok_or("existing folder scene")?;
+    assert!(
+        moved.metadata["position"]
+            .as_f64()
+            .ok_or("moved position")?
+            > first.metadata["position"]
+                .as_f64()
+                .ok_or("existing position")?
+    );
+    for node in before.iter().filter(|node| node.logical_id != source_id) {
+        assert_eq!(
+            after
+                .iter()
+                .find(|current| current.logical_id == node.logical_id),
+            Some(node)
+        );
+    }
+    assert_eq!(fixture.app.workspace.document(&source.id)?, source);
+    assert_eq!(
+        fixture.app.workspace.document(&fixture.first.id)?,
+        fixture.first
+    );
+    assert_eq!(
+        fixture.app.workspace.rich_revisions(&source.id)?,
+        source_history
+    );
+    assert_eq!(
+        fixture.app.workspace.rich_revisions(&fixture.first.id)?,
+        first_history
+    );
+    assert_eq!(fixture.app.document.as_ref(), Some(&fixture.first));
+    // The release receipt is consumed; a later frame cannot repeat the tree mutation.
+    fixture.render(vec![], Modifiers::NONE);
+    assert_eq!(fixture.app.workspace.project_tree(&project)?, after);
+    Ok(())
+}
+
+#[test]
 fn browsing_current_document_refuses_an_externally_trashed_ancestor_without_replacing_editor()
 -> AppResult<()> {
     let mut fixture = Fixture::new()?;
