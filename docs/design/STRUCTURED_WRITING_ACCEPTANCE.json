@@ -70,7 +70,8 @@
         "one-action-remove-mark-and-guarded-undo",
         "one-action-local-label-unassignment",
         "short-inline-correction-loop-preserves-draft-and-caret",
-        "filtered-markup-previous-next-inline-apply-and-parked-replacement"
+        "filtered-markup-previous-next-inline-apply-and-parked-replacement",
+        "applied-correction-resolve-note-next-completion-and-reopen"
       ],
       "required_semantic_operations": [
         {

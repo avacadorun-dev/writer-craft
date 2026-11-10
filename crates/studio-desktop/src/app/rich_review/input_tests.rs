@@ -591,3 +591,155 @@ fn removing_review_markup_offers_resume_only_for_a_retained_unapplied_replacemen
     }
     Ok(())
 }
+
+fn click_review_label(fixture: &mut Fixture, label: &str) -> AppResult<()> {
+    fixture.app.rich_review.focus = false;
+    fixture.render_panel(vec![]);
+    let output = fixture.render_panel(vec![]);
+    let pos = painted_text(&output, label)
+        .ok_or_else(|| format!("missing action: {label}"))?
+        .center();
+    fixture.render_panel(vec![
+        Event::PointerMoved(pos),
+        Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        },
+    ]);
+    fixture.render_panel(vec![Event::PointerButton {
+        pos,
+        button: PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    }]);
+    Ok(())
+}
+
+#[test]
+fn applied_note_can_be_resolved_with_one_visible_action_then_next_end_and_reopen() -> AppResult<()>
+{
+    let mut fixture = Fixture::new()?;
+    fixture.begin_queue()?;
+    // Refining only the first two scalars of the marked occurrence must keep its note/queue.
+    fixture.select("p", 3, 5)?;
+    fixture.app.capture_review_selection()?;
+    assert_eq!(
+        fixture.app.rich_review.markup_id.as_deref(),
+        Some(fixture.first_mark.id.as_str())
+    );
+    assert!(fixture.app.rich_review.queue.is_some());
+    fixture.app.rich_review.replacements[0] = "an".into();
+    click_review_label(&mut fixture, "Apply changes")?;
+    let first_applied = fixture.app.workspace.document(&fixture.first.id)?;
+    assert_eq!(first_applied.body, "Я😀 anho echo");
+    click_review_label(&mut fixture, "Resolve note and next")?;
+    let resolved = fixture.app.workspace.annotation(&fixture.first_mark.id)?;
+    assert_eq!(resolved.status, studio_core::AnnotationStatus::Resolved);
+    assert!(!resolved.deleted);
+    assert_eq!(resolved.note, fixture.first_mark.note);
+    assert_eq!(
+        fixture.app.workspace.document(&fixture.first.id)?,
+        first_applied
+    );
+    assert_eq!(
+        fixture.app.document.as_ref().map(|d| &d.id),
+        Some(&fixture.second.id)
+    );
+    fixture.app.step_markup_review(false)?;
+    assert_eq!(
+        fixture.app.document.as_ref().map(|d| &d.id),
+        Some(&fixture.second.id)
+    );
+    fixture.app.rich_review.replacements[0] = "The archivist".into();
+    click_review_label(&mut fixture, "Apply changes")?;
+    let second_applied = fixture.app.workspace.document(&fixture.second.id)?;
+    click_review_label(&mut fixture, "Resolve note")?;
+    let output = fixture.render_panel(vec![]);
+    assert!(painted_text(&output, "End of review list").is_some());
+    assert!(fixture.app.rich_review.queue_finished);
+    assert_eq!(
+        fixture
+            .app
+            .workspace
+            .annotation(&fixture.second_mark.id)?
+            .status,
+        studio_core::AnnotationStatus::Resolved
+    );
+    click_review_label(&mut fixture, "Reopen note")?;
+    assert_eq!(
+        fixture
+            .app
+            .workspace
+            .annotation(&fixture.second_mark.id)?
+            .status,
+        studio_core::AnnotationStatus::Open
+    );
+    assert_eq!(
+        fixture.app.workspace.document(&fixture.second.id)?,
+        second_applied
+    );
+    assert!(!fixture.app.rich_review.queue_finished);
+    Ok(())
+}
+
+#[test]
+fn unrelated_selection_cannot_resolve_the_previous_review_note() -> AppResult<()> {
+    let mut fixture = Fixture::new()?;
+    fixture.begin_queue()?;
+    fixture.select("p", 8, 12)?;
+    fixture.app.capture_review_selection()?;
+    assert!(fixture.app.rich_review.markup_id.is_none());
+    assert!(fixture.app.rich_review.queue.is_none());
+    fixture.app.rich_review.replacements[0] = "different".into();
+    fixture.app.apply_inline_review(false)?;
+    assert!(fixture.app.rich_review.applied_markup.is_none());
+    assert!(fixture.app.resolve_applied_review_note(true).is_err());
+    assert_eq!(
+        fixture
+            .app
+            .workspace
+            .annotation(&fixture.first_mark.id)?
+            .status,
+        studio_core::AnnotationStatus::Open
+    );
+    Ok(())
+}
+
+#[test]
+fn stale_note_refuses_completion_without_replaying_applied_text_or_losing_its_receipt()
+-> AppResult<()> {
+    let mut fixture = Fixture::new()?;
+    fixture.begin_queue()?;
+    fixture.app.rich_review.replacements[0] = "a signal".into();
+    fixture.app.apply_inline_review(false)?;
+    let canonical = fixture.app.workspace.document(&fixture.first.id)?;
+    let note = fixture.app.workspace.annotation(&fixture.first_mark.id)?;
+    let changed = fixture.app.workspace.update_annotation(
+        &note.id,
+        canonical.revision,
+        note.revision,
+        AnnotationPatch {
+            note: Some("A later editorial question".into()),
+            status: None,
+        },
+    )?;
+    assert!(fixture.app.resolve_applied_review_note(true).is_err());
+    assert_eq!(fixture.app.workspace.annotation(&note.id)?, changed);
+    assert_eq!(
+        fixture.app.workspace.document(&fixture.first.id)?,
+        canonical
+    );
+    assert_eq!(
+        fixture
+            .app
+            .rich_review
+            .selected
+            .as_ref()
+            .map(|p| p.summary.status),
+        Some(ProposalStatus::Applied)
+    );
+    assert!(!fixture.app.rich_review.queue_finished);
+    Ok(())
+}

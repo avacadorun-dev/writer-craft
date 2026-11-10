@@ -938,6 +938,9 @@ const PROJECT_LABEL_ERROR_MESSAGES: &[&str] = &[
     "Project labels contain extension data that cannot be scoped safely; use complete-project canonical export",
 ];
 const COMMITTED_LABEL_MESSAGES: &[&str] = &[
+    "The edit was applied, but its note changed. Open Notes to review it before resolving it.",
+    "This note or manuscript changed. Review it in Notes before resolving it.",
+    "The note was updated, but the panel could not refresh. Reopen Notes before continuing.",
     "This passage cannot be revealed safely. Save or restore the document, then select it again.",
     "Write a replacement before saving this draft, or discard it.",
     "This marked passage is unavailable. Restore or reattach it first.",
@@ -1805,6 +1808,7 @@ mod catalog_source_checks {
             include_str!("app/notes/presentation.rs"),
             include_str!("app/notes/quick_actions.rs"),
             include_str!("app/rich_review.rs"),
+            include_str!("app/rich_review/markup_completion.rs"),
             include_str!("app/project_navigation.rs"),
             include_str!("app/clipboard_host.rs"),
             include_str!("app/rendering.rs"),

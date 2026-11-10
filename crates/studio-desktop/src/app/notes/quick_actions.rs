@@ -11,6 +11,67 @@ pub(super) struct QuickMarkupUndo {
 }
 
 impl StudioApp {
+    /// Finish or reopen the exact reviewed note, consuming its pending metadata in one command.
+    /// The caller records the returned receipt before attempting any fallible UI refresh.
+    pub(in crate::app) fn update_review_note_status(
+        &mut self,
+        before: &PassageAnnotation,
+        status: AnnotationStatus,
+    ) -> AppResult<PassageAnnotation> {
+        let draft = self.notes.drafts.get(&before.id).cloned();
+        if let Some(draft) = &draft
+            && draft.original != *before
+        {
+            return Err(studio_core::StudioError::AnnotationConflict {
+                expected: draft.original.revision,
+                actual: before.revision,
+            }
+            .into());
+        }
+        let tags = draft
+            .as_ref()
+            .map(|draft| parsed_tags(&draft.tags))
+            .filter(|tags| *tags != before.tags);
+        let labels = if tags.is_some() {
+            Some(
+                draft
+                    .as_ref()
+                    .and_then(|draft| draft.catalog.as_ref())
+                    .ok_or("missing_draft_label_catalog")?,
+            )
+        } else {
+            None
+        };
+        let patch = AnnotationPatch {
+            note: draft
+                .as_ref()
+                .filter(|draft| draft.body != before.note)
+                .map(|draft| draft.body.clone()),
+            status: Some(status),
+        };
+        let (document_revision, annotation_revision) = self.note_guard_after_flush(before)?;
+        let updated = if let Some(labels) = labels {
+            self.workspace.update_annotation_markup_with_labels(
+                &before.id,
+                document_revision,
+                annotation_revision,
+                patch,
+                tags,
+                labels,
+            )?
+        } else {
+            self.workspace.update_annotation(
+                &before.id,
+                document_revision,
+                annotation_revision,
+                patch,
+            )?
+        };
+        self.notes.drafts.remove(&before.id);
+        self.notes.acknowledge(&updated);
+        Ok(updated)
+    }
+
     /// Remove a local mark in one metadata transaction, retaining its authored draft for recovery.
     pub(in crate::app) fn quick_remove_note(&mut self, note: &PassageAnnotation) -> AppResult<()> {
         let draft = self.notes.drafts.get(&note.id).cloned();
@@ -356,6 +417,158 @@ mod tests {
             }
             Err("manuscript scroll did not settle within the bounded frame budget".into())
         }
+    }
+
+    #[test]
+    fn review_status_commits_pending_body_labels_and_status_in_one_guarded_history_event()
+    -> AppResult<()> {
+        let mut fixture = Fixture::new()?;
+        let note = fixture.note.clone();
+        let catalog = fixture
+            .app
+            .workspace
+            .project_labels(&fixture.document.project_id)?;
+        let catalog = fixture.app.workspace.create_project_label(
+            &catalog,
+            "Motivation",
+            ProjectLabelColor::Violet,
+        )?;
+        fixture.draft(&note, "Ася keeps the log to protect Lev. 😀")?;
+        fixture
+            .app
+            .notes
+            .drafts
+            .get_mut(&note.id)
+            .ok_or("pending note draft")?
+            .tags = "Chronology\nMotivation".into();
+        let catalog = fixture.app.workspace.set_project_label_color(
+            &catalog,
+            "Motivation",
+            ProjectLabelColor::Rose,
+        )?;
+        assert!(
+            fixture
+                .app
+                .update_review_note_status(&note, AnnotationStatus::Resolved)
+                .is_err()
+        );
+        assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
+        assert_eq!(fixture.app.workspace.annotation_history(&note.id)?.len(), 1);
+        let draft = fixture
+            .app
+            .notes
+            .drafts
+            .get_mut(&note.id)
+            .ok_or("retained note draft")?;
+        assert_eq!(draft.body, "Ася keeps the log to protect Lev. 😀");
+        assert_eq!(draft.tags, "Chronology\nMotivation");
+        // Model explicit acknowledgement of the changed vocabulary, retaining authored fields.
+        draft.catalog = Some(catalog);
+        let resolved = fixture
+            .app
+            .update_review_note_status(&note, AnnotationStatus::Resolved)?;
+        assert_eq!(resolved.id, note.id);
+        assert_eq!(resolved.status, AnnotationStatus::Resolved);
+        assert_eq!(resolved.note, "Ася keeps the log to protect Lev. 😀");
+        assert_eq!(resolved.tags, ["Chronology", "Motivation"]);
+        assert_eq!(resolved.anchor, note.anchor);
+        assert!(!resolved.deleted);
+        assert_eq!(fixture.app.workspace.annotation(&note.id)?, resolved);
+        let history = fixture.app.workspace.annotation_history(&note.id)?;
+        assert_eq!(history.len(), 2);
+        let event = history.last().ok_or("resolved note history")?;
+        assert_eq!(event.before.as_ref(), Some(&note));
+        assert_eq!(event.after, resolved);
+        assert!(!fixture.app.notes.drafts.contains_key(&note.id));
+        assert!(
+            fixture.app.notes.invalid,
+            "The caller must refresh after storing the receipt"
+        );
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.document.id)?,
+            fixture.document
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_review_status_keeps_pending_draft_and_refuses_a_fresh_snapshot_over_old_draft()
+    -> AppResult<()> {
+        let mut fixture = Fixture::new()?;
+        let note = fixture.note.clone();
+        fixture.draft(&note, "Unfinished wording stays here 😀")?;
+        let current = fixture.app.workspace.update_annotation(
+            &note.id,
+            fixture.document.revision,
+            note.revision,
+            AnnotationPatch {
+                note: Some("A newer saved note".into()),
+                status: None,
+            },
+        )?;
+        for captured in [&note, &current] {
+            assert!(
+                fixture
+                    .app
+                    .update_review_note_status(captured, AnnotationStatus::Resolved)
+                    .is_err()
+            );
+            assert_eq!(fixture.app.workspace.annotation(&note.id)?, current);
+            assert_eq!(fixture.app.workspace.annotation_history(&note.id)?.len(), 2);
+            let draft = fixture
+                .app
+                .notes
+                .drafts
+                .get(&note.id)
+                .ok_or("retained conflicting draft")?;
+            assert_eq!(draft.original, note);
+            assert_eq!(draft.body, "Unfinished wording stays here 😀");
+            assert_eq!(draft.tags, note.tags.join("\n"));
+            assert_eq!(
+                fixture.app.workspace.document(&fixture.document.id)?,
+                fixture.document
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reopening_a_reviewed_note_is_guarded_and_keeps_the_same_identity_and_metadata()
+    -> AppResult<()> {
+        let mut fixture = Fixture::new()?;
+        let note = fixture.note.clone();
+        let resolved = fixture
+            .app
+            .update_review_note_status(&note, AnnotationStatus::Resolved)?;
+        fixture.app.refresh_notes()?;
+        let reopened = fixture
+            .app
+            .update_review_note_status(&resolved, AnnotationStatus::Open)?;
+        assert_eq!(reopened.id, note.id);
+        assert_eq!(reopened.note, note.note);
+        assert_eq!(reopened.tags, note.tags);
+        assert_eq!(reopened.anchor, note.anchor);
+        assert_eq!(reopened.status, AnnotationStatus::Open);
+        assert!(!reopened.deleted);
+        let history = fixture.app.workspace.annotation_history(&note.id)?;
+        assert_eq!(history.len(), 3);
+        let event = history.last().ok_or("reopened note history")?;
+        assert_eq!(event.before.as_ref(), Some(&resolved));
+        assert_eq!(event.after, reopened);
+        fixture.app.refresh_notes()?;
+        assert!(
+            fixture
+                .app
+                .update_review_note_status(&resolved, AnnotationStatus::Resolved)
+                .is_err()
+        );
+        assert_eq!(fixture.app.workspace.annotation(&note.id)?, reopened);
+        assert_eq!(fixture.app.workspace.annotation_history(&note.id)?.len(), 3);
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.document.id)?,
+            fixture.document
+        );
+        Ok(())
     }
 
     #[test]

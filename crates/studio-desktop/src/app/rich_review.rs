@@ -4,6 +4,8 @@ use craft_editor_egui::{DocPoint, EditorSession, Selection, canvas::CanvasStyle}
 use craft_editor_model::{Document as RichTree, Revision, TextPoint};
 use studio_core::{AssistantSelectionAttachment, RichProposal, RichProposalSummary};
 
+mod markup_completion;
+
 #[cfg(test)]
 mod input_tests;
 
@@ -26,6 +28,8 @@ pub(super) struct RichReviewState {
     parked: Vec<ReviewDraft>,
     prepared: Option<PreparedEdit>,
     paused: bool,
+    applied_markup: Option<markup_completion::AppliedMarkup>,
+    queue_finished: bool,
 }
 #[derive(Clone)]
 struct PreparedEdit {
@@ -111,6 +115,8 @@ impl RichReviewState {
         markup_id: Option<String>,
         markup_revision: Option<i64>,
     ) {
+        self.applied_markup = None;
+        self.queue_finished = false;
         if self.attachment.as_ref() == Some(&attachment)
             && self.markup_id == markup_id
             && self.markup_revision == markup_revision
@@ -322,8 +328,15 @@ impl StudioApp {
     }
     pub(super) fn capture_review_selection(&mut self) -> AppResult<()> {
         let attachment = self.captured_review_selection()?;
-        self.rich_review.install(attachment, None, None);
-        self.rich_review.queue = None;
+        let markup = self.current_review_markup_for_selection(&attachment)?;
+        self.rich_review.install(
+            attachment,
+            markup.as_ref().map(|note| note.id.clone()),
+            markup.as_ref().map(|note| note.revision),
+        );
+        if markup.is_none() {
+            self.rich_review.queue = None;
+        }
         self.show_inline_review();
         Ok(())
     }
@@ -379,7 +392,8 @@ impl StudioApp {
             .into_iter()
             .find(|row| &row.annotation.id == id)
             .ok_or("This marked passage is unavailable. Restore or reattach it first.")?;
-        if row.annotation.anchor_status != studio_core::AnchorStatus::Attached
+        if row.annotation.status == studio_core::AnnotationStatus::Resolved
+            || row.annotation.anchor_status != studio_core::AnchorStatus::Attached
             || !project_tree::document_is_active(
                 &self.workspace.project_tree(&queue.project_id)?,
                 &row.annotation.document_id,
@@ -450,6 +464,7 @@ impl StudioApp {
             let id = &queue.ids[index];
             let available = records.iter().any(|row| {
                 &row.annotation.id == id
+                    && row.annotation.status != studio_core::AnnotationStatus::Resolved
                     && row.annotation.anchor_status == studio_core::AnchorStatus::Attached
                     && project_tree::document_is_active(&tree, &row.annotation.document_id)
             });
@@ -524,6 +539,15 @@ impl StudioApp {
     fn load_rich_proposal(&mut self, id: &str) -> AppResult<()> {
         let project = self.project.as_ref().ok_or("Open a project for review.")?;
         let proposal = self.workspace.rich_proposal(&project.id, id)?;
+        if self
+            .rich_review
+            .applied_markup
+            .as_ref()
+            .is_some_and(|mark| mark.proposal_id != id)
+        {
+            self.rich_review.applied_markup = None;
+            self.rich_review.queue_finished = false;
+        }
         let preview = RichPreview::new(&proposal)?;
         self.rich_review.excerpts = review_excerpts(&proposal);
         self.rich_review.selected = Some(std::sync::Arc::new(proposal));
@@ -620,6 +644,11 @@ impl StudioApp {
             .id
             .clone();
         let mut receipt = self.workspace.rich_proposal(&project, id)?;
+        let markup = if action == ProposalStatus::Applied {
+            self.markup_origin_for_apply(id)?
+        } else {
+            None
+        };
         let document = match action {
             ProposalStatus::Applied => {
                 let document = self.workspace.apply_rich_proposal(&project, id)?;
@@ -678,6 +707,19 @@ impl StudioApp {
                 self.rich_review.paused = false;
             }
         }
+        let markup_result = if action == ProposalStatus::Applied {
+            self.remember_applied_markup(id, markup)
+        } else {
+            if self
+                .rich_review
+                .applied_markup
+                .as_ref()
+                .is_some_and(|mark| mark.proposal_id == id)
+            {
+                self.rich_review.applied_markup = None;
+            }
+            Ok(())
+        };
         if let Some(document) = document
             && self.open_document(document).is_err()
         {
@@ -711,7 +753,7 @@ impl StudioApp {
         if self.refresh_rich_proposals().is_err() || self.load_rich_proposal(id).is_err() {
             return Err("The edit was saved, but the panel could not refresh. Reopen the document before continuing.".into());
         }
-        Ok(())
+        markup_result
     }
     pub(super) fn rich_review_panel(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let l = self.language;
@@ -767,9 +809,12 @@ impl StudioApp {
                 .get(queue.index)
                 .and_then(|id| self.workspace.annotation(id).ok())
                 .filter(|note| {
-                    self.document
-                        .as_ref()
-                        .is_some_and(|document| document.id == note.document_id)
+                    !note.deleted
+                        && note.status != studio_core::AnnotationStatus::Resolved
+                        && self
+                            .document
+                            .as_ref()
+                            .is_some_and(|document| document.id == note.document_id)
                 });
             if let Some(note) = note
                 && ui
@@ -782,6 +827,7 @@ impl StudioApp {
                 let result = self.quick_remove_note(&note);
                 if result.is_ok() {
                     self.rich_review.paused = self.rich_review.attachment.is_some();
+                    self.rich_review.applied_markup = None;
                 }
                 self.record_error(result);
             }
@@ -797,9 +843,11 @@ impl StudioApp {
                     .as_ref()
                     .and_then(|rich| rich.session.selection())
                     .is_some_and(|selection| selection.anchor != selection.head);
-            capture = ui
-                .add_enabled(enabled, egui::Button::new(l.text("Edit selection")))
-                .clicked();
+            if self.rich_review.applied_markup.is_none() {
+                capture = ui
+                    .add_enabled(enabled, egui::Button::new(l.text("Edit selection")))
+                    .clicked();
+            }
             if self.rich_review.paused
                 && self.rich_review.attachment.is_some()
                 && ui.button(l.text("Resume edit")).clicked()
@@ -1079,6 +1127,7 @@ impl StudioApp {
             }
             ProposalStatus::Applied => {
                 ui.colored_label(t.good, l.text("Changes applied"));
+                self.review_markup_completion_actions(ui, proposal, t);
                 if components::action(ui, l.text("Undo apply"), same, None).clicked() {
                     let result =
                         self.act_rich_proposal(&proposal.summary.id, ProposalStatus::Undone);

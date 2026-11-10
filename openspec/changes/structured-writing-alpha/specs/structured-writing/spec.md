@@ -143,3 +143,23 @@ The Review panel SHALL support previous/next navigation through captured marked 
 #### Scenario: Remove a mark after its correction is applied
 - **WHEN** a fulfilled correction has no active unapplied draft and its mark is removed
 - **THEN** the panel exposes removal Undo without a phantom Resume action; an actually retained unapplied replacement remains resumable
+
+### Requirement: Finish a corrected note
+
+The applied Review result SHALL retain its originating note identity and offer direct resolution and continuation. Resolution MUST preserve authored note data and history, refuse stale state and remain distinct from manuscript Undo. Completed notes SHALL leave the active review queue and remain reopenable.
+
+#### Scenario: Complete a note after Apply
+- **WHEN** a replacement tied to a marked passage has been applied and the author chooses Resolve note and next
+- **THEN** that exact note becomes resolved, the next unresolved captured note opens, and the completed note retains its prose, labels and history
+
+#### Scenario: Resolve the final note
+- **WHEN** the last available note is resolved
+- **THEN** the panel shows queue completion with a reopen route, without an extra editor action or a nonexistent next target
+
+#### Scenario: Preserve context while refining a marked passage
+- **WHEN** an author recaptures an exact subrange within the current attached note
+- **THEN** review retains that note identity and queue; an unrelated selection starts a standalone correction
+
+#### Scenario: Refuse stale resolution
+- **WHEN** note metadata, attachment or manuscript revision changed after the applied result
+- **THEN** resolution refuses without closing another note, losing pending authored data or replaying the already applied text mutation

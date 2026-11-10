@@ -176,6 +176,97 @@ impl crate::preference_file::FlatPreferences for InterfacePreferences {
 // Each row is msgid + Russian, English, German, French, Spanish, Portuguese, Chinese, Japanese.
 const CATALOG: &[(&str, [&str; 8])] = &[
     (
+        "Resolve note and next",
+        [
+            "Закрыть и далее",
+            "Resolve note and next",
+            "Notiz erledigen und weiter",
+            "Résoudre la note et continuer",
+            "Resolver nota y continuar",
+            "Resolver nota e continuar",
+            "解决笔记并继续",
+            "注釈を解決して次へ",
+        ],
+    ),
+    (
+        "Note resolved",
+        [
+            "Заметка закрыта",
+            "Note resolved",
+            "Notiz erledigt",
+            "Note résolue",
+            "Nota resuelta",
+            "Nota resolvida",
+            "笔记已解决",
+            "注釈を解決しました",
+        ],
+    ),
+    (
+        "Note reopened",
+        [
+            "Заметка открыта снова",
+            "Note reopened",
+            "Notiz wieder geöffnet",
+            "Note rouverte",
+            "Nota reabierta",
+            "Nota reaberta",
+            "笔记已重新打开",
+            "注釈を再開しました",
+        ],
+    ),
+    (
+        "End of review list",
+        [
+            "Конец списка заметок",
+            "End of review list",
+            "Ende der Notizenliste",
+            "Fin de la liste de notes",
+            "Fin de la lista de notas",
+            "Fim da lista de notas",
+            "已到笔记列表末尾",
+            "注釈リストの最後です",
+        ],
+    ),
+    (
+        "The edit was applied, but its note changed. Open Notes to review it before resolving it.",
+        [
+            "Правка применена, но заметка изменилась. Проверьте её в «Заметках» перед закрытием.",
+            "The edit was applied, but its note changed. Open Notes to review it before resolving it.",
+            "Die Änderung wurde angewendet, aber die Notiz hat sich geändert. Prüfen Sie sie vor dem Erledigen unter Notizen.",
+            "La modification a été appliquée, mais la note a changé. Vérifiez-la dans Notes avant de la résoudre.",
+            "La edición se aplicó, pero la nota cambió. Revísela en Notas antes de resolverla.",
+            "A edição foi aplicada, mas a nota mudou. Revise-a em Notas antes de resolvê-la.",
+            "修改已应用，但笔记已更改。请先在“笔记”中检查，再将其标为已解决。",
+            "編集は適用されましたが、注釈が変更されました。解決する前に「注釈」で確認してください。",
+        ],
+    ),
+    (
+        "This note or manuscript changed. Review it in Notes before resolving it.",
+        [
+            "Заметка или рукопись изменились. Проверьте заметку перед закрытием.",
+            "This note or manuscript changed. Review it in Notes before resolving it.",
+            "Die Notiz oder das Manuskript hat sich geändert. Prüfen Sie die Notiz vor dem Erledigen.",
+            "La note ou le manuscrit a changé. Vérifiez la note avant de la résoudre.",
+            "La nota o el manuscrito cambió. Revise la nota antes de resolverla.",
+            "A nota ou o manuscrito mudou. Revise a nota antes de resolvê-la.",
+            "笔记或文稿已更改。请先检查笔记，再将其标为已解决。",
+            "注釈または原稿が変更されました。解決する前に注釈を確認してください。",
+        ],
+    ),
+    (
+        "The note was updated, but the panel could not refresh. Reopen Notes before continuing.",
+        [
+            "Заметка обновлена, но панель не обновилась. Откройте «Заметки» заново перед продолжением.",
+            "The note was updated, but the panel could not refresh. Reopen Notes before continuing.",
+            "Die Notiz wurde aktualisiert, aber die Ansicht konnte nicht aktualisiert werden. Öffnen Sie Notizen erneut.",
+            "La note a été mise à jour, mais le panneau ne s’est pas actualisé. Rouvrez Notes avant de continuer.",
+            "La nota se actualizó, pero el panel no pudo actualizarse. Vuelva a abrir Notas antes de continuar.",
+            "A nota foi atualizada, mas o painel não. Reabra Notas antes de continuar.",
+            "笔记已更新，但面板未能刷新。请重新打开“笔记”后再继续。",
+            "注釈は更新されましたが、パネルを更新できませんでした。「注釈」を開き直してから続行してください。",
+        ],
+    ),
+    (
         "Save note and edit drafts before closing?",
         [
             "Сохранить черновики заметок и правок перед выходом?",
@@ -6171,7 +6262,7 @@ const CATALOG: &[(&str, [&str; 8])] = &[
     (
         "Resolve note",
         [
-            "Завершить заметку",
+            "Закрыть заметку",
             "Resolve note",
             "Notiz als erledigt markieren",
             "Résoudre la note",
