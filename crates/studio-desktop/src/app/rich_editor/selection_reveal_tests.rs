@@ -142,8 +142,29 @@ impl Fixture {
             ..Default::default()
         };
         eframe::App::raw_input_hook(&mut self.app, &self.ctx, &mut input);
-        let mut output = self.ctx.run_ui(input, |ui| {
+        let ctx = self.ctx.clone();
+        let mut observation = None;
+        let mut output = ctx.run_ui(input, |ui| {
             eframe::App::ui(&mut self.app, ui, &mut self.frame);
+            // Read this emitted pass before end_pass swaps widget registries. Reading afterward
+            // can pair the previous Response origin with current engine geometry during animation.
+            observation = Some((|| -> AppResult<Observation> {
+                let rich = self.rich()?;
+                let response = ctx
+                    .read_response(rich.session.options.id)
+                    .ok_or("The actual manuscript response was not emitted")?;
+                let selected = rich.session.canvas_selection_rect(&response)?;
+                let offset = rich
+                    .measured_navigation_scroll_offset()
+                    .ok_or("The completed manuscript frame has no measured scroll offset")?;
+                assert!(offset.is_finite() && offset >= 0.0);
+                assert!(response.interact_rect.is_finite() && response.interact_rect.is_positive());
+                Ok(Observation {
+                    response,
+                    selected,
+                    offset,
+                })
+            })());
         });
         output.textures_delta.clear();
         output.platform_output.commands.clear();
@@ -152,22 +173,7 @@ impl Fixture {
             "Full-app selection reveal failed: {:?}",
             self.app.error.as_ref().map(|error| &error.details),
         );
-        let rich = self.rich()?;
-        let response = self
-            .ctx
-            .read_response(rich.session.options.id)
-            .ok_or("The actual manuscript response was not emitted")?;
-        let selected = rich.session.canvas_selection_rect(&response)?;
-        let offset = rich
-            .measured_navigation_scroll_offset()
-            .ok_or("The completed manuscript frame has no measured scroll offset")?;
-        assert!(offset.is_finite() && offset >= 0.0);
-        assert!(response.interact_rect.is_finite() && response.interact_rect.is_positive());
-        Ok(Observation {
-            response,
-            selected,
-            offset,
-        })
+        observation.ok_or("The full application pass was not observed")?
     }
 
     fn settle(&mut self) -> AppResult<Observation> {
