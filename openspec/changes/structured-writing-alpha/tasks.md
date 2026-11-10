@@ -9,6 +9,7 @@
 - [ ] Complete F-55 one-action recoverable mark removal, nearby guarded Undo and direct local label removal; simplify and count the native correction loop without losing authored drafts.
 - [x] Implement compatible author-defined passage tags and project result lifecycle.
 - [ ] Verify targeted semantic preservation/refusal checks on GitHub without including the retained #10 diff.
+- [ ] Resolve compiled F-55 B1 selected-range visibility, B2 note-row chip containment and C1 phantom Resume; repeat native and independent review.
 - [ ] Perform A3-WRITE-01/A3-MARK-01 through the native interface on the substantial acceptance manuscript.
 - [ ] Obtain independent same-issue exact-candidate acceptance and audit #14/#10 remaining scope.
 - [ ] Complete and independently verify #7 before advancing to #11.

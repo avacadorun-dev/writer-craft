@@ -781,7 +781,7 @@ impl StudioApp {
             {
                 let result = self.quick_remove_note(&note);
                 if result.is_ok() {
-                    self.rich_review.paused = true;
+                    self.rich_review.paused = self.rich_review.attachment.is_some();
                 }
                 self.record_error(result);
             }
@@ -800,7 +800,10 @@ impl StudioApp {
             capture = ui
                 .add_enabled(enabled, egui::Button::new(l.text("Edit selection")))
                 .clicked();
-            if self.rich_review.paused && ui.button(l.text("Resume edit")).clicked() {
+            if self.rich_review.paused
+                && self.rich_review.attachment.is_some()
+                && ui.button(l.text("Resume edit")).clicked()
+            {
                 self.rich_review.paused = false;
                 self.rich_review.focus = true;
             }

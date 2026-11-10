@@ -53,7 +53,7 @@
       "issues": [
         14
       ],
-      "requirements": "Use meaningful manual labels across scenes and exact repeated occurrences. Distinguish one assignment from a project-wide label operation. Exercise pending passage-composer cancel/resume and the draft preflight before project-wide label mutation. Retain annotation identity, Unicode-scalar anchors, history and detached states without name-based retargeting.",
+      "requirements": "Use meaningful manual labels across scenes and exact repeated occurrences. Distinguish one assignment from a project-wide label operation. Exercise pending passage-composer cancel/resume and the draft preflight before project-wide label mutation. Retain annotation identity, Unicode-scalar anchors, history and detached states without name-based retargeting. Compiled F-55 rework must show the whole short wrapped selection after inspector reflow and Apply/Undo; note labels/overflow stay inside their row hit/background geometry, and Resume appears only for a retained unapplied draft.",
       "required_paths": [
         "create-tag-only-and-noted-passages",
         "project-filter-exact-occurrence-and-return",

@@ -442,6 +442,23 @@ struct NoteRowResponse {
     row: egui::Response,
     remove: egui::Response,
 }
+/// Uniform virtualization height for the fullest row: note, quote and label chips.
+/// Horizontal groups reserve the theme's interaction height even for decorative content.
+fn note_row_height(ui: &egui::Ui) -> f32 {
+    let (primary, secondary) = ui.fonts_mut(|fonts| {
+        (
+            RichText::new("").size(13.0).font_height(fonts, ui.style()),
+            RichText::new("").size(12.0).font_height(fonts, ui.style()),
+        )
+    });
+    let interaction = ui.spacing().interact_size.y;
+    let primary = primary.max(15.0).max(interaction);
+    let chips = interaction
+        .max(25.0)
+        .max(secondary + 8.0)
+        .max(ui.text_style_height(&egui::TextStyle::Button) + ui.spacing().button_padding.y * 2.0);
+    (10.0 + primary + 2.0 + secondary + 2.0 + chips).ceil()
+}
 fn note_row(
     ui: &mut egui::Ui,
     note: &PassageAnnotation,
@@ -451,8 +468,11 @@ fn note_row(
     l: Language,
     t: Tokens,
 ) -> NoteRowResponse {
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 72.0), egui::Sense::click());
+    let height = note_row_height(ui);
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::click(),
+    );
     if state.selected || response.hovered() {
         ui.painter().rect_filled(
             rect,
@@ -533,6 +553,9 @@ fn note_row(
             }
         },
     );
+    // The positioned child scopes advance their parent cursor to their own content bounds.
+    // Restore the full allocated row so consecutive rows follow the virtualized stride.
+    ui.advance_cursor_after_rect(rect);
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
@@ -1389,7 +1412,8 @@ impl StudioApp {
         ui.add_space(12.0);
         let mut activate = None;
         let mut remove_row = None;
-        let list_height = (ui.available_height() - 260.0).clamp(72.0, 216.0);
+        let row_height = note_row_height(ui);
+        let list_height = (ui.available_height() - 260.0).clamp(row_height, row_height * 3.0);
         let mut list = egui::ScrollArea::vertical()
             .id_salt("document-notes-list")
             .max_height(list_height)
@@ -1412,14 +1436,14 @@ impl StudioApp {
                 .position(|note| Some(&note.id) == self.notes.selected.as_ref())
             {
                 list = list.vertical_scroll_offset(
-                    (index as f32 * (72.0 + ui.spacing().item_spacing.y) - list_height * 0.5
-                        + 36.0)
+                    (index as f32 * (row_height + ui.spacing().item_spacing.y) - list_height * 0.5
+                        + row_height * 0.5)
                         .max(0.0),
                 );
             }
             self.notes.reveal_row = false;
         }
-        list.show_rows(ui, 72.0, rows.len(), |ui, range| {
+        list.show_rows(ui, row_height, rows.len(), |ui, range| {
             for note in &rows[range] {
                 let selected = self.notes.selected.as_ref() == Some(&note.id);
                 let tree = if self.notes.invalid {
@@ -3516,6 +3540,171 @@ mod tests {
             if name != "delete control" {
                 assert_eq!(fixture.app.workspace.annotation(&note.id)?, note);
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn painted_note_chips_stay_inside_the_row_and_its_hit_target_at_compact_sizes() -> TestResult {
+        fn painted(
+            shape: &egui::epaint::Shape,
+            texts: &mut Vec<(String, egui::Rect)>,
+            fills: &mut Vec<(egui::Color32, egui::Rect)>,
+        ) {
+            match shape {
+                egui::epaint::Shape::Text(shape) => {
+                    texts.push((shape.galley.job.text.clone(), shape.visual_bounding_rect()))
+                }
+                egui::epaint::Shape::Rect(shape) => fills.push((shape.fill, shape.rect)),
+                egui::epaint::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        painted(shape, texts, fills);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let (_, _, mut note, _) = fixture()?;
+        note.tags = vec![
+            "Motivation".into(),
+            "A deliberately long secondary label".into(),
+        ];
+        for (width, font_scale, selected) in [(320.0, 1.0, true), (224.0, 1.35, false)] {
+            let ctx = egui::Context::default();
+            let tokens = theme::apply(&ctx, &theme::ThemeSettings::default());
+            let mut style = (*ctx.style()).clone();
+            style.spacing.interact_size.y *= font_scale;
+            style.spacing.button_padding *= font_scale;
+            for font in style.text_styles.values_mut() {
+                font.size *= font_scale;
+            }
+            style.interaction.selectable_labels = true;
+            ctx.set_style(style);
+            let frame = |events, time| {
+                let mut bounds = egui::Rect::NOTHING;
+                let mut clicked = false;
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(640.0, 480.0),
+                        )),
+                        events,
+                        time: Some(time),
+                        focused: true,
+                        ..Default::default()
+                    },
+                    |root| {
+                        egui::CentralPanel::default().show(root, |ui| {
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(width, 160.0),
+                                Layout::top_down(Align::Min),
+                                |ui| {
+                                    let row = note_row(
+                                        ui,
+                                        &note,
+                                        "echo",
+                                        NoteRowState {
+                                            selected,
+                                            removable: true,
+                                        },
+                                        None,
+                                        Language::English,
+                                        tokens,
+                                    );
+                                    bounds = row.row.rect;
+                                    clicked = row.row.clicked() && !row.remove.clicked();
+                                    let mut following = note.clone();
+                                    following.id = "following-note".into();
+                                    following.note = "Following note".into();
+                                    following.tags.clear();
+                                    let following = note_row(
+                                        ui,
+                                        &following,
+                                        "another passage",
+                                        NoteRowState { selected: false, removable: true },
+                                        None,
+                                        Language::English,
+                                        tokens,
+                                    );
+                                    assert!(
+                                        (following.row.rect.top() - bounds.bottom() - ui.spacing().item_spacing.y).abs() < 0.1,
+                                        "Successive rows must retain their allocated spacing at width {width}: {bounds:?} then {:?}",
+                                        following.row.rect,
+                                    );
+                                },
+                            );
+                        });
+                    },
+                );
+                output.textures_delta.clear();
+                (output, bounds, clicked)
+            };
+            frame(vec![], 0.0);
+            let (output, row, _) = frame(vec![], 0.05);
+            let mut texts = Vec::new();
+            let mut fills = Vec::new();
+            for shape in &output.shapes {
+                painted(&shape.shape, &mut texts, &mut fills);
+            }
+            for text in [note.note.as_str(), "echo", "Motivation"] {
+                let bounds = texts
+                    .iter()
+                    .find(|(value, _)| value == text)
+                    .map(|(_, rect)| *rect)
+                    .ok_or_else(|| format!("Missing note-row text {text:?} at width {width}"))?;
+                assert!(
+                    row.contains_rect(bounds),
+                    "{text:?} paints outside its row at width {width}: {bounds:?} versus {row:?}"
+                );
+            }
+            let chip_text = texts
+                .iter()
+                .find(|(text, _)| text == "Motivation")
+                .map(|(_, rect)| *rect)
+                .ok_or("missing label text")?;
+            let chip_fill = labels::named_color("Motivation", None, tokens).gamma_multiply(0.13);
+            let chip = fills
+                .iter()
+                .find(|(fill, rect)| *fill == chip_fill && rect.contains_rect(chip_text))
+                .map(|(_, rect)| *rect)
+                .ok_or("missing painted label frame")?;
+            assert!(
+                row.contains_rect(chip),
+                "The entire label frame must be inside the row, including its lower border: {chip:?} versus {row:?}"
+            );
+            let point = egui::pos2(chip.center().x, chip.bottom() - 0.5);
+            let (hovered, _, _) = frame(vec![egui::Event::PointerMoved(point)], 0.1);
+            texts.clear();
+            fills.clear();
+            for shape in &hovered.shapes {
+                painted(&shape.shape, &mut texts, &mut fills);
+            }
+            let background = if selected {
+                tokens.accent_soft
+            } else {
+                tokens.surface
+            };
+            assert!(
+                fills
+                    .iter()
+                    .any(|(fill, rect)| *fill == background && rect.contains_rect(chip)),
+                "Selected or hovered background must contain the whole label at width {width}"
+            );
+            let pointer = |pressed| {
+                vec![egui::Event::PointerButton {
+                    pos: point,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }]
+            };
+            frame(pointer(true), 0.2);
+            let (_, _, clicked) = frame(pointer(false), 0.3);
+            assert!(
+                clicked,
+                "The lower label border must activate its own row at width {width}"
+            );
         }
         Ok(())
     }

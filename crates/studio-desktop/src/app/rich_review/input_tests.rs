@@ -541,3 +541,53 @@ fn stale_annotation_or_document_apply_preserves_wording_receipt_and_current_cano
     assert_eq!(proposals[0].status, ProposalStatus::Staged);
     Ok(())
 }
+
+#[test]
+fn removing_review_markup_offers_resume_only_for_a_retained_unapplied_replacement() -> AppResult<()>
+{
+    for apply_first in [false, true] {
+        let mut fixture = Fixture::new()?;
+        fixture.begin_queue()?;
+        fixture.app.rich_review.replacements[0] = "A deliberate signal".into();
+        if apply_first {
+            fixture.app.apply_inline_review(false)?;
+        }
+        let canonical = fixture.app.workspace.document(&fixture.first.id)?;
+        fixture.app.rich_review.focus = false;
+        fixture.render_panel(vec![]);
+        let output = fixture.render_panel(vec![]);
+        let remove = painted_text(&output, "Delete markup")
+            .ok_or("visible direct markup removal")?
+            .center();
+        fixture.render_panel(vec![
+            Event::PointerMoved(remove),
+            Event::PointerButton {
+                pos: remove,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            },
+        ]);
+        fixture.render_panel(vec![Event::PointerButton {
+            pos: remove,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        }]);
+        let output = fixture.render_panel(vec![]);
+        assert_eq!(painted_text(&output, "Resume edit").is_some(), !apply_first);
+        assert_eq!(fixture.app.rich_review.paused, !apply_first);
+        assert_eq!(
+            fixture.app.workspace.document(&fixture.first.id)?,
+            canonical
+        );
+        assert_eq!(fixture.app.rich_review.attachment.is_some(), !apply_first);
+        if !apply_first {
+            assert_eq!(
+                fixture.app.rich_review.replacements,
+                ["A deliberate signal"]
+            );
+        }
+    }
+    Ok(())
+}

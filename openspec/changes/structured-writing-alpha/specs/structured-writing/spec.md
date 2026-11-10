@@ -131,3 +131,15 @@ The Review panel SHALL support previous/next navigation through captured marked 
 #### Scenario: Pause or navigate with unapplied wording
 - **WHEN** the author closes the panel or visits another marked passage before applying
 - **THEN** the authored replacement remains resumable against its captured revision without altering the manuscript or silently retargeting it
+
+#### Scenario: Inspect the whole short selected passage
+- **WHEN** a short marked range is revealed, the inspector changes manuscript width, or its correction is applied or undone
+- **THEN** the complete range that fits the usable viewport is visible below the formatting toolbar without changing selection direction, text, history or input ownership
+
+#### Scenario: Recognize a contained note row
+- **WHEN** a note has authored text, a quoted passage and one or several labels
+- **THEN** its named chips and overflow control remain within the row's background and hit area, with consistent scrolling and selected-row reveal
+
+#### Scenario: Remove a mark after its correction is applied
+- **WHEN** a fulfilled correction has no active unapplied draft and its mark is removed
+- **THEN** the panel exposes removal Undo without a phantom Resume action; an actually retained unapplied replacement remains resumable
