@@ -118,7 +118,8 @@ impl RichState {
                 self.session.cancel_scroll_request();
                 let mut state = egui::scroll_area::State::default();
                 state.offset.y = offset;
-                state.store(ui.ctx(), ui.make_persistent_id(salt));
+                // Match ScrollArea's stored IdSalt layer, rather than a raw tuple's different ID.
+                state.store(ui.ctx(), ui.make_persistent_id(egui::IdSalt::new(salt)));
                 area.vertical_scroll_offset(offset)
             }
             None => area,
