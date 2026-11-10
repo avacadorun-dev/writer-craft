@@ -1041,13 +1041,22 @@ mod drop_tests {
             document.revision,
             "Asya waits for the last ferry.",
         )?;
+        // Use the same current-head projection as the app. project_tree() preserves raw node
+        // metadata and can still contain the revision from before this authored text save.
         let child = app
             .workspace
-            .project_tree(&project.id)?
+            .initialize_project_tree(&project.id)?
             .into_iter()
             .find(|node| node.logical_id == child.logical_id)
             .ok_or("current scene")?;
-        let child = app.workspace.trash_project_tree_node(&project.id, &child)?;
+        assert_eq!(
+            child.metadata["currentRevision"].as_i64(),
+            Some(document.revision)
+        );
+        let child = app
+            .workspace
+            .trash_project_tree_node(&project.id, &child)
+            .map_err(|error| format!("trash authored scene fixture: {error}"))?;
         app.open_project(project.clone())?;
         let history = app.workspace.revisions(&document.id)?;
 
