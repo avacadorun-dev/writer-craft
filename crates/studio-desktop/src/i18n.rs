@@ -7904,6 +7904,32 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Continue writing",
+        [
+            "Продолжить работу",
+            "Continue writing",
+            "Weiterschreiben",
+            "Continuer à écrire",
+            "Seguir escribiendo",
+            "Continuar escrevendo",
+            "继续写作",
+            "執筆を続ける",
+        ],
+    ),
+    (
+        "Home illustration could not be loaded.",
+        [
+            "Не удалось загрузить иллюстрацию главной страницы.",
+            "Home illustration could not be loaded.",
+            "Die Illustration der Startseite konnte nicht geladen werden.",
+            "Impossible de charger l’illustration de la page d’accueil.",
+            "No se pudo cargar la ilustración de la página de inicio.",
+            "Não foi possível carregar a ilustração da página inicial.",
+            "无法加载主页插图。",
+            "ホーム画面のイラストを読み込めませんでした。",
+        ],
+    ),
+    (
         "All projects",
         [
             "Все проекты",
