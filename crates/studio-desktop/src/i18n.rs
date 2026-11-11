@@ -6728,6 +6728,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Double-click a rendered block, or press F2, to edit its source.",
+        [
+            "Дважды щёлкните блок или нажмите F2, чтобы изменить его исходник.",
+            "Double-click a rendered block, or press F2, to edit its source.",
+            "Doppelklicken Sie einen Block oder drücken Sie F2, um seine Quelle zu bearbeiten.",
+            "Double-cliquez sur un bloc ou appuyez sur F2 pour modifier sa source.",
+            "Haz doble clic en un bloque o pulsa F2 para editar su código fuente.",
+            "Clique duas vezes num bloco ou prima F2 para editar a fonte.",
+            "双击块或按 F2 编辑其源内容。",
+            "ブロックをダブルクリックするか F2 を押すと、ソースを編集できます。",
+        ],
+    ),
+    (
         "Delete block",
         [
             "Удалить блок",

@@ -392,7 +392,7 @@ fn commit_node(
     Ok(())
 }
 
-fn editable_target(session: &EditorSession) -> Option<NodeRef> {
+pub(super) fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     if let Some(node) = session.node_selection() {
         return Kind::from_node(&node.expected).map(|_| node.clone());
     }
@@ -400,6 +400,64 @@ fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     let path = find_path(session.document().root(), id, NodePath::root())?;
     let node = session.document().node_ref(&path).ok()?;
     (node.expected.node_type == "codeBlock").then_some(node)
+}
+
+/// Whole-object targets only. A double-click on prose or on a code block's text keeps its
+/// ordinary word/caret selection instead of opening a source dialog.
+fn node_edit_target(session: &EditorSession) -> Option<NodeRef> {
+    let node = session.node_selection()?;
+    Kind::from_node(&node.expected).map(|_| node.clone())
+}
+
+/// Decide which direct gesture may open the existing source dialog. Callers have already
+/// established that the manuscript is writable, no modal owns the session and no IME
+/// composition is active; a single click always returns `None`.
+fn direct_edit_target(
+    session: &EditorSession,
+    double_clicked: bool,
+    keyboard: bool,
+) -> Option<NodeRef> {
+    if double_clicked {
+        node_edit_target(session)
+    } else if keyboard {
+        editable_target(session)
+    } else {
+        None
+    }
+}
+
+/// Open the existing revision-guarded source dialog for the current editable selection.
+pub(super) fn open_selected_block(rich: &mut RichState) -> AppResult<bool> {
+    if rich.read_only || rich.dialog.is_some() || rich.session.is_composing() {
+        return Ok(false);
+    }
+    let Some(target) = editable_target(&rich.session) else {
+        return Ok(false);
+    };
+    let kind = Kind::from_node(&target.expected).ok_or("unsupported_block_edit")?;
+    open_dialog(rich, kind, Some(target))?;
+    Ok(true)
+}
+
+/// Route a double-click on a rendered object or the direct F2 shortcut on the focused
+/// manuscript to the same editor as the More formatting → Edit block command.
+pub(super) fn existing_block_gesture(
+    ctx: &egui::Context,
+    rich: &mut RichState,
+    response: &egui::Response,
+) -> AppResult<bool> {
+    if rich.read_only || rich.dialog.is_some() || rich.session.is_composing() {
+        return Ok(false);
+    }
+    let double_clicked = response.double_clicked();
+    let keyboard = response.has_focus()
+        && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+    let Some(target) = direct_edit_target(&rich.session, double_clicked, keyboard) else {
+        return Ok(false);
+    };
+    let kind = Kind::from_node(&target.expected).ok_or("unsupported_block_edit")?;
+    open_dialog(rich, kind, Some(target))?;
+    Ok(true)
 }
 fn apply_link(session: &mut EditorSession, mark: Mark, mode: MarkMode) -> AppResult<()> {
     session.format_mark_range(mark, mode)?;
@@ -820,19 +878,22 @@ pub(super) fn toolbar(
                                     ui.close();
                                 }
                             }
-                            if let Some(target) = editable_target(&rich.session)
-                                && icons::labeled_button(
+                            if let Some(target) = editable_target(&rich.session) {
+                                let edit = icons::labeled_button(
                                     ui,
                                     Icon::TextCursor,
                                     l.text("Edit block"),
                                     false,
                                 )
-                                .clicked()
-                            {
-                                if let Some(kind) = Kind::from_node(&target.expected) {
-                                    capture(open_dialog(rich, kind, Some(target)), &mut error);
+                                .on_hover_text(l.text(
+                                    "Double-click a rendered block, or press F2, to edit its source.",
+                                ));
+                                if edit.clicked() {
+                                    if let Some(kind) = Kind::from_node(&target.expected) {
+                                        capture(open_dialog(rich, kind, Some(target)), &mut error);
+                                    }
+                                    ui.close();
                                 }
-                                ui.close();
                             }
                             if rich.session.node_selection().is_some()
                                 && icons::labeled_button(
@@ -1334,6 +1395,101 @@ mod tests {
         drop(dialog);
         assert_eq!(session.document().to_json()?, before);
         assert!(!session.can_undo());
+        Ok(())
+    }
+    #[test]
+    fn direct_edit_gesture_requires_a_whole_object_selection() -> AppResult<()> {
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"p"},"content":[
+                    {"type":"text","text":"Prose "},
+                    {"type":"inlineMath","attrs":{"latex":"x^2","description":""}},
+                    {"type":"text","text":" tail"}
+                ]},
+                {"type":"mermaidBlock","attrs":{"blockId":"diagram","code":"flowchart LR\nA-->B","caption":"Original"}},
+                {"type":"codeBlock","attrs":{"blockId":"code","language":"rust"},"content":[{"type":"text","text":"fn main() {}"}]}
+            ]}),
+        )?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let point = DocPoint {
+            block_id: "p".into(),
+            offset: ScalarOffset(1),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        assert!(direct_edit_target(&session, false, false).is_none());
+        assert!(
+            direct_edit_target(&session, true, false).is_none(),
+            "a double-click in prose keeps word selection and opens nothing"
+        );
+        let diagram = session.document().node_ref(&NodePath(vec![1]))?;
+        session.select_node(diagram)?;
+        assert!(
+            direct_edit_target(&session, false, false).is_none(),
+            "a single click selects without editing"
+        );
+        assert_eq!(
+            direct_edit_target(&session, true, false).map(|target| target.path),
+            Some(NodePath(vec![1]))
+        );
+        assert_eq!(
+            direct_edit_target(&session, false, true).map(|target| target.path),
+            Some(NodePath(vec![1]))
+        );
+        let inline = session.document().node_ref(&NodePath(vec![0, 1]))?;
+        session.select_node(inline)?;
+        assert_eq!(
+            direct_edit_target(&session, true, false).map(|target| target.path),
+            Some(NodePath(vec![0, 1]))
+        );
+        let point = DocPoint {
+            block_id: "code".into(),
+            offset: ScalarOffset(2),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        assert!(direct_edit_target(&session, true, false).is_none());
+        assert_eq!(
+            direct_edit_target(&session, false, true).map(|target| target.path),
+            Some(NodePath(vec![2])),
+            "the keyboard path matches the existing Edit block fallback for a code caret"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn direct_edit_opens_the_exact_selected_source_and_nothing_for_a_caret() -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Direct edit")?;
+        let document = workspace.create_rich_document(
+            &project.id,
+            "Synthetic direct edit",
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"seed"},"content":[]},
+                {"type":"mermaidBlock","attrs":{"blockId":"diagram","code":"flowchart LR\nA-->B","caption":"Original","custom":{"value":7}}}
+            ]}),
+        )?;
+        let mut rich = RichState::open(&workspace, &document)?.ok_or("missing rich state")?;
+        assert!(!rich.open_selected_block()?, "no target means no dialog");
+        let diagram = rich.session.document().node_ref(&NodePath(vec![1]))?;
+        rich.session.select_node(diagram)?;
+        assert!(
+            rich.open_selected_block()?,
+            "the selected object opens its dialog"
+        );
+        assert!(
+            !rich.open_selected_block()?,
+            "an open dialog is never replaced"
+        );
+        let dialog = rich.dialog.as_ref().ok_or("missing block dialog")?;
+        assert_eq!(dialog.kind, Kind::Mermaid);
+        assert_eq!(dialog.source, "flowchart LR\nA-->B");
+        assert_eq!(dialog.caption, "Original");
+        assert!(dialog.target.is_some());
         Ok(())
     }
     #[test]

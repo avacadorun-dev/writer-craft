@@ -1254,10 +1254,27 @@ impl StudioApp {
                 .input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, egui::Key::F10));
         let popup_id = response.id.with("rich-selection-menu");
         let keyboard_id = popup_id.with("keyboard-anchor");
+        let block_id = popup_id.with("block-edit");
+        // Direct source editing targets only the exact whole-object selection. A pointer-opened
+        // menu additionally requires the click inside that object's measured frame, so a
+        // right-click over prose can never edit a block selected elsewhere.
+        let block_available = self
+            .rich
+            .as_ref()
+            .is_some_and(rich_editor::RichState::editable_block_selected);
+        let block_at_pointer = block_available
+            && response.secondary_clicked()
+            && response.interact_pointer_pos().is_some_and(|position| {
+                self.rich
+                    .as_ref()
+                    .and_then(|rich| rich.session.canvas_selection_rect(response).ok().flatten())
+                    .is_some_and(|rect| rect.contains(position))
+            });
         if response.secondary_clicked() {
             response
                 .ctx
                 .data_mut(|data| data.remove::<bool>(keyboard_id));
+            response.ctx.data_mut(|data| data.remove::<bool>(block_id));
         }
         if keyboard {
             response
@@ -1265,11 +1282,21 @@ impl StudioApp {
                 .data_mut(|data| data.insert_temp(keyboard_id, true));
             egui::Popup::open_id(&response.ctx, popup_id);
         }
+        if block_at_pointer || (keyboard && block_available) {
+            response
+                .ctx
+                .data_mut(|data| data.insert_temp(block_id, true));
+        }
         if !egui::Popup::is_id_open(&response.ctx, popup_id) {
             response
                 .ctx
                 .data_mut(|data| data.remove::<bool>(keyboard_id));
+            response.ctx.data_mut(|data| data.remove::<bool>(block_id));
         }
+        let block_allowed = block_available
+            && response
+                .ctx
+                .data(|data| data.get_temp::<bool>(block_id).unwrap_or(false));
         let mut popup = egui::Popup::context_menu(response).id(popup_id);
         if response
             .ctx
@@ -1298,6 +1325,24 @@ impl StudioApp {
             popup = popup.at_position(visible_menu_anchor(visible, caret));
         }
         popup.show(|ui| {
+            if block_allowed
+                && ui
+                    .button(l.text("Edit block"))
+                    .on_hover_text(
+                        l.text("Double-click a rendered block, or press F2, to edit its source."),
+                    )
+                    .clicked()
+            {
+                let result = self
+                    .rich
+                    .as_mut()
+                    .map_or(Ok(()), |rich| rich.open_selected_block().map(|_| ()));
+                self.record_error(result);
+                ui.close();
+            }
+            if block_allowed {
+                ui.separator();
+            }
             let review_allowed = self
                 .rich
                 .as_ref()

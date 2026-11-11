@@ -236,6 +236,18 @@ impl RichState {
         self.dialog.is_some()
     }
 
+    /// Whether the manuscript currently has a whole-object target the source dialog can edit.
+    pub(super) fn editable_block_selected(&self) -> bool {
+        !self.read_only
+            && self.dialog.is_none()
+            && authoring::editable_target(&self.session).is_some()
+    }
+
+    /// Open the existing source dialog for the current editable object selection.
+    pub(super) fn open_selected_block(&mut self) -> AppResult<bool> {
+        authoring::open_selected_block(self)
+    }
+
     fn write_draft(&mut self, workspace: &Workspace, document: &Document) -> AppResult<()> {
         if self.read_only {
             return Err(studio_core::StudioError::ReadOnly {
@@ -749,6 +761,12 @@ impl StudioApp {
                         });
                 });
         });
+        if let Some(response) = &manuscript_response
+            && let Err(error) = authoring::existing_block_gesture(ui.ctx(), &mut rich, response)
+            && operation_error.is_none()
+        {
+            operation_error = Some(error);
+        }
         if let Some(project) = &self.project {
             authoring::show_dialog(ui.ctx(), &mut rich, &self.workspace, &project.id, l, t);
         }
