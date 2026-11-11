@@ -1287,12 +1287,6 @@ impl StudioApp {
                 .ctx
                 .data_mut(|data| data.insert_temp(block_id, true));
         }
-        if !egui::Popup::is_id_open(&response.ctx, popup_id) {
-            response
-                .ctx
-                .data_mut(|data| data.remove::<bool>(keyboard_id));
-            response.ctx.data_mut(|data| data.remove::<bool>(block_id));
-        }
         let block_allowed = block_available
             && response
                 .ctx
@@ -1379,6 +1373,14 @@ impl StudioApp {
                 ui.close();
             }
         });
+        // Clean up only after the popup had its chance to open this frame: a secondary click
+        // opens the menu in `show`, so checking before it would drop the object flag.
+        if !egui::Popup::is_id_open(&response.ctx, popup_id) {
+            response
+                .ctx
+                .data_mut(|data| data.remove::<bool>(keyboard_id));
+            response.ctx.data_mut(|data| data.remove::<bool>(block_id));
+        }
     }
 
     /// A bounded list/detail inspector; the parent must not wrap this in another ScrollArea.

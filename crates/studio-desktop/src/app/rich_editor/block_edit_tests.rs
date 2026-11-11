@@ -121,11 +121,19 @@ impl Fixture {
     }
 
     fn click_at(&mut self, pos: Pos2) -> AppResult<()> {
+        self.press_at(pos, PointerButton::Primary)
+    }
+
+    fn right_click_at(&mut self, pos: Pos2) -> AppResult<()> {
+        self.press_at(pos, PointerButton::Secondary)
+    }
+
+    fn press_at(&mut self, pos: Pos2, button: PointerButton) -> AppResult<()> {
         self.render(vec![Event::PointerMoved(pos)])?;
         for pressed in [true, false] {
             self.render(vec![Event::PointerButton {
                 pos,
-                button: PointerButton::Primary,
+                button,
                 pressed,
                 modifiers: Modifiers::NONE,
             }])?;
@@ -194,6 +202,40 @@ fn pressing_f2_on_a_focused_code_caret_opens_the_same_source_dialog() -> AppResu
     assert!(
         fixture.rich()?.dialog_open(),
         "F2 opens the existing source dialog for the focused code block"
+    );
+    Ok(())
+}
+
+#[test]
+fn right_click_on_the_selected_diagram_offers_block_editing() -> AppResult<()> {
+    let mut fixture = Fixture::new()?;
+    let rect = fixture.selected_node_rect()?;
+    let point = DocPoint {
+        block_id: "p".into(),
+        offset: ScalarOffset(2),
+    };
+    fixture.rich_mut()?.session.set_selection(Selection {
+        anchor: point.clone(),
+        head: point,
+    })?;
+    fixture.settle()?;
+    fixture.click_at(rect.center())?;
+    assert!(fixture.rich()?.session.node_selection().is_some());
+    fixture.right_click_at(rect.center())?;
+    let response = fixture
+        .ctx
+        .read_response(fixture.rich()?.session.options.id)
+        .ok_or("The manuscript response was not emitted")?;
+    let popup_id = response.id.with("rich-selection-menu");
+    assert!(
+        egui::Popup::is_id_open(&fixture.ctx, popup_id),
+        "the right-click opens the manuscript context menu"
+    );
+    assert!(
+        fixture.ctx.data(|data| data
+            .get_temp::<bool>(popup_id.with("block-edit"))
+            .unwrap_or(false)),
+        "the object-specific Edit block entry survives the opening frame"
     );
     Ok(())
 }
