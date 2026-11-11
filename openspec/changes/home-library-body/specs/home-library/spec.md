@@ -41,6 +41,10 @@ The library SHALL reflow using available body width and height, preserve readabl
 - **WHEN** the wide native body is compared with the selected blue-Light or copper-Dark reference
 - **THEN** it preserves banner insets and hierarchy, a substantial contained right-hand scribe and subtle print field, and project actions aligned at the trailing edge.
 
+#### Scenario: Artwork contour
+- **WHEN** the scribe is displayed inside the banner
+- **THEN** its visible canvas meets the right and bottom banner contour while text/actions retain their own insets, without transparent export padding or distortion.
+
 #### Scenario: Long localized content
 - **WHEN** long project titles or any of the eight interface locales are displayed
 - **THEN** controls remain inside the body, complete titles remain discoverable and keyboard focus can reach every action.

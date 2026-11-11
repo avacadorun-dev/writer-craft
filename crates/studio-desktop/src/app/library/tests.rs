@@ -398,11 +398,11 @@ fn home_stays_inside_the_real_central_body_after_shared_panel_resizing() {
             assert!(banner.contains_rect(artwork));
             if banner.width() >= 660.0 {
                 assert!(
-                    banner.right() - artwork.right() <= 27.0,
+                    (banner.right() - artwork.right()).abs() <= 1.0,
                     "artwork did not reach right column: {banner:?} {artwork:?}"
                 );
                 assert!(
-                    banner.bottom() - artwork.bottom() <= 27.0,
+                    (banner.bottom() - artwork.bottom()).abs() <= 1.0,
                     "artwork was not bottom anchored: {banner:?} {artwork:?}"
                 );
             }

@@ -34,6 +34,23 @@ fn decode(accent: Color32) -> Result<egui::ColorImage, String> {
     let mut pixels = image::load_from_memory(SCRIBE)
         .map_err(|error| error.to_string())?
         .into_rgba8();
+    // Transparent export margins are not intentional banner padding. Trim
+    // only the canvas; retain every visible ink/paper pixel and its alpha.
+    let bounds =
+        pixels
+            .enumerate_pixels()
+            .filter(|(_, _, p)| p[3] > 0)
+            .fold(None, |bounds, (x, y, _)| match bounds {
+                None => Some((x, y, x, y)),
+                Some((left, top, right, bottom)) => {
+                    Some((left.min(x), top.min(y), right.max(x), bottom.max(y)))
+                }
+            });
+    let Some((left, top, right, bottom)) = bounds else {
+        return Err("Bundled home illustration contains no visible pixels".into());
+    };
+    pixels = image::imageops::crop_imm(&pixels, left, top, right - left + 1, bottom - top + 1)
+        .to_image();
     for pixel in pixels.pixels_mut() {
         recolor(&mut pixel.0, accent);
     }

@@ -154,14 +154,14 @@ fn banner(
                             column.response.rect.height().max(image_width / 1.65),
                         ),
                         Layout::bottom_up(Align::Min),
-                        |ui| illustration(ui, image_width, l, t),
+                        |ui| illustration(ui, image_width, l, t, f32::from(padding)),
                     );
                 });
             } else {
                 text(ui, action);
                 ui.add_space(12.0);
-                ui.with_layout(Layout::top_down(Align::Center), |ui| {
-                    illustration(ui, image_width, l, t)
+                ui.with_layout(Layout::top_down(Align::Max), |ui| {
+                    illustration(ui, image_width, l, t, f32::from(padding))
                 });
             }
         });
@@ -252,18 +252,21 @@ fn engraved_field(rect: Rect, t: Tokens, dark: bool) -> egui::Shape {
     egui::Shape::Vec(lines)
 }
 
-fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens) {
+fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens, padding: f32) {
     match artwork::texture(ui.ctx(), t.accent) {
         Ok(texture) => {
             let size = Vec2::new(width, width * texture.size_vec2().y / texture.size_vec2().x);
             let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+            // Text retains its inset, while the trimmed artwork meets the
+            // banner's right and bottom contour, as in the selected concept.
+            let rect = rect.translate(Vec2::splat(padding));
             if ui.is_rect_visible(rect) {
-                ui.painter().image(
-                    texture.id(),
-                    rect,
-                    Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                    Color32::WHITE,
-                );
+                egui::Image::new((texture.id(), size))
+                    .corner_radius(egui::CornerRadius {
+                        se: 10,
+                        ..egui::CornerRadius::ZERO
+                    })
+                    .paint_at(ui, rect);
             }
             record(ui, "home.artwork", rect);
         }
