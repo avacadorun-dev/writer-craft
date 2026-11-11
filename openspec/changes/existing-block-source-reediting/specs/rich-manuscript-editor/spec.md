@@ -2,7 +2,11 @@
 
 ### Requirement: Direct source editing of existing rendered blocks
 
-The native manuscript SHALL let an author re-open the source or properties of an already-created Mermaid diagram, block formula, inline formula, code block or image through a direct gesture on that object. A double-click SHALL open the same revision-guarded source dialog that the existing **Edit block** command uses, and a single click SHALL retain ordinary text or whole-object selection without opening the dialog. The permanent toolbar SHALL NOT gain further block commands or a second command row.
+The native manuscript SHALL let an author re-open the source or properties of an already-created Mermaid diagram, block formula, inline formula, code block or image through a double-click on that object. The double-click SHALL open the same revision-guarded source dialog that the existing **Edit block** command uses.
+
+### Requirement: Single-click selection and compact chrome
+
+A single click SHALL retain ordinary text or whole-object selection without opening a source dialog. The permanent toolbar SHALL NOT gain further block commands or a second command row.
 
 #### Scenario: An existing diagram is double-clicked
 
