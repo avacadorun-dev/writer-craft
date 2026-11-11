@@ -3,6 +3,9 @@
 #[path = "authoring.rs"]
 mod authoring;
 #[cfg(test)]
+#[path = "rich_editor/block_edit_tests.rs"]
+mod block_edit_tests;
+#[cfg(test)]
 #[path = "rich_editor/selection_reveal_tests.rs"]
 mod selection_reveal_tests;
 use super::*;
