@@ -1145,6 +1145,15 @@ fn install_fonts(ctx: &egui::Context) {
         ))
         .into(),
     );
+    // A named home-only heading face; shared chrome and prose keep their families.
+    fonts.font_data.insert(
+        "Home Heading".into(),
+        egui::FontData::from_static(include_bytes!("../../../assets/fonts/Inter-Bold.ttf")).into(),
+    );
+    fonts.families.insert(
+        FontFamily::Name("HomeHeading".into()),
+        vec!["Home Heading".into(), "Noto CJK".into()],
+    );
     fonts.font_data.insert(
         "Noto CJK".into(),
         egui::FontData::from_static(include_bytes!(

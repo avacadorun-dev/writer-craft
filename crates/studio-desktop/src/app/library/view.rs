@@ -93,21 +93,24 @@ fn banner(
             };
             let text = |ui: &mut egui::Ui, action: &mut Option<Action>| {
                 ui.spacing_mut().item_spacing.y = 10.0;
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(l.text(if resume.is_some() {
-                            "Your story awaits"
-                        } else if empty {
-                            "Your first chapter starts here"
-                        } else {
-                            "Open project"
-                        }))
-                        .size(if wide { 30.0 } else { 26.0 })
-                        .strong()
-                        .color(t.text),
-                    )
-                    .wrap(),
-                );
+                ui.scope(|ui| {
+                    ui.set_max_width(ui.available_width().min(420.0));
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(l.text(if resume.is_some() {
+                                "Your story awaits"
+                            } else if empty {
+                                "Your first chapter starts here"
+                            } else {
+                                "Open project"
+                            }))
+                            .size(if wide { 40.0 } else { 32.0 })
+                            .family(FontFamily::Name("HomeHeading".into()))
+                            .color(t.text),
+                        )
+                        .wrap(),
+                    );
+                });
                 if let Some(project) = resume {
                     ui.add(
                         egui::Label::new(RichText::new(&project.title).size(16.0).color(t.text))
@@ -173,8 +176,8 @@ fn banner(
 
 fn project_heading(ui: &mut egui::Ui, l: Language, t: Tokens, action: &mut Option<Action>) {
     let heading = RichText::new(l.text("All projects"))
-        .size(23.0)
-        .strong()
+        .size(24.0)
+        .family(FontFamily::Name("HomeHeading".into()))
         .color(t.text);
     let measure = |text: &str, size| {
         ui.painter()
@@ -186,7 +189,16 @@ fn project_heading(ui: &mut egui::Ui, l: Language, t: Tokens, action: &mut Optio
         + measure(l.text("Open .wstudio…"), 14.0)
         + ui.spacing().button_padding.x * 4.0
         + ui.spacing().item_spacing.x;
-    let wide = ui.available_width() >= measure(l.text("All projects"), 23.0) + action_width + 40.0;
+    let heading_width = ui
+        .painter()
+        .layout_no_wrap(
+            l.text("All projects").into(),
+            FontId::new(24.0, FontFamily::Name("HomeHeading".into())),
+            t.text,
+        )
+        .size()
+        .x;
+    let wide = ui.available_width() >= heading_width + action_width + 40.0;
     let actions = |ui: &mut egui::Ui, action: &mut Option<Action>| {
         let buttons = [
             ("New project", "home.new", Action::New),
@@ -263,11 +275,11 @@ fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens) {
 }
 
 fn action_button(ui: &mut egui::Ui, label: &str, primary: bool, t: Tokens, key: &str) -> Response {
-    let mut button = egui::Button::new(RichText::new(label).size(14.0).color(if primary {
-        t.on_accent
-    } else {
-        t.text
-    }))
+    let mut button = egui::Button::new(
+        RichText::new(label)
+            .size(if primary { 18.0 } else { 14.0 })
+            .color(if primary { t.on_accent } else { t.text }),
+    )
     .min_size(Vec2::new(0.0, 40.0))
     .wrap();
     if primary {
@@ -359,8 +371,8 @@ fn project_row(ui: &mut egui::Ui, project: &Project, l: Language, t: Tokens) -> 
     labels.add(
         egui::Label::new(
             RichText::new(&project.title)
-                .size(17.0)
-                .strong()
+                .size(18.0)
+                .family(FontFamily::Name("HomeHeading".into()))
                 .color(t.text),
         )
         .truncate(),
