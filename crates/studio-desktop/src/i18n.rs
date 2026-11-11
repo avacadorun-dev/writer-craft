@@ -6877,6 +6877,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Apply",
+        [
+            "Применить",
+            "Apply",
+            "Anwenden",
+            "Appliquer",
+            "Aplicar",
+            "Aplicar",
+            "应用",
+            "適用",
+        ],
+    ),
+    (
         "Insert",
         [
             "Вставить",

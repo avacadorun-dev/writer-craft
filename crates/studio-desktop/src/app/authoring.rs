@@ -1493,6 +1493,43 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn every_block_dialog_label_resolves_in_all_eight_catalogs() {
+        let labels = [
+            "Mermaid diagram",
+            "Block formula",
+            "Inline formula",
+            "Code block",
+            "Image",
+            "Link",
+            "Source",
+            "LaTeX source",
+            "Caption",
+            "Description",
+            "Apply",
+            "Insert",
+            "Cancel",
+            "Language",
+            "Plain text",
+            "Choose image…",
+            "Alternative text",
+            "Link address",
+            "Leave empty to remove the link.",
+            "Copy code",
+            "The block could not be updated.",
+            "Double-click a rendered block, or press F2, to edit its source.",
+        ];
+        for language in Language::ALL {
+            for label in labels {
+                assert_ne!(
+                    language.text(label),
+                    "⟦missing translation⟧",
+                    "{}: {label}",
+                    language.code()
+                );
+            }
+        }
+    }
+    #[test]
     fn inline_formula_property_edit_keeps_the_exact_node_selected_through_history() -> AppResult<()>
     {
         let workspace = Workspace::memory()?;
