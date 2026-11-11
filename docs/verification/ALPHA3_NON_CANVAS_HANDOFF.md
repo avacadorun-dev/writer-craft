@@ -118,3 +118,7 @@ Actual e4157d1 feedback requires F-54 rework: remove permanent row Add/More butt
 ### Refresh after the Apply localization fix — 2026-11-12
 
 Compiled review of `91abc734…` confirmed the direct gesture opened the exact Mermaid source but exposed a catalog gap on the dialog's primary action. `4b2dd847a537fed106841778e67133b453232bbe` adds the missing `Apply` translations and a regression over every block-dialog label; [Verify 43090534346](https://github.com/avacadorun-dev/writer-craft/actions/runs/43090534346) and [Preview 43090522723](https://github.com/avacadorun-dev/writer-craft/actions/runs/43090522723) are green. Use artifact `WriterCraft-Editor-Preview-macos-arm64-4b2dd847…` for the remaining native checks. #7 is still open; no engine, Canvas, dependency or protected #10 change.
+
+### Right-click correction after native review — 2026-11-12
+
+The `4b2dd84…` manual pass confirmed F2 and Shift+F10 but showed no **Edit block** entry on a right-click over the same selected object, because popup cleanup ran before `Popup::show()` opened the menu. `9d11a3627d66de76b9a849fdda824cfd1d61aa75` runs cleanup after the opening frame and adds a compiled-widget secondary-click regression; [Verify 43093494736](https://github.com/avacadorun-dev/writer-craft/actions/runs/43093494736) and [Preview 43093484168](https://github.com/avacadorun-dev/writer-craft/actions/runs/43093484168) are green. Manual-check artifact: `WriterCraft-Editor-Preview-macos-arm64-9d11a362…`. #7 stays open; engine, Canvas, dependencies and the protected #10 diff remain unchanged.
