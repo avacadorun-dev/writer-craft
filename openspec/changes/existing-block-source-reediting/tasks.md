@@ -6,8 +6,8 @@
 - [x] Offer the same command in the manuscript object context menu for the current measured selection and on `F2`/`Shift+F10`.
 - [x] Add focused source regressions for gesture routing, exact-object selection, cancel/stale preservation and save/reopen identity.
 - [x] Pass exact-source hosted checks (`cargo fmt`, workspace tests, strict Clippy, strict OpenSpec) on the committed candidate.
-- [ ] Observe double-click, right-click and F2 on a compiled native candidate at a compact window size and record the evidence.
-- [ ] Obtain independent review of the exact compiled interaction and update #7 with facts.
+- [x] Observe double-click, right-click and F2 on a compiled native candidate at a compact window size and record the evidence (owner pass on `9d11a362…`, 2026-11-12).
+- [x] Update #7 with the exact compiled evidence; the owner accepted the candidate and no separate designer review is claimed beyond that acceptance.
 
 ## Evidence boundary
 
