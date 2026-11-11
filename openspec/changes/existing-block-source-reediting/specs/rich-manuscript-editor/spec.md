@@ -4,10 +4,6 @@
 
 The native manuscript SHALL let an author re-open the source or properties of an already-created Mermaid diagram, block formula, inline formula, code block or image through a double-click on that object. The double-click SHALL open the same revision-guarded source dialog that the existing **Edit block** command uses.
 
-### Requirement: Single-click selection and compact chrome
-
-A single click SHALL retain ordinary text or whole-object selection without opening a source dialog. The permanent toolbar SHALL NOT gain further block commands or a second command row.
-
 #### Scenario: An existing diagram is double-clicked
 
 - **WHEN** an author double-clicks a rendered Mermaid diagram in a writable manuscript
@@ -18,15 +14,19 @@ A single click SHALL retain ordinary text or whole-object selection without open
 - **WHEN** an author double-clicks a rendered block formula or an inline formula
 - **THEN** the dialog opens with that exact formula's stored LaTeX and description, including a formula inside surrounding prose
 
-#### Scenario: A single click selects without editing
-
-- **WHEN** an author single-clicks a rendered block or ordinary prose
-- **THEN** the usual text or whole-object selection is produced and no source dialog opens
-
 #### Scenario: The author edits the current source and applies
 
 - **WHEN** the author changes the source in the dialog and confirms Apply
 - **THEN** the exact object is updated once, its stable identity, surrounding text and unknown attributes are preserved, the edited source renders, and Undo restores the previous source in one history step
+
+### Requirement: Single-click selection and compact chrome
+
+A single click SHALL retain ordinary text or whole-object selection without opening a source dialog. The permanent toolbar SHALL NOT gain further block commands or a second command row.
+
+#### Scenario: A single click selects without editing
+
+- **WHEN** an author single-clicks a rendered block or ordinary prose
+- **THEN** the usual text or whole-object selection is produced and no source dialog opens
 
 ### Requirement: Object context menu and keyboard entry to the same editor
 
