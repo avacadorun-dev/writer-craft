@@ -33,6 +33,14 @@ The library SHALL reflow using available body width and height, preserve readabl
 - **WHEN** available width or height decreases or the window resizes live
 - **THEN** banner regions and actions wrap or stack, illustration proportions remain intact, and the project list stays reachable.
 
+#### Scenario: Existing shell offsets
+- **WHEN** the shared header, footer and resized navigator allocate space before the central body
+- **THEN** centered content width is clamped to the remaining body and every banner, row and action stays inside its bounds, including its nonzero origin.
+
+#### Scenario: Selected body fidelity
+- **WHEN** the wide native body is compared with the selected blue-Light or copper-Dark reference
+- **THEN** it preserves banner insets and hierarchy, a substantial contained right-hand scribe and subtle print field, and project actions aligned at the trailing edge.
+
 #### Scenario: Long localized content
 - **WHEN** long project titles or any of the eight interface locales are displayed
 - **THEN** controls remain inside the body, complete titles remain discoverable and keyboard focus can reach every action.

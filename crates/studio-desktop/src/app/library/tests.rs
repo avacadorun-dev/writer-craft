@@ -332,6 +332,91 @@ fn localized_resizing_contains_artwork_controls_and_project_rows() {
 }
 
 #[test]
+fn home_stays_inside_the_real_central_body_after_shared_panel_resizing() {
+    let ctx = context();
+    let items = projects(3);
+    let tokens = theme::apply(&ctx, &ThemeSettings::default());
+    let mut tick = 0;
+    for language in [Language::Russian, Language::German, Language::Japanese] {
+        // Reuse one Context: panel placement and wrapping must survive live
+        // resizing, not merely a zero-origin standalone render.
+        for (size, navigator) in [
+            (Vec2::new(1000.0, 680.0), 264.0),
+            (Vec2::new(1440.0, 940.0), 210.0),
+            (Vec2::new(1280.0, 800.0), 340.0),
+            (Vec2::new(1000.0, 680.0), 340.0),
+            (Vec2::new(1000.0, 520.0), 264.0),
+        ] {
+            let mut body = Rect::NOTHING;
+            for _ in 0..3 {
+                tick += 1;
+                ctx.data_mut(|data| {
+                    data.insert_temp(
+                        egui::Id::new("home-test-geometry"),
+                        BTreeMap::<String, Rect>::new(),
+                    )
+                });
+                let mut output = ctx.run_ui(
+                    RawInput {
+                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
+                        time: Some(f64::from(tick) * 0.1),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        egui::Panel::top("home-test-header")
+                            .exact_size(48.0)
+                            .show(ui, |_| {});
+                        egui::Panel::bottom("home-test-footer")
+                            .exact_size(28.0)
+                            .show(ui, |_| {});
+                        egui::Panel::left("home-test-navigator")
+                            .exact_size(navigator)
+                            .show(ui, |_| {});
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(20, 20)))
+                            .show(ui, |ui| {
+                                body = ui.available_rect_before_wrap();
+                                let _ = view::show(ui, &items, Some(&items[0]), language, tokens);
+                            });
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            let observed = geometry(&ctx);
+            assert!(
+                body.left() >= navigator + 20.0,
+                "fixture did not reserve shared shell"
+            );
+            for (key, rect) in &observed {
+                assert!(
+                    rect.left() >= body.left() - 1.0 && rect.right() <= body.right() + 1.0,
+                    "body intrusion {language:?} {size:?} nav={navigator}: {key} {rect:?}, body={body:?}"
+                );
+            }
+            let banner = observed["home.banner"];
+            let artwork = observed["home.artwork"];
+            assert!(banner.contains_rect(artwork));
+            if banner.width() >= 660.0 {
+                assert!(
+                    banner.right() - artwork.right() <= 27.0,
+                    "artwork did not reach right column: {banner:?} {artwork:?}"
+                );
+                assert!(
+                    banner.bottom() - artwork.bottom() <= 27.0,
+                    "artwork was not bottom anchored: {banner:?} {artwork:?}"
+                );
+            }
+            if size.y >= 680.0 {
+                assert!(
+                    observed["home.project.project-0"].top() < body.bottom(),
+                    "banner displaced the first project off screen"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn long_library_scroll_moves_the_banner_and_reaches_the_last_project() {
     let ctx = context();
     let items = projects(30);

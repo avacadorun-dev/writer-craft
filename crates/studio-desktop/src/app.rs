@@ -354,6 +354,9 @@ impl StudioApp {
         }
         // These read-only presentation overrides belong only to explicitly requested captures.
         if app.capture.is_some() {
+            if demo && std::env::args().any(|argument| argument == "--capture-home") {
+                app.library = true;
+            }
             if std::env::args().any(|argument| argument == "--capture-focus") {
                 app.focus_mode = true;
             }

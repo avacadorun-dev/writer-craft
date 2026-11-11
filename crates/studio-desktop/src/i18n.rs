@@ -7904,6 +7904,19 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Your story awaits",
+        [
+            "История ждёт продолжения",
+            "Your story awaits",
+            "Deine Geschichte wartet auf Fortsetzung",
+            "Votre histoire attend la suite",
+            "Tu historia espera continuar",
+            "Sua história espera continuar",
+            "故事，待你续写",
+            "物語の続きを書こう",
+        ],
+    ),
+    (
         "Continue writing",
         [
             "Продолжить работу",

@@ -1,5 +1,7 @@
 # Independent home body source preflight
 
+Superseded for geometry and concept fidelity by the owner's actual native finding on 2026-11-12. The centered maximum expanded beneath the navigator; prior origin-zero probes did not establish central-body containment. See F-57's actual-native correction and the updated home-library-body scenarios. Data/action and artwork observations below remain historical source observations; no native approval was granted.
+
 Date: 2026-11-12. Reviewer: separate `home18_review` agent. Candidate: `3e1b36c4d6b6b0fb0935525d04896de31816e109`. Scope: issue #18 source only. Result: no remaining blocking source finding after the P2 correction; execution and native acceptance pending.
 
 Reviewed library.rs, library/view.rs, library/artwork.rs, library/tests.rs and the two new eight-language catalog rows. Continue resolves the current project's actual ID still present in the library and routes through existing guarded opening/save/navigation. The implementation uses available body dimensions, one local vertical scroll, native text/controls and horizontal rows. Artwork adaptation targets blue robe pigment, retaining neutral paper/skin/ink and alpha, and caches by resolved accent. No shell, engine, persistence or manuscript-typography changes were found in scope.

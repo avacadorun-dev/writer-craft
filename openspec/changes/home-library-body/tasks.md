@@ -9,4 +9,5 @@
 - [ ] Run hosted formatting, full tests, strict Clippy and OpenSpec validation on the exact committed candidate.
 - [ ] Observe exact compiled minimum/laptop/wide/short/live-resize behavior, eight locales, palettes, keyboard and project actions.
 - [ ] Obtain independent same-issue review; rework blockers.
+- [ ] Rework owner-observed P1 clipping under navigator and incomplete concept fidelity; verify actual central-body origins and native blue-Light/copper-Dark comparisons before reacceptance.
 - [ ] Audit issues and update #18/progress/handoff with exact source/build evidence and remaining gaps. Close only complete acceptance.

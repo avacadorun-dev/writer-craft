@@ -17,36 +17,31 @@ pub(super) fn show(
     t: Tokens,
 ) -> Option<Action> {
     let mut action = None;
-    let short = ui.available_height() < 520.0;
+    let body_height = ui.available_height();
+    let short = body_height < 520.0;
     // One local scroll includes the banner, so it cannot trap the list in a
     // short window. No horizontal scroll area or fixed screenshot geometry.
     egui::ScrollArea::vertical()
         .id_salt("home-body")
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            // set_max_width is a setter, not a cap: never expand a narrow
+            // centered region beyond the actual pane left by shared chrome.
+            let body_width = ui.available_width().min(1280.0);
             ui.vertical_centered(|ui| {
-                ui.set_max_width(1280.0);
+                ui.set_max_width(body_width);
                 ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                    banner(ui, projects.is_empty(), resume, l, t, short, &mut action);
+                    banner(
+                        ui,
+                        projects.is_empty(),
+                        resume,
+                        l,
+                        t,
+                        body_height,
+                        &mut action,
+                    );
                     ui.add_space(if short { 16.0 } else { 24.0 });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(
-                            RichText::new(l.text("All projects"))
-                                .size(23.0)
-                                .strong()
-                                .color(t.text),
-                        );
-                        ui.add_space(16.0);
-                        if action_button(ui, l.text("New project"), false, t, "home.new").clicked()
-                        {
-                            action = Some(Action::New);
-                        }
-                        if action_button(ui, l.text("Open .wstudio…"), false, t, "home.import")
-                            .clicked()
-                        {
-                            action = Some(Action::Import);
-                        }
-                    });
+                    project_heading(ui, l, t, &mut action);
                     ui.add_space(12.0);
                     for project in projects {
                         ui.push_id(&project.id, |ui| {
@@ -67,34 +62,45 @@ fn banner(
     resume: Option<&Project>,
     l: Language,
     t: Tokens,
-    short: bool,
+    body_height: f32,
     action: &mut Option<Action>,
 ) {
     let wide = ui.available_width() >= 660.0;
     let padding = if wide { 24 } else { 16 };
+    let dark = u16::from(t.bg.r()) + u16::from(t.bg.g()) + u16::from(t.bg.b()) < 384;
+    let field = if dark {
+        t.accent_soft
+    } else {
+        t.editor
+            .lerp_to_gamma(Color32::from_rgb(249, 240, 220), 0.45)
+    };
+    let mut hatch = None;
     let frame = egui::Frame::new()
-        .fill(t.accent_soft)
+        .fill(field)
         .stroke(Stroke::new(1.0, t.border))
         .corner_radius(10)
         .inner_margin(padding)
         .show(ui, |ui| {
+            // Reserve the decoration before native text/buttons so it can
+            // never paint over them, even when the final height changes.
+            hatch = Some((ui.painter().clone(), ui.painter().add(egui::Shape::Noop)));
             ui.set_width(ui.available_width());
             let width = ui.available_width();
             let image_width = if wide {
-                (width * 0.47).min(if short { 330.0 } else { 440.0 })
+                (width * 0.50).min((body_height * 0.42).clamp(130.0, 320.0) * 1.65)
             } else {
-                width.min(if short { 230.0 } else { 290.0 })
+                width.min((body_height * 0.28).clamp(90.0, 180.0) * 1.65)
             };
             let text = |ui: &mut egui::Ui, action: &mut Option<Action>| {
                 ui.spacing_mut().item_spacing.y = 10.0;
                 ui.add(
                     egui::Label::new(
                         RichText::new(l.text(if resume.is_some() {
-                            "Continue writing"
+                            "Your story awaits"
                         } else if empty {
                             "Your first chapter starts here"
                         } else {
-                            "All projects"
+                            "Open project"
                         }))
                         .size(if wide { 30.0 } else { 26.0 })
                         .strong()
@@ -127,15 +133,26 @@ fn banner(
                 }
             };
             if wide {
+                let text_width = width - image_width - 24.0;
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(width - image_width - 24.0, 0.0),
+                    let column = ui.allocate_ui_with_layout(
+                        Vec2::new(text_width, 0.0),
                         Layout::top_down(Align::Min),
-                        |ui| text(ui, action),
+                        |ui| {
+                            ui.set_width(text_width);
+                            text(ui, action);
+                        },
                     );
                     ui.add_space(24.0);
-                    illustration(ui, image_width, l, t);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(
+                            image_width,
+                            column.response.rect.height().max(image_width / 1.65),
+                        ),
+                        Layout::bottom_up(Align::Min),
+                        |ui| illustration(ui, image_width, l, t),
+                    );
                 });
             } else {
                 text(ui, action);
@@ -145,7 +162,82 @@ fn banner(
                 });
             }
         });
+    if let Some((painter, index)) = hatch {
+        painter.set(
+            index,
+            engraved_field(frame.response.rect.shrink(12.0), t, dark),
+        );
+    }
     record(ui, "home.banner", frame.response.rect);
+}
+
+fn project_heading(ui: &mut egui::Ui, l: Language, t: Tokens, action: &mut Option<Action>) {
+    let heading = RichText::new(l.text("All projects"))
+        .size(23.0)
+        .strong()
+        .color(t.text);
+    let measure = |text: &str, size| {
+        ui.painter()
+            .layout_no_wrap(text.into(), FontId::proportional(size), t.text)
+            .size()
+            .x
+    };
+    let action_width = measure(l.text("New project"), 14.0)
+        + measure(l.text("Open .wstudio…"), 14.0)
+        + ui.spacing().button_padding.x * 4.0
+        + ui.spacing().item_spacing.x;
+    let wide = ui.available_width() >= measure(l.text("All projects"), 23.0) + action_width + 40.0;
+    let actions = |ui: &mut egui::Ui, action: &mut Option<Action>| {
+        let buttons = [
+            ("New project", "home.new", Action::New),
+            ("Open .wstudio…", "home.import", Action::Import),
+        ];
+        for (label, key, intent) in buttons {
+            if action_button(ui, l.text(label), false, t, key).clicked() {
+                *action = Some(intent);
+            }
+        }
+    };
+    if wide {
+        ui.horizontal(|ui| {
+            ui.label(heading);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // Right-align the group, retaining the visual New → Import
+                // order for keyboard traversal inside it.
+                ui.allocate_ui_with_layout(
+                    Vec2::new(action_width, 40.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| actions(ui, action),
+                );
+            });
+        });
+    } else {
+        ui.label(heading);
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| actions(ui, action));
+    }
+}
+
+fn engraved_field(rect: Rect, t: Tokens, dark: bool) -> egui::Shape {
+    let color = t.text.gamma_multiply(if dark { 0.045 } else { 0.035 });
+    let mut lines = Vec::new();
+    let mut offset = 7.0;
+    while offset < rect.width() + rect.height() {
+        let start = egui::pos2(
+            (rect.left() + offset).min(rect.right()),
+            rect.bottom() - (offset - rect.width()).max(0.0),
+        );
+        let end = egui::pos2(
+            (rect.left() + offset - rect.height()).max(rect.left()),
+            rect.top() + (rect.height() - offset).max(0.0),
+        );
+        lines.push(egui::Shape::line_segment(
+            [start, end],
+            Stroke::new(0.65, color),
+        ));
+        offset += 11.0;
+    }
+    egui::Shape::Vec(lines)
 }
 
 fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens) {
@@ -180,8 +272,20 @@ fn action_button(ui: &mut egui::Ui, label: &str, primary: bool, t: Tokens, key: 
     .wrap();
     if primary {
         button = button.fill(t.accent);
+    } else if key == "home.new" {
+        button = button.fill(t.panel).stroke(Stroke::new(1.0, t.accent));
+    } else if key == "home.import" {
+        button = button.frame(false);
     }
     let response = ui.add(button);
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect.shrink(1.0),
+            5.0,
+            Stroke::new(2.0, t.accent),
+            egui::StrokeKind::Inside,
+        );
+    }
     if response.gained_focus() {
         response.scroll_to_me(None);
     }
