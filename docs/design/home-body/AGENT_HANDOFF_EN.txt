@@ -1,0 +1,125 @@
+WRITERCRAFT HOME PAGE BODY REDESIGN
+Implementation handoff based on the user's selected visual direction
+2026-11-10
+
+READ FIRST
+
+Implement the body of the home/project-library page using the included medieval-scribe concepts. The user explicitly liked the banner and content composition and narrowed the requested change to this page only. This package is a design handoff, not implemented software or independent UX acceptance.
+
+The home body must closely reproduce the chosen composition at a comparable available width. Do not reduce the task to adding a mascot or changing colors. Responsive reflow is mandatory; pixel coordinates from a single image are not fixed layout requirements.
+
+AUTHORITY AND SCOPE
+
+The latest user clarification supersedes incidental details of the generated mockups. Preserve the application's existing header, footer, native window chrome and shared navigation. The images do not mandate reproducing those elements, adding global navigation destinations, or redesigning other screens.
+
+In scope:
+- The home body: scribe banner, main action, project-section heading/actions, project rows.
+- Local typography, spacing, illustrations, semantic colors and responsive states.
+- Integration with existing project-library commands and data.
+
+Outside this change:
+- Manuscript editor, Canvas, notes/review workflows, settings and global navigation redesign.
+- Brand/logo replacement, palette removal/addition, or changes to the default theme.
+- New project taxonomy, cover-authoring features, analytics, gamification, cloud accounts or session-management infrastructure.
+- Any mutation of user projects solely for presentation.
+
+The scribe has been selected as the home direction. The earlier serif UI typography was rejected. Latest included sans-serif renders show a proposed correction; no exact font family, weight or size has been separately approved. Reuse the established UI family and refine local hierarchy rather than replacing the app-wide typography.
+
+The copper theme was an assistant preference, not an owner-selected default.
+
+REFERENCE INVENTORY
+
+references/01-home-scribe-blue-dark.png
+references/02-home-scribe-blue-light.png
+references/03-home-scribe-copper-dark.png
+references/04-home-scribe-lavender-light.png
+
+All four are generated visual references of one home body. Synthetic project names, word counts, chapter names, cover illustrations and save/status text are illustrative only. Shared navigation and chrome are contextual only.
+
+Images are full-screen PNG concepts, not production illustration cutouts, editable typography, verified contrast specifications or ready-to-ship native UI. Prepare appropriate illustration assets and real native text/controls. Never flatten the whole mockup into a clickable background.
+
+REQUIRED COMPOSITION
+
+HOM identifiers below are local to this handoff. Map them to the repository's actual specification and scenario IDs during implementation.
+
+HOM-01 Banner
+A prominent but bounded top banner: content/action at the left and the expressive medieval scribe at the right on wide layouts. Preserve the hand-on-cheek pose, face and eyes, quill, book stack, manuscript and woodcut linework. The artwork stays fully inside the banner and never covers shared chrome or controls.
+
+HOM-02 Projects
+Place the project heading and creation/opening actions below the banner, followed by horizontal project rows. Keep modest thumbnails/icons, readable titles, supported metadata, opening affordances, quiet separators and the demonstrated alignment/rhythm. A dashboard, metrics view or grid of large tiles is not an equivalent implementation.
+
+HOM-03 Integration
+Use the current shell and established commands. Preserve the existing first-run and archive-import paths. Avoid duplicated or misleading controls. Project selection and opening must use actual identifiers.
+
+HOM-04 Copy
+Reject these strings and translated equivalents:
+"Ваши тексты и персонажи рядом"
+"Ваши тексты, идеи и персонажи — рядом."
+
+Default to omitting that promotional subtitle rather than inventing a replacement slogan. Show concise functional copy and real project context. The depicted "История ждёт продолжения" is illustrative copy, not a mandatory approved slogan. Empty and unavailable-target states need truthful wording.
+
+HOM-05 Typography
+Modern, readable humanist sans-serif in the UI, continuous with WriterCraft. No revival of the rejected serif treatment for the home heading, project names or interface labels. Keep a deliberate hierarchy without oversized/heavy headings. Scope styling locally; preserve the manuscript's independent typography.
+
+HOM-06 Theme adaptation
+Use existing semantic theme tokens and retain all seven palettes plus independent Light/Dark/System behavior. Adapt the scribe's clothing and decorative field to the palette while retaining neutral skin/paper/linework. Use intentional masks/layers or prepared variants; do not rely on indiscriminate full-image tinting. Do not recolor actual user-owned thumbnails/content. The small approved logo in the existing shared shell remains unchanged.
+
+HOM-07 Real state
+Only display "Continue" if a valid existing target is known. Do not fabricate a chapter/caret restoration ability, statistics, timestamps or save success. Preserve existing unavailable-target/error handling. Decorative project thumbnails must not require a new cover-editing workflow.
+
+RESPONSIVE BEHAVIOR
+
+HOM-08 Available content width
+Measure the width left for the home body after existing panes/chrome. Do not compute layout solely from the outer window width.
+
+Wide: side-by-side banner text/action and scribe; aligned banner/list edges; bounded readable text.
+Constrained: reduce decorative gaps and illustration size, wrap labels/actions, retain useful hit targets.
+Narrow: stack banner regions where necessary; keep action and text prominent, preserve the character's meaningful silhouette. Project rows retain title/opening access while secondary metadata wraps or yields space.
+
+Do not shrink the entire screenshot, clip controls, overlap text, crop the face/quill/book, or introduce horizontal scrolling for ordinary home content. Short windows require a smaller banner and usable local vertical scrolling so the project list stays reachable. Respect the existing shell's scrolling behavior.
+
+Use content-driven breakpoints. No exact breakpoint numbers were owner-approved.
+
+STATE AND NATIVE REVIEW MATRIX
+
+Verify at the application's actual supported minimum, a typical laptop size and a wide window. Existing design references use 1000x680 and 1440x940 logical windows; verify the current minimum rather than assuming it. Include an intermediate size such as 1280x800, narrow body widths caused by existing panes, short heights, live resizing and supported UI scaling.
+
+Required states:
+- Empty library, one project and a long scrollable library.
+- Valid continuation target and no available continuation target.
+- Long/duplicate titles, absent thumbnails and unavailable project data.
+- Light/Dark, System behavior and retained seven palettes.
+- Russian and English plus long German/French strings and CJK; complete ru/en/de/fr/es/pt/zh/ja catalogs.
+- Pointer and keyboard focus, reachable opening/creation/import, cancel/error/return paths.
+
+Inspect real compiled captures for text clipping, image containment, excessive banner height, control grouping and theme compatibility. Record exact candidate identity and observed interaction evidence. Generated reference PNGs cannot pass these checks.
+
+REPOSITORY STARTING POINTS
+
+Observed during handoff preparation; verify against the target checkout:
+- crates/studio-desktop/src/app/library.rs: current native library body and project actions.
+- crates/studio-desktop/src/app.rs: entry routing/shared layout.
+- crates/studio-desktop/src/theme.rs: existing appearance and palette tokens.
+- crates/studio-desktop/src/i18n.rs: localization.
+- Existing icon/font/asset handling: follow current project conventions.
+
+Read applicable AGENTS.md, docs/PRD.md, docs/governance/SPEC_WORKFLOW.md, openspec/config.yaml, docs/design/USER_FEEDBACK.md, docs/design/UX_ACCEPTANCE.md, docs/design/DESKTOP_UX.md and relevant architecture/migration contracts before implementation.
+
+Follow the current repository queue, issue workflow and file ownership. The task is one bounded home-page slice; do not resume unrelated feature streams under this design request. Record the new owner scope/copy/typography correction in the feedback log, applicable OpenSpec/task, and review criteria before acceptance. Keep public issue prose/evidence synthetic and sanitized.
+
+Use Rust/native UI, the required Rust skill and established core commands. Preserve user data and ongoing work. Do not replace or restart the user's running preview without a clear request. The bundle itself does not request any new release or product-issue closure.
+
+ACCEPTANCE AND STOP CONDITION
+
+Complete the repository's proposal/spec/design/tasks flow for this scoped behavior, integrate the real home body, run required fmt/tests/clippy checks, exercise the actual native page and obtain independent review of this same slice.
+
+Acceptance requires:
+1. The selected banner and project-list body are visibly recognizable at comparable width.
+2. Shared chrome and unrelated screens retain their established behavior and presentation.
+3. The rejected slogans are absent from shipping UI/localization.
+4. Narrow/short layouts preserve reading, controls, illustration containment and list reachability.
+5. Theme adaptation works without changing user content, available palettes or defaults.
+6. Commands, real data and first-run behavior are truthful and functional.
+7. Current exact-candidate native evidence and independent findings support the claimed scope.
+
+Stop with a focused, reviewable handoff and precise remaining gaps. Do not claim full editor/product parity from home-page polish.

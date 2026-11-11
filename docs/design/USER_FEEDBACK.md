@@ -308,3 +308,7 @@ Independent inspection of the first native authoring batch on compiled source `1
 ## F-57 — home/project-library body
 
 2026-11-10: a separately prepared visual handoff selects a medieval-scribe banner and horizontal project-list composition for the home body, with responsive reflow. Preserve the shared shell, current logo, defaults and seven palettes; use established sans-serif UI typography. The rejected promotional subtitle must not ship. The archive is design input, not implemented or independently accepted evidence. Schedule this bounded home slice after the active #14 correction workflow; it does not silently accept or replace unfinished authoring requirements.
+
+### F-57 recovered design input — 2026-11-12
+
+The original chat retains the verified handoff archive, so no replacement owner upload is required. Its four references and English instructions are now retained in `docs/design/home-body/`, with hashes and the standalone generated artwork provenance. Reproduce the selected banner and project-list body recognizably at comparable available width; the illustrated header/footer and incidental navigation do not require shell changes. Responsive reflow is mandatory. The earlier serif UI treatment was rejected; exact replacement font metrics were not independently approved. Omit both rejected subtitle wordings and translated equivalents rather than invent a new promotional slogan. The copper variant was an assistant recommendation, not a new user-selected default. A3-HOME-01 remains pending until exact compiled native review.

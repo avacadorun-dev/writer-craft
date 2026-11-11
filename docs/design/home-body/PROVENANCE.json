@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-12",
+  "issue": 18,
+  "status": "Design inputs; native acceptance pending",
+  "source_archive_sha256": "c51995a89c298947f8f63b50e2664b2d12db03c85517dfa844621497b13ef7b2",
+  "references": [
+    {
+      "path": "references/01-home-scribe-blue-dark.png",
+      "sha256": "971a9dbe2d76edcf9468fad0b32b6a56ca018839b8a3bbefa94ded4fec9cc052"
+    },
+    {
+      "path": "references/02-home-scribe-blue-light.png",
+      "sha256": "85f058c56c5cdee4cd21627595904f68bf2189081efa66f0ec8062ca58be5bc3"
+    },
+    {
+      "path": "references/03-home-scribe-copper-dark.png",
+      "sha256": "256b7e93488bca73ab732932cc7e7cfd2ea5d1ef29f4efd6c452a00b9b8717d4"
+    },
+    {
+      "path": "references/04-home-scribe-lavender-light.png",
+      "sha256": "d088df1616eabc6435ad36e4d7439443c0b832c1f51226d78c97ff3056970bfb"
+    }
+  ],
+  "artwork": {
+    "path": "assets/home/scribe.png",
+    "sha256": "708fa0abb7954b17c2fd8eb60e5cf608f771b09a09d56b99cec2c2e16f62b7ef",
+    "method": "Built-in ImageGen extraction from selected home-scribe-blue-dark reference",
+    "prompt": "Extract the selected hand-on-cheek medieval scribe, quill, manuscript, books and desk as a faithful transparent cutout; preserve cream/black engraving, use separable blue robe, omit all UI and text."
+  }
+}
