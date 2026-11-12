@@ -1453,7 +1453,7 @@ mod tests {
         let renderer =
             craft_editor_render::Renderer::new(craft_editor_render::RenderOptions::default())?;
         let catalog = renderer.prepare_document(&document, &assets, 1)?;
-        assert_eq!(catalog.len(), 6);
+        assert_eq!(catalog.len(), 8);
         assert!(
             catalog.failures().is_empty(),
             "Valid showcase source must produce real media: {:?}",
