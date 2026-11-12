@@ -383,3 +383,19 @@ The spec-first increment lands in `openspec/changes/compiled-markdown-manuscript
 Local evidence: `cargo test -p studio-transfer --locked` passed (23 + 2 + 4 + 8 + 14 + 7 across suites, including the seven new compiled-manuscript tests), `cargo fmt --all`, strict `cargo clippy -p studio-transfer --all-targets -- -D warnings`, and `cargo check -p studio-desktop`. New tests cover tree order and nested heading levels, exclusion of unselected writing, adjacent asset bytes/links after moving the pair, exclusive destination refusal, pre-cancellation, and in-document anchors plus outside-link disclosure. A missing captured artifact is already refused by import validation; the plan guard remains defensive.
 
 Not yet reachable or verified: no native export mode/UI, no eight-catalog strings, no hosted Verify/Preview on this increment, no owner-observed artifact in an independent Markdown reader, and no independent review. #20 therefore stays open; this is source-only progress, not acceptance. No engine pin, dependency, schema, storage, Canvas or protected-#10 change occurred.
+
+### #20 native manuscript export mode — 2026-11-13
+
+Commit `973c64c` on `feature/alpha3-parity` makes the compiled manuscript reachable in the existing project-transfer modal:
+
+- Third export format "Manuscript Markdown (one file)" with whole-project, current-document, section or explicit-documents scope, defaulting to the open document.
+- A planning worker captures a fresh snapshot and runs `plan_manuscript`; the preview lists the actual `#`-prefixed chapter order and localized reader-conversion disclosures (naming the affected chapter) before any destination exists.
+- The destination is a new folder under a chosen parent, using the shared `.incomplete` marker, exclusive creation, read-back SHA-256 verification and cancellation. Completion is reported as "Manuscript exported and verified." and offers to reveal the folder.
+- Library hardening in the same commit: `ManuscriptSelection::Project`, trashed nodes dropped before ordering so deleted writing can never leak into a reader manuscript, and the reader export now omits the folder export's invisible per-block HTML anchors (`block_anchors: false`), so plain prose discloses only the reading-copy scope.
+- All 30 new visible strings exist in the eight catalogs. Two pre-existing Clippy findings in untouched desktop files (`commands.rs`, `native_capture.rs`) remain outside this change and were not modified.
+
+Local evidence: `cargo test -p studio-desktop --locked` (104 passed, including five new transfer tests: one verified ordered document; the plan discloses the reading scope without creating the destination; scope helpers reject empty or foreign choices; the preview shows order and localized disclosures; the format choice is reachable by pointer and every locale renders without the missing-translation marker), `cargo test -p studio-transfer --locked` (23 + 2 + 4 + 9 + 14 + 7), `cargo fmt --all --check`, strict Clippy for both crates, and native captures stored in `docs/verification/compiled-markdown/` (export mode in Russian, order preview in English; both report `canonical_unchanged: true` and 11 stable frames). `--capture-transfer`/`--capture-transfer-preview` are capture-only presentation flags.
+
+Hosted: for `2491991` the Linux and Windows shared-core jobs passed, the macOS Verify job was still running at handoff, and that commit's Preview workflow never received a macOS runner (job cancelled after 15 minutes with an empty runner name). New runs for `973c64c` started normally (Verify queued, Preview running) but no hosted result is claimed yet.
+
+Not claimed: an independent Markdown-reader observation of a native-exported artifact, moving the `.md` plus assets pair, owner inspection and independent scoped review. #20 remains open. No engine pin, dependency, schema, storage or protected-#10 change occurred.
