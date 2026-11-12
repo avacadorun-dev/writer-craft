@@ -161,10 +161,13 @@ pub fn export_markdown_folder_with_progress(
                         && revision["revision"].as_u64() == Some(current)
                 })
                 .ok_or_else(|| TransferError::Invalid("Export document head is missing".into()))?;
+            let anchors = HashMap::new();
             let mut renderer = MarkdownRenderer {
                 current: path,
                 project: &project_id,
                 nodes: &plan.node_paths,
+                anchors: &anchors,
+                heading_offset: 0,
                 assets: &plan.asset_paths,
                 conversions: BTreeSet::new(),
             };
@@ -540,7 +543,7 @@ fn plan_export(
         scope: scope.into(),
     })
 }
-fn ordered_tree(nodes: &[Value], allow_outside_parents: bool) -> Result<Vec<usize>> {
+pub(super) fn ordered_tree(nodes: &[Value], allow_outside_parents: bool) -> Result<Vec<usize>> {
     let known: HashSet<&str> = nodes
         .iter()
         .map(|node| required(node, "id"))
@@ -787,10 +790,10 @@ fn extension(mime: &str) -> &str {
         _ => ".bin",
     }
 }
-fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+pub(super) fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
     value[key].as_array().map(Vec::as_slice).unwrap_or(&[])
 }
-fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+pub(super) fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
     value[key]
         .as_str()
         .ok_or_else(|| TransferError::Invalid(format!("Portable export field {key} is missing")))
@@ -801,13 +804,17 @@ fn invalid<T>(message: &str) -> Result<T> {
 fn core_error(error: studio_core::StudioError) -> TransferError {
     TransferError::Invalid(error.to_string())
 }
-fn check_cancel(cancel: &ProjectTransferCancellation) -> Result<()> {
+pub(super) fn check_cancel(cancel: &ProjectTransferCancellation) -> Result<()> {
     if cancel.is_cancelled() {
         return invalid("Export cancelled; any new output remains explicitly incomplete");
     }
     Ok(())
 }
-fn ensure_parent(root: &Path, relative: &str, owned: &mut HashSet<PathBuf>) -> Result<()> {
+pub(super) fn ensure_parent(
+    root: &Path,
+    relative: &str,
+    owned: &mut HashSet<PathBuf>,
+) -> Result<()> {
     if !safe_relative(relative) {
         return invalid("Unsafe portable output path");
     }
@@ -824,7 +831,7 @@ fn ensure_parent(root: &Path, relative: &str, owned: &mut HashSet<PathBuf>) -> R
     }
     Ok(())
 }
-fn write_new(
+pub(super) fn write_new(
     root: &Path,
     relative: &str,
     bytes: &[u8],
@@ -848,7 +855,7 @@ fn write_new(
     }
     writer.finish(relative)
 }
-struct DigestWriter {
+pub(super) struct DigestWriter {
     file: File,
     digest: Sha256,
     length: u64,
@@ -868,7 +875,15 @@ impl Write for DigestWriter {
     }
 }
 impl DigestWriter {
-    fn finish(mut self, path: &str) -> Result<PortableExportFile> {
+    /// Start a digesting payload writer.
+    pub(super) fn new(file: File) -> Self {
+        Self {
+            file,
+            digest: Sha256::new(),
+            length: 0,
+        }
+    }
+    pub(super) fn finish(mut self, path: &str) -> Result<PortableExportFile> {
         self.flush()?;
         self.file.sync_all()?;
         Ok(PortableExportFile {
@@ -878,7 +893,7 @@ impl DigestWriter {
         })
     }
 }
-fn verify_file(
+pub(super) fn verify_file(
     root: &Path,
     expected: &PortableExportFile,
     cancel: &ProjectTransferCancellation,
@@ -904,7 +919,7 @@ fn verify_file(
     }
     Ok(())
 }
-fn sync_directory(path: &Path) -> Result<()> {
+pub(super) fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         File::open(path)?.sync_all()?;

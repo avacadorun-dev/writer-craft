@@ -209,10 +209,13 @@ impl ReadingPlan {
                     .reading_document(&node.logical_id)
                     .map_err(core_error)?;
                 let body = if let Some(content) = &reading.rich_content {
+                    let anchors = HashMap::new();
                     let mut renderer = MarkdownRenderer {
                         current: path,
                         project: &self.project,
                         nodes: &self.node_paths,
+                        anchors: &anchors,
+                        heading_offset: 0,
                         assets: &self.asset_paths,
                         conversions: BTreeSet::new(),
                     };

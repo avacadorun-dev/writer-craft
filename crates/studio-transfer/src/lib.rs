@@ -9,6 +9,7 @@ mod canonical_archive;
 mod canonical_folder;
 mod canonical_reader;
 mod canonical_reading;
+mod compiled_markdown;
 mod markdown_render;
 mod portable_file;
 mod portable_markdown;
@@ -22,6 +23,10 @@ pub use canonical_folder::{
     CanonicalFolderReceipt, CanonicalProjectFolder, export_canonical_project_folder,
 };
 pub use canonical_reader::CanonicalProjectArchive;
+pub use compiled_markdown::{
+    CompiledManuscriptProgress, CompiledManuscriptReceipt, ManuscriptEntry, ManuscriptPlan,
+    ManuscriptSelection, compile_manuscript, compile_manuscript_with_progress, plan_manuscript,
+};
 pub use portable_file::{PortableFileReceipt, export_project_archive_file};
 pub use portable_markdown::{
     MarkdownConversion, MarkdownExportProgress, MarkdownExportReceipt, MarkdownExportSelection,

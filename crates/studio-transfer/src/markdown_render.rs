@@ -10,6 +10,8 @@ pub(super) struct MarkdownRenderer<'a> {
     pub(super) current: &'a str,
     pub(super) project: &'a str,
     pub(super) nodes: &'a HashMap<String, String>,
+    pub(super) anchors: &'a HashMap<String, String>,
+    pub(super) heading_offset: u8,
     pub(super) assets: &'a HashMap<String, String>,
     pub(super) conversions: BTreeSet<String>,
 }
@@ -26,7 +28,12 @@ impl MarkdownRenderer<'_> {
             "paragraph" => self.inline(children),
             "heading" => Ok(format!(
                 "{} {}",
-                "#".repeat(attrs["level"].as_u64().unwrap_or(1).clamp(1, 6) as usize),
+                "#".repeat(
+                    u8::try_from(attrs["level"].as_u64().unwrap_or(1).clamp(1, 6))
+                        .unwrap_or(1)
+                        .saturating_add(self.heading_offset)
+                        .min(6) as usize
+                ),
                 self.inline(children)?
             )),
             "hardBreak" => Ok("  \n".into()),
@@ -232,6 +239,9 @@ impl MarkdownRenderer<'_> {
             .strip_prefix("writers-studio://documents/")
             .or_else(|| target.strip_prefix(&format!("/projects/{}/studio/", self.project)));
         if let Some(id) = document {
+            if let Some(anchor) = self.anchors.get(id) {
+                return Ok(Some(anchor.clone()));
+            }
             if let Some(path) = self.nodes.get(id) {
                 let mut relative = relative_link(self.current, path)?;
                 if !fragment.is_empty() {
@@ -587,10 +597,13 @@ mod tests {
     fn complex_tables_should_keep_nested_blocks_spans_and_unicode_visible() {
         let nodes = HashMap::new();
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -618,10 +631,13 @@ mod tests {
     fn document_links_should_rewrite_and_outside_selection_links_should_be_reported() {
         let nodes = HashMap::from([("selected".into(), "documents/Автор.md".into())]);
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -649,10 +665,13 @@ mod tests {
     fn opaque_image_locations_should_have_readable_fallbacks_without_invented_local_links() {
         let nodes = HashMap::new();
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
