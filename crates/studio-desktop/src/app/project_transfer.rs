@@ -1208,6 +1208,9 @@ fn disclosure_message(conversion: &MarkdownConversion) -> &'static str {
         "mermaid-reader-support-required" => {
             "A Mermaid diagram stays as source for the reader to render."
         }
+        "underline-html-reader-support" => {
+            "An underline is written as HTML for the reader to render."
+        }
         "callout-reader-extension"
         | "block-identity-html-anchor"
         | "inline-code-linebreak-reading-normalization"
@@ -1223,6 +1226,9 @@ fn disclosure_message(conversion: &MarkdownConversion) -> &'static str {
         }
         "markdown-table-first-row-as-header" | "complex-table-html-reading-view" => {
             "A table becomes HTML or first-row-header Markdown."
+        }
+        feature if feature.starts_with("unsupported-rich-node:") => {
+            "Unsupported rich content is left out of the reader copy; the project keeps the original."
         }
         _ => "This formatting is represented approximately in Markdown.",
     }
@@ -1666,6 +1672,47 @@ mod tests {
                 text.contains(language.text("Include")),
                 "{language:?} does not render the manuscript scope selector"
             );
+        }
+        Ok(())
+    }
+    #[test]
+    fn every_reader_disclosure_should_resolve_in_every_catalog() -> TestResult {
+        for feature in [
+            "reader-export-is-not-a-canonical-project-backup",
+            "source-frontmatter-omitted-from-reader-export",
+            "document-link-outside-export-scope",
+            "external-or-opaque-image-source-retained",
+            "unresolved-or-application-link-in-companion",
+            "formula-reader-support-required",
+            "formula-description-in-companion",
+            "mermaid-reader-support-required",
+            "underline-html-reader-support",
+            "callout-reader-extension",
+            "block-identity-html-anchor",
+            "inline-code-linebreak-reading-normalization",
+            "scene-break-reading-separator",
+            "ordered-list-numbering-style-in-companion",
+            "code-language-label-in-companion",
+            "image-display-size-in-companion",
+            "extended-link-attributes-in-companion",
+            "table-widths-and-cell-metadata-in-companion",
+            "markdown-table-first-row-as-header",
+            "complex-table-html-reading-view",
+            "unsupported-rich-node:mysteryBlock",
+            "future-unmapped-feature",
+        ] {
+            let conversion = MarkdownConversion {
+                resource_id: "project".into(),
+                feature: feature.into(),
+            };
+            let msgid = disclosure_message(&conversion);
+            for language in Language::ALL {
+                assert_ne!(
+                    language.text(msgid),
+                    "⟦missing translation⟧",
+                    "{feature} has no {language:?} disclosure"
+                );
+            }
         }
         Ok(())
     }

@@ -14,6 +14,8 @@ pub(super) struct MarkdownRenderer<'a> {
     pub(super) heading_offset: u8,
     /// Folder exports keep per-block HTML anchors; a reader manuscript omits that invisible markup.
     pub(super) block_anchors: bool,
+    /// Folder exports can link the canonical companion; a reader manuscript never emits that link.
+    pub(super) companion_links: bool,
     pub(super) assets: &'a HashMap<String, String>,
     pub(super) conversions: BTreeSet<String>,
 }
@@ -146,10 +148,16 @@ impl MarkdownRenderer<'_> {
             _ => {
                 self.conversions
                     .insert(format!("unsupported-rich-node:{kind}"));
-                Ok(format!(
-                    "[Preserved rich content](<{}>)",
-                    relative_link(self.current, ".writercraft/project.json")?
-                ))
+                if self.companion_links {
+                    Ok(format!(
+                        "[Preserved rich content](<{}>)",
+                        relative_link(self.current, ".writercraft/project.json")?
+                    ))
+                } else {
+                    // A reader manuscript has no canonical companion, so it must not publish a
+                    // dangling link to one. The conversion disclosure names the omission.
+                    Ok(String::new())
+                }
             }
         }?;
         if self.block_anchors
@@ -608,6 +616,7 @@ mod tests {
             anchors: &anchors,
             heading_offset: 0,
             block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -632,6 +641,41 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_nodes_without_a_companion_should_leave_no_dangling_link() {
+        let nodes = HashMap::new();
+        let assets = HashMap::new();
+        let anchors = HashMap::new();
+        let unknown = json!({"type":"mysteryBlock","attrs":{"blockId":"mystery"}});
+        let conversions = |companion_links: bool| {
+            let mut renderer = MarkdownRenderer {
+                current: "Manuscript.md",
+                project: "project",
+                nodes: &nodes,
+                anchors: &anchors,
+                heading_offset: 0,
+                block_anchors: false,
+                companion_links,
+                assets: &assets,
+                conversions: BTreeSet::new(),
+            };
+            let rendered = renderer.render(&unknown).unwrap();
+            (rendered, renderer.conversions)
+        };
+        let (folder, folder_conversions) = conversions(true);
+        assert!(folder.contains(".writercraft/project.json"));
+        assert!(
+            folder_conversions.contains("unsupported-rich-node:mysteryBlock"),
+            "the folder export still reports the preserved rich node"
+        );
+        let (reader, reader_conversions) = conversions(false);
+        assert_eq!(reader, "", "the reader copy has no canonical companion");
+        assert!(
+            reader_conversions.contains("unsupported-rich-node:mysteryBlock"),
+            "the omission is still disclosed"
+        );
+    }
+
+    #[test]
     fn document_links_should_rewrite_and_outside_selection_links_should_be_reported() {
         let nodes = HashMap::from([("selected".into(), "documents/Автор.md".into())]);
         let assets = HashMap::new();
@@ -643,6 +687,7 @@ mod tests {
             anchors: &anchors,
             heading_offset: 0,
             block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -678,6 +723,7 @@ mod tests {
             anchors: &anchors,
             heading_offset: 0,
             block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };

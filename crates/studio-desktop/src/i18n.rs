@@ -3530,6 +3530,32 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "An underline is written as HTML for the reader to render.",
+        [
+            "Подчёркивание записывается как HTML для отображения читалкой.",
+            "An underline is written as HTML for the reader to render.",
+            "Eine Unterstreichung wird als HTML für den Renderer geschrieben.",
+            "Un soulignement est écrit en HTML à rendre par le lecteur.",
+            "El subrayado se escribe como HTML para que lo renderice el lector.",
+            "O sublinhado é escrito como HTML para o leitor o renderizar.",
+            "下划线写为 HTML，由阅读器渲染。",
+            "下線は HTML として書き出され、閲覧側で描画します。",
+        ],
+    ),
+    (
+        "Unsupported rich content is left out of the reader copy; the project keeps the original.",
+        [
+            "Неподдерживаемое форматированное содержимое не включается в копию для чтения; оригинал остаётся в проекте.",
+            "Unsupported rich content is left out of the reader copy; the project keeps the original.",
+            "Nicht unterstützte Rich-Inhalte entfallen in der Lesefassung; das Original bleibt im Projekt.",
+            "Le contenu enrichi non pris en charge est omis de la copie de lecture ; l’original reste dans le projet.",
+            "El contenido enriquecido no compatible se omite de la copia de lectura; el original permanece en el proyecto.",
+            "O conteúdo rico não suportado fica fora da cópia de leitura; o original permanece no projeto.",
+            "不支持的富内容不会进入阅读副本；原始内容仍保留在项目中。",
+            "未対応のリッチコンテンツは閲覧用コピーに含まれません。元の内容はプロジェクトに残ります。",
+        ],
+    ),
+    (
         "Restore an independent project from a native archive or a readable folder with its canonical companion.",
         [
             "Восстановите отдельный проект из архива WriterCraft или папки с файлами и каноническими данными.",

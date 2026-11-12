@@ -288,6 +288,7 @@ fn render_manuscript(
             anchors: &prepared.anchors,
             heading_offset: *level,
             block_anchors: false,
+            companion_links: false,
             assets: &prepared.asset_paths,
             conversions: BTreeSet::new(),
         };
