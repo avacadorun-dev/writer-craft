@@ -1675,6 +1675,89 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn every_transfer_dialog_state_should_render_in_every_locale() -> TestResult {
+        let (_directory, mut app, project) = fixture()?;
+        let ctx = egui::Context::default();
+        let export_request = manuscript_request(&project);
+        let context = Context {
+            title: project.title.clone(),
+            path: Some(std::path::PathBuf::from("/tmp/synthetic-destination")),
+        };
+        let jobs = [
+            JobKind::Check,
+            JobKind::Plan,
+            JobKind::Export,
+            JobKind::Restore,
+        ];
+        for (index, language) in Language::ALL.into_iter().enumerate() {
+            let mut views = vec![
+                View::Export(export_request.clone()),
+                View::Export(ExportRequest {
+                    kind: ExportKind::Archive,
+                    ..export_request.clone()
+                }),
+                View::ChooseRestore,
+                View::Preparing(Prerequisites {
+                    intent: Intent::Export(export_request.clone()),
+                    project: Some(project.id.clone()),
+                    notes: Vec::new(),
+                    armed: true,
+                }),
+                View::Preparing(Prerequisites {
+                    intent: Intent::Export(export_request.clone()),
+                    project: Some(project.id.clone()),
+                    notes: vec![("document".into(), "Writing".into())],
+                    armed: false,
+                }),
+            ];
+            for kind in jobs {
+                let (_sender, receiver) = mpsc::channel();
+                views.push(View::Working(Job {
+                    receiver,
+                    cancel: ProjectTransferCancellation::default(),
+                    cancelling: false,
+                    context: context.clone(),
+                    kind,
+                }));
+            }
+            for (kind, retry) in [
+                (OutcomeKind::Exported, None),
+                (OutcomeKind::Compiled, None),
+                (OutcomeKind::Cancelled, None),
+                (
+                    OutcomeKind::Unconfirmed,
+                    Some(Retry::Export(export_request.clone())),
+                ),
+            ] {
+                views.push(View::Outcome(Outcome {
+                    context: context.clone(),
+                    kind,
+                    details: Some("synthetic failure".into()),
+                    retry,
+                }));
+            }
+            for (state_index, view) in views.into_iter().enumerate() {
+                app.project_transfer.visible = true;
+                app.project_transfer.view = Some(view);
+                let time = 100.0 + index as f64 * 10.0;
+                let _first = dialog_frame(&ctx, &mut app.project_transfer, language, time, vec![]);
+                let output = dialog_frame(
+                    &ctx,
+                    &mut app.project_transfer,
+                    language,
+                    time + 0.05,
+                    vec![],
+                );
+                let text = painted_text(&output);
+                assert!(
+                    !text.contains("⟦missing translation⟧"),
+                    "{language:?} is missing a label in transfer state {state_index}"
+                );
+            }
+        }
+        Ok(())
+    }
+    #[test]
     fn retry_and_continue_should_render_in_every_locale() -> TestResult {
         let (_directory, mut app, project) = fixture()?;
         let ctx = egui::Context::default();
