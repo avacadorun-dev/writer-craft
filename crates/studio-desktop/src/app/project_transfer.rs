@@ -764,9 +764,8 @@ impl StudioApp {
             }
             self.return_from_transfer_review()?;
             #[cfg(feature = "editor-preview")]
-            if !self.flush_canvas_for_transfer(state.project.as_deref())? {
-                return Ok(false);
-            }
+            return self.flush_canvas_for_transfer(state.project.as_deref());
+            #[cfg(not(feature = "editor-preview"))]
             Ok(true)
         })();
         match preparation {
