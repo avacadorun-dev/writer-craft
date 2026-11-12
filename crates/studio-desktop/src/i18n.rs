@@ -9399,6 +9399,32 @@ const CATALOG: &[(&str, [&str; 8])] = &[
         ],
     ),
     (
+        "Continue",
+        [
+            "Продолжить",
+            "Continue",
+            "Weiter",
+            "Continuer",
+            "Continuar",
+            "Continuar",
+            "继续",
+            "続行",
+        ],
+    ),
+    (
+        "Retry",
+        [
+            "Повторить",
+            "Retry",
+            "Wiederholen",
+            "Réessayer",
+            "Reintentar",
+            "Repetir",
+            "重试",
+            "再試行",
+        ],
+    ),
+    (
         "Archive checked",
         [
             "Архив проверен",

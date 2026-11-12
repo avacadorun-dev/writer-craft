@@ -1675,6 +1675,49 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn retry_and_continue_should_render_in_every_locale() -> TestResult {
+        let (_directory, mut app, project) = fixture()?;
+        let ctx = egui::Context::default();
+        let request = manuscript_request(&project);
+        app.project_transfer.visible = true;
+        app.project_transfer.view = Some(View::Outcome(Outcome {
+            context: Context {
+                title: project.title.clone(),
+                path: None,
+            },
+            kind: OutcomeKind::Unconfirmed,
+            details: Some("synthetic failure".into()),
+            retry: Some(Retry::Export(request.clone())),
+        }));
+        for language in Language::ALL {
+            let _first = dialog_frame(&ctx, &mut app.project_transfer, language, 10.0, vec![]);
+            let output = dialog_frame(&ctx, &mut app.project_transfer, language, 10.05, vec![]);
+            let text = painted_text(&output);
+            assert!(
+                text.contains(language.text("Retry")),
+                "{language:?} cannot retry a failed transfer"
+            );
+            assert!(!text.contains("⟦missing translation⟧"));
+        }
+        app.project_transfer.view = Some(View::Preparing(Prerequisites {
+            intent: Intent::Export(request),
+            project: Some(project.id.clone()),
+            notes: vec![("document".into(), "Writing".into())],
+            armed: false,
+        }));
+        for language in Language::ALL {
+            let _first = dialog_frame(&ctx, &mut app.project_transfer, language, 11.0, vec![]);
+            let output = dialog_frame(&ctx, &mut app.project_transfer, language, 11.05, vec![]);
+            let text = painted_text(&output);
+            assert!(
+                text.contains(language.text("Continue")),
+                "{language:?} cannot continue past pending notes"
+            );
+            assert!(!text.contains("⟦missing translation⟧"));
+        }
+        Ok(())
+    }
+    #[test]
     fn every_reader_disclosure_should_resolve_in_every_catalog() -> TestResult {
         for feature in [
             "reader-export-is-not-a-canonical-project-backup",

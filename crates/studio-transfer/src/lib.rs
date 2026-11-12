@@ -80,8 +80,8 @@ pub struct ImportedDocument {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransferError {
-    /// The archive could not be read from disk.
-    #[error("Cannot read project archive: {0}")]
+    /// Project data could not be read from or written to disk.
+    #[error("Cannot read or write project data: {0}")]
     Io(#[from] std::io::Error),
     /// ZIP structure, compression or an entry checksum is invalid.
     #[error("Cannot read ZIP project archive: {0}")]
