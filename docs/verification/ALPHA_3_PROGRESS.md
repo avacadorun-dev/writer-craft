@@ -399,3 +399,14 @@ Local evidence: `cargo test -p studio-desktop --locked` (104 passed, including f
 Hosted: for `2491991` the Linux and Windows shared-core jobs passed, the macOS Verify job was still running at handoff, and that commit's Preview workflow never received a macOS runner (job cancelled after 15 minutes with an empty runner name). New runs for `973c64c` started normally (Verify queued, Preview running) but no hosted result is claimed yet.
 
 Not claimed: an independent Markdown-reader observation of a native-exported artifact, moving the `.md` plus assets pair, owner inspection and independent scoped review. #20 remains open. No engine pin, dependency, schema, storage or protected-#10 change occurred.
+
+### #20 reader-profile hardening and independent rendering check — 2026-11-13
+
+`9edd832` closes two reader-profile gaps found while examining a real export:
+
+- `MarkdownRenderer` gains `companion_links`. A folder export still links the canonical companion for an unsupported rich node; the compiled manuscript now omits that object entirely and discloses it through the new `unsupported-rich-node:<kind>` message, so a final manuscript can never publish a link to a companion it does not ship.
+- Underlines (`underline-html-reader-support`) and unsupported nodes gained localized disclosure lines, and a desktop test now resolves every known disclosure slug (including the unknown-feature fallback) in all eight catalogs.
+
+Artifact probe (temporary local example calling `studio-transfer` directly — the same library the desktop worker invokes; the example was removed before commit): a synthetic editor-preview demo workspace was exported twice with `ManuscriptSelection::Project`. `Editor Preview.md` is 6,407 bytes, SHA-256 `a55476c29cc1c83f4cc1afaedbfdc9070deb27d5826d5ae858d1e6114b2808a5`, identical across both runs; its adjacent `Editor Preview-assets/lighthouse--fd80756d4c547300.png` is 16,262 bytes, SHA-256 `0154bea58504f21b1798bef0aeff2ea2fa4b76aa726b44323858b3dc08b1da1d`. Copying the `.md` plus assets folder to a new directory kept every local link resolvable (percent-decoded targets exist) and the asset checksum unchanged. An independent renderer (`marked`, npm) turned the moved document into 19 headings, two HTML tables and two image references with no broken target. The plain demo project (`Where the sea begins`, 2,103-byte document, SHA-256 `f1ae47815c96eabea6a65a894fcb1ab42275114a761ea958e1656ff395279030`) rendered its three chapters and prose without artifacts.
+
+This is a renderer-library check, not an observation in an independent Markdown reader application; that observation, owner inspection and independent review still remain for #20. Local suites after the change: `cargo test -p studio-transfer --locked` (24 + 2 + 4 + 9 + 14 + 7), `cargo test -p studio-desktop --locked` (105), `cargo fmt --all --check` and strict Clippy for both crates apart from the two pre-existing findings noted above.
