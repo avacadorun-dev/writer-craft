@@ -154,3 +154,9 @@ The owner is exploring the separate WriterCraft Home Contour app at source8c61a8
 ### #22 owner acceptance — 2026-11-13
 
 The owner scrolled a long manuscript in the expanded native editor showcase in the live local preview and approved closing #22. The running build (binary built 02:05:08, SHA-256 `87cd8ca7aeac84b48ff99181df3f3403f5fb0e74781b670436df6115a29978ce`) rebuilt egui/wgpu/craft-editor-egui at 01:58–02:03 after the dev-profile edit, so it contains `75d86a9`'s opt-level-2 dependencies and the `42918cf` showcase. Only `[profile.dev.package."*"]` changed; `[profile.release]` and dependency versions are untouched, so release installers are unaffected and tile appearance is unchanged. No instrumented rerun, release rebuild or independent review is claimed. #22 closed; #18 stays the sole active product issue; protected #10 remains unstaged at `4502d8eb632045bd0bef3a460025aa48311b0ce3b3001e39a9f85825a7a4ca51`.
+
+### #18 closed on owner acceptance; Actions queue stalled — 2026-11-13
+
+The owner reviewed the home library body in the compiled app at HEAD `0755f3e` (binary SHA-256 `e1d544a9…`, isolated demo database) and approved closing #18. The build includes the banner contour corrections `6b87cbc`/`8c61a88` and the body/typography commits `73e4cec`/`fe98d7e`. Item-by-item locale/palette/state/resize re-verification and independent review of the late paint-order change are not claimed.
+
+The two active `0755f3e` runs were cancelled at the owner's request; five older runs stuck since 2026-11-11 remain queued and cannot be cancelled through the API ("has not been queued yet", no jobs). Fresh runs start normally, so this does not block local work, but hosted qualification for #20 waits on a usable queue or owner direction. #22 and #18 are closed; #20/#19/#21 remain queued; protected #10 stays unstaged at `4502d8eb632045bd0bef3a460025aa48311b0ce3b3001e39a9f85825a7a4ca51`.
