@@ -75,6 +75,7 @@ fn banner(
             .lerp_to_gamma(Color32::from_rgb(249, 240, 220), 0.45)
     };
     let mut hatch = None;
+    let mut deferred_artwork = None;
     let frame = egui::Frame::new()
         .fill(field)
         .stroke(Stroke::new(1.0, t.border))
@@ -154,14 +155,17 @@ fn banner(
                             column.response.rect.height().max(image_width / 1.65),
                         ),
                         Layout::bottom_up(Align::Min),
-                        |ui| illustration(ui, image_width, l, t, f32::from(padding)),
+                        |ui| {
+                            deferred_artwork =
+                                illustration(ui, image_width, l, t, f32::from(padding), false);
+                        },
                     );
                 });
             } else {
                 text(ui, action);
                 ui.add_space(12.0);
                 ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                    illustration(ui, image_width, l, t, f32::from(padding))
+                    let _ = illustration(ui, image_width, l, t, f32::from(padding), true);
                 });
             }
         });
@@ -170,6 +174,21 @@ fn banner(
             index,
             engraved_field(frame.response.rect.shrink(12.0), t, dark),
         );
+    }
+    // The wide banner paints the illustration only after its final contour is known, so the
+    // artwork meets the frame's right and bottom edge exactly instead of inheriting the
+    // surrounding layout's rounding.
+    if let Some((texture, size)) = deferred_artwork {
+        let rect = Rect::from_min_size(frame.response.rect.max - Vec2::splat(1.0) - size, size);
+        if ui.is_rect_visible(rect) {
+            egui::Image::new((texture.id(), size))
+                .corner_radius(egui::CornerRadius {
+                    se: 10,
+                    ..egui::CornerRadius::ZERO
+                })
+                .paint_at(ui, rect);
+        }
+        record(ui, "home.artwork", rect);
     }
     record(ui, "home.banner", frame.response.rect);
 }
@@ -252,7 +271,14 @@ fn engraved_field(rect: Rect, t: Tokens, dark: bool) -> egui::Shape {
     egui::Shape::Vec(lines)
 }
 
-fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens, padding: f32) {
+fn illustration(
+    ui: &mut egui::Ui,
+    width: f32,
+    l: Language,
+    t: Tokens,
+    padding: f32,
+    paint: bool,
+) -> Option<(egui::TextureHandle, Vec2)> {
     match artwork::texture(ui.ctx(), t.accent) {
         Ok(texture) => {
             let size = Vec2::new(width, width * texture.size_vec2().y / texture.size_vec2().x);
@@ -260,19 +286,23 @@ fn illustration(ui: &mut egui::Ui, width: f32, l: Language, t: Tokens, padding: 
             // Text retains its inset, while the trimmed artwork meets the
             // banner's right and bottom contour, as in the selected concept.
             let rect = rect.translate(Vec2::splat(padding));
-            if ui.is_rect_visible(rect) {
-                egui::Image::new((texture.id(), size))
-                    .corner_radius(egui::CornerRadius {
-                        se: 10,
-                        ..egui::CornerRadius::ZERO
-                    })
-                    .paint_at(ui, rect);
+            if paint {
+                if ui.is_rect_visible(rect) {
+                    egui::Image::new((texture.id(), size))
+                        .corner_radius(egui::CornerRadius {
+                            se: 10,
+                            ..egui::CornerRadius::ZERO
+                        })
+                        .paint_at(ui, rect);
+                }
+                record(ui, "home.artwork", rect);
             }
-            record(ui, "home.artwork", rect);
+            Some((texture, size))
         }
         Err(error) => {
             ui.colored_label(t.warning, l.text("Home illustration could not be loaded."));
             ui.label(error);
+            None
         }
     }
 }

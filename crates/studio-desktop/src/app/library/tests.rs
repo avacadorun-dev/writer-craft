@@ -39,22 +39,11 @@ fn frame(
         )
     });
     let tokens = theme::apply(ctx, &settings);
-    let modifiers = events
-        .iter()
-        .find_map(|event| {
-            if let Event::Key { modifiers, .. } = event {
-                Some(*modifiers)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_default();
     let mut action = None;
     let mut output = ctx.run_ui(
         RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
             time: Some(f64::from(ticks) * 0.1),
-            modifiers,
             events,
             ..Default::default()
         },
@@ -87,14 +76,16 @@ fn tab_through_long_library_reveals_rows_and_shift_tab_returns_to_banner() {
     for _ in 0..3 {
         idle(vec![]);
     }
-    let row_id = ctx
-        .data(|data| data.get_temp::<egui::Id>(egui::Id::new(("home-test-row", "project-29"))))
-        .expect("last row emitted");
-    let primary_id = ctx
-        .data(|data| {
-            data.get_temp::<egui::Id>(egui::Id::new(("home-test-control", "home.primary")))
-        })
-        .expect("primary emitted");
+    let Some(row_id) =
+        ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new(("home-test-row", "project-29"))))
+    else {
+        panic!("last row emitted");
+    };
+    let Some(primary_id) = ctx.data(|data| {
+        data.get_temp::<egui::Id>(egui::Id::new(("home-test-control", "home.primary")))
+    }) else {
+        panic!("primary emitted");
+    };
     let tab = |shift| {
         let modifiers = if shift {
             Modifiers::SHIFT
@@ -242,9 +233,11 @@ fn focused_project_row_opens_by_keyboard() {
             vec![],
         );
     }
-    let id = ctx
-        .data(|data| data.get_temp::<egui::Id>(egui::Id::new(("home-test-row", "project-0"))))
-        .expect("row emitted");
+    let Some(id) =
+        ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new(("home-test-row", "project-0"))))
+    else {
+        panic!("row emitted");
+    };
     ctx.memory_mut(|memory| memory.request_focus(id));
     let action = frame(
         &ctx,
@@ -445,6 +438,7 @@ fn long_library_scroll_moves_the_banner_and_reaches_the_last_project() {
             Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
                 delta: Vec2::new(0.0, -10000.0),
+                phase: egui::TouchPhase::Move,
                 modifiers: Modifiers::NONE,
             },
         ],
