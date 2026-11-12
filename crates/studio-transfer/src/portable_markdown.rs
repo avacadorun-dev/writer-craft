@@ -168,6 +168,7 @@ pub fn export_markdown_folder_with_progress(
                 nodes: &plan.node_paths,
                 anchors: &anchors,
                 heading_offset: 0,
+                block_anchors: true,
                 assets: &plan.asset_paths,
                 conversions: BTreeSet::new(),
             };

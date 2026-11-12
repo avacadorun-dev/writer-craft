@@ -12,6 +12,8 @@ pub(super) struct MarkdownRenderer<'a> {
     pub(super) nodes: &'a HashMap<String, String>,
     pub(super) anchors: &'a HashMap<String, String>,
     pub(super) heading_offset: u8,
+    /// Folder exports keep per-block HTML anchors; a reader manuscript omits that invisible markup.
+    pub(super) block_anchors: bool,
     pub(super) assets: &'a HashMap<String, String>,
     pub(super) conversions: BTreeSet<String>,
 }
@@ -150,7 +152,8 @@ impl MarkdownRenderer<'_> {
                 ))
             }
         }?;
-        if !matches!(kind, "text" | "hardBreak" | "inlineMath")
+        if self.block_anchors
+            && !matches!(kind, "text" | "hardBreak" | "inlineMath")
             && let Some(id) = attrs["blockId"].as_str().filter(|id| !id.is_empty())
         {
             self.conversions.insert("block-identity-html-anchor".into());
@@ -604,6 +607,7 @@ mod tests {
             nodes: &nodes,
             anchors: &anchors,
             heading_offset: 0,
+            block_anchors: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -638,6 +642,7 @@ mod tests {
             nodes: &nodes,
             anchors: &anchors,
             heading_offset: 0,
+            block_anchors: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -672,6 +677,7 @@ mod tests {
             nodes: &nodes,
             anchors: &anchors,
             heading_offset: 0,
+            block_anchors: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };

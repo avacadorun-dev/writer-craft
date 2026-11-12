@@ -4,7 +4,7 @@
 
 ### Requirement: ME-01 Ordered single-manuscript scope
 
-The desktop SHALL compile one selected manuscript into one Markdown document in the current project-tree order, offering the current document, a chosen subtree or explicit documents, and SHALL preview actual inclusion and order before writing.
+The desktop SHALL compile one selected manuscript into one Markdown document in the current project-tree order, offering the whole project, the current document, a chosen subtree or explicit documents, and SHALL preview actual inclusion, chapter order and reader conversions before writing.
 
 #### Scenario: Reordered chapters
 
@@ -15,6 +15,11 @@ The desktop SHALL compile one selected manuscript into one Markdown document in 
 
 - WHEN the user compiles the current document or a subtree
 - THEN sibling documents, character research, notes, annotations, labels, histories and deleted content outside the selection never appear in the output.
+
+#### Scenario: Deleted writing
+
+- WHEN the project contains a trashed document or section
+- THEN the whole-project and subtree scopes skip that branch, deleted text never appears in the manuscript, and the preview never lists it.
 
 ### Requirement: ME-02 Documented Markdown reading profile
 

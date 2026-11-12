@@ -364,6 +364,12 @@ impl StudioApp {
                 app.font_size = 28.0;
                 app.editor_preferences.values.font_size = 28.0;
             }
+            if std::env::args().any(|argument| argument == "--capture-transfer") {
+                app.capture_manuscript_export(false)?;
+            }
+            if std::env::args().any(|argument| argument == "--capture-transfer-preview") {
+                app.capture_manuscript_export(true)?;
+            }
             #[cfg(feature = "editor-preview")]
             if std::env::args().any(|argument| argument == "--capture-notes") {
                 app.inspector = Inspector::Notes;

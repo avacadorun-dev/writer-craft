@@ -216,6 +216,7 @@ impl ReadingPlan {
                         nodes: &self.node_paths,
                         anchors: &anchors,
                         heading_offset: 0,
+                        block_anchors: true,
                         assets: &self.asset_paths,
                         conversions: BTreeSet::new(),
                     };

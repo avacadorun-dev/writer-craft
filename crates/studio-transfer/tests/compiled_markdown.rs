@@ -78,7 +78,11 @@ fn fixture() -> (Value, Assets) {
     )
 }
 fn imported(database: &Path) -> (ProjectImportWorker, String) {
-    let (manifest, mut assets) = fixture();
+    let (manifest, _) = fixture();
+    imported_manifest(database, manifest)
+}
+fn imported_manifest(database: &Path, manifest: Value) -> (ProjectImportWorker, String) {
+    let (_, mut assets) = fixture();
     let validated = ValidatedProjectImport::parse(&serde_json::to_vec(&manifest).unwrap()).unwrap();
     let mut worker = ProjectImportWorker::open(database).unwrap();
     let result = worker
@@ -153,6 +157,11 @@ fn subtree_compilation_should_emit_one_document_in_tree_order_with_nested_headin
     assert!(part < one && one < two, "chapters must follow tree order");
     assert!(!body.contains("UNSELECTED_SECRET"));
     assert_eq!(body.matches("<a id=\"document-").count(), 2);
+    assert_eq!(
+        body.matches("<a id=").count(),
+        2,
+        "a reader manuscript keeps only chapter anchors, not per-block HTML markers"
+    );
     assert!(
         body.lines().any(|line| line == "#### Authored section"),
         "body headings shift under the chapter"
@@ -396,4 +405,42 @@ fn plan_preview_should_match_the_compiled_inclusion_and_order() {
     assert!(plan.conversions.iter().any(|conversion| {
         conversion.feature == "reader-export-is-not-a-canonical-project-backup"
     }));
+    assert!(
+        plan.conversions.iter().any(|conversion| {
+            conversion.resource_id == "one"
+                && conversion.feature == "document-link-outside-export-scope"
+        }),
+        "the preview must disclose outside-selection links before writing"
+    );
+}
+
+#[test]
+fn whole_project_selection_should_include_active_nodes_and_skip_deleted_writing() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("workspace.sqlite");
+    let (mut manifest, _) = fixture();
+    manifest["nodes"][2]["trashedAt"] = json!("2026-11-01T00:00:00Z");
+    let (worker, project) = imported_manifest(&database, manifest);
+    let snapshot = snapshot(&worker, &project);
+    let destination = directory.path().join("whole");
+    let receipt = compile_manuscript(
+        &snapshot,
+        &database,
+        &destination,
+        &ManuscriptSelection::Project,
+        &ProjectTransferCancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        receipt
+            .entries
+            .iter()
+            .map(|entry| entry.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["part", "one", "secret"],
+        "deleted writing never appears in a reader manuscript"
+    );
+    let body = text(&destination.join(&receipt.document));
+    assert!(!body.contains("Second chapter writing"));
+    assert!(body.contains("Secret"));
 }

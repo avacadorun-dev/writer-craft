@@ -26,6 +26,8 @@ use super::{Result, TransferError};
 /// Which manuscript documents one reader export includes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManuscriptSelection {
+    /// Every active node of the project, in tree order.
+    Project,
     /// One content-bearing document identity.
     Document(String),
     /// A folder or document identity and every descendant, in tree order.
@@ -97,6 +99,9 @@ struct PreparedCompilation {
 
 /// Resolve actual inclusion and order without reading or writing any destination.
 ///
+/// Included revisions are rendered in memory so the preview names every reader conversion that
+/// compilation would disclose. Nothing is written and no cancellation is reported.
+///
 /// # Errors
 /// Returns an error for an unknown or empty selection, a non-content document, a broken tree or
 /// a document that references a missing captured artifact.
@@ -104,7 +109,12 @@ pub fn plan_manuscript(
     snapshot: &ProjectExportSnapshot,
     selection: &ManuscriptSelection,
 ) -> Result<ManuscriptPlan> {
-    let prepared = prepare(snapshot, selection)?;
+    let mut prepared = prepare(snapshot, selection)?;
+    render_manuscript(
+        snapshot,
+        &mut prepared,
+        &ProjectTransferCancellation::default(),
+    )?;
     Ok(ManuscriptPlan {
         entries: prepared.entries,
         conversions: prepared.conversions.into_iter().collect(),
@@ -277,6 +287,7 @@ fn render_manuscript(
             nodes: &HashMap::new(),
             anchors: &prepared.anchors,
             heading_offset: *level,
+            block_anchors: false,
             assets: &prepared.asset_paths,
             conversions: BTreeSet::new(),
         };
@@ -334,7 +345,15 @@ fn prepare(
     selection: &ManuscriptSelection,
 ) -> Result<PreparedCompilation> {
     let manifest = snapshot.manifest();
-    let nodes = array(manifest, "nodes");
+    let all = array(manifest, "nodes");
+    // Deleted nodes keep their captured title and metadata; a reader manuscript must never
+    // resurrect them merely because they still exist in the canonical snapshot.
+    let nodes = all
+        .iter()
+        .filter(|node| !is_trashed(node))
+        .cloned()
+        .collect::<Vec<_>>();
+    let nodes = nodes.as_slice();
     let ordered = ordered_tree(nodes, false)?;
     let by_id: HashMap<&str, usize> = ordered
         .iter()
@@ -446,6 +465,10 @@ fn selected_identities(
     selection: &ManuscriptSelection,
 ) -> Result<HashSet<String>> {
     match selection {
+        ManuscriptSelection::Project => Ok(nodes
+            .iter()
+            .filter_map(|node| node["id"].as_str().map(str::to_owned))
+            .collect()),
         ManuscriptSelection::Document(id) => {
             let index = by_id.get(id.as_str()).ok_or_else(|| {
                 TransferError::Invalid("The selected document is not in this project".into())
@@ -613,6 +636,12 @@ fn manuscript_stem(title: &str) -> String {
         stem.insert(0, '_');
     }
     stem
+}
+
+fn is_trashed(node: &Value) -> bool {
+    node["trashedAt"]
+        .as_str()
+        .is_some_and(|timestamp| !timestamp.is_empty())
 }
 
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
