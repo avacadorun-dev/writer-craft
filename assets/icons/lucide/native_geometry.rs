@@ -4,6 +4,7 @@
 #[expect(clippy::approx_constant, reason = "Generated SVG coordinates and contour normals are retained as data, not substituted mathematical constants")]
 fn geometry(kind: Icon) -> &'static IconGeometry {
     match kind {
+        Icon::Tag => &TAG_GEOMETRY,
         Icon::Home => &IconGeometry { name: "house", vertices: &[
             [14.0, 13.066885, -1.0, 0.06688],
             [16.0, 13.0, 1.0, -0.033404],

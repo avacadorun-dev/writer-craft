@@ -1,11 +1,12 @@
-//! Official Lucide utility geometry rendered as native antialiased vectors.
-//! Source SVGs, pinned revision and license notices live in assets/icons/lucide.
+//! Native antialiased vectors on a shared 24-unit icon grid.
+//! Lucide sources/notices live in assets/icons/lucide; WriterCraft's filled tag
+//! has its own vector source in assets/icons/writercraft.
 use egui::{
     Color32, Painter, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, WidgetInfo,
     WidgetType, vec2,
 };
 
-/// Utility icons from the pinned official Lucide subset.
+/// The pinned Lucide utility subset and WriterCraft's filled passage tag.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Icon {
     Home,
@@ -60,6 +61,7 @@ pub enum Icon {
     Minus,
     Focus,
     Copy,
+    Tag,
 }
 
 /// Allocate a decorative icon in the current layout.
@@ -170,20 +172,37 @@ struct IconGeometry {
 }
 
 include!("../../../assets/icons/lucide/native_geometry.rs");
+include!("../../../assets/icons/writercraft/tag_geometry.rs");
 
 pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
+    paint_oriented(painter, rect, kind, color, false);
+}
+
+/// The same official Lucide chevron, rotated clockwise for an expanded tree row.
+pub(crate) fn paint_disclosure(painter: &Painter, rect: Rect, expanded: bool, color: Color32) {
+    paint_oriented(painter, rect, Icon::ChevronRight, color, expanded);
+}
+
+fn paint_oriented(painter: &Painter, rect: Rect, kind: Icon, color: Color32, quarter_turn: bool) {
     let source = geometry(kind);
     let scale = rect.width().min(rect.height()) / 24.0;
     if !scale.is_finite() || scale <= 0.0 {
         return;
     }
-    let origin = rect.center() - Vec2::splat(12.0 * scale);
+    let orient = |value: Vec2| {
+        if quarter_turn {
+            vec2(-value.y, value.x)
+        } else {
+            value
+        }
+    };
+    let position = |x, y| rect.center() + orient(vec2(x - 12.0, y - 12.0)) * scale;
     let half_fringe = 0.5 / painter.ctx().pixels_per_point();
     let mut mesh = egui::Mesh::default();
     mesh.vertices.reserve(source.vertices.len() * 2);
     for [x, y, nx, ny] in source.vertices {
         mesh.vertices.push(egui::epaint::Vertex {
-            pos: origin + vec2(*x, *y) * scale - vec2(*nx, *ny) * half_fringe,
+            pos: position(*x, *y) - orient(vec2(*nx, *ny)) * half_fringe,
             uv: egui::epaint::WHITE_UV,
             color,
         });
@@ -191,7 +210,7 @@ pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
     let outer_offset = mesh.vertices.len() as u32;
     for [x, y, nx, ny] in source.vertices {
         mesh.vertices.push(egui::epaint::Vertex {
-            pos: origin + vec2(*x, *y) * scale + vec2(*nx, *ny) * half_fringe,
+            pos: position(*x, *y) + orient(vec2(*nx, *ny)) * half_fringe,
             uv: egui::epaint::WHITE_UV,
             color: Color32::TRANSPARENT,
         });
@@ -215,7 +234,7 @@ pub(crate) fn paint(painter: &Painter, rect: Rect, kind: Icon, color: Color32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const ALL: [Icon; 52] = [
+    const ALL: [Icon; 53] = [
         Icon::Home,
         Icon::Book,
         Icon::Folder,
@@ -268,15 +287,21 @@ mod tests {
         Icon::Minus,
         Icon::Focus,
         Icon::Copy,
+        Icon::Tag,
     ];
     #[test]
-    fn every_utility_has_a_pinned_official_lucide_source() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn every_utility_has_its_declared_vector_source() -> Result<(), Box<dyn std::error::Error>> {
         let directory =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/lucide");
         let notice = std::fs::read_to_string(directory.join("NOTICE.md"))?;
         for kind in ALL {
             let source = geometry(kind);
+            if kind == Icon::Tag {
+                let svg = std::fs::read_to_string(directory.join("../writercraft/tag.svg"))?;
+                assert!(svg.contains("viewBox=\"0 0 24 24\""));
+                assert!(svg.contains("fill-rule=\"evenodd\""));
+                continue;
+            }
             let svg = std::fs::read_to_string(directory.join(format!("{}.svg", source.name)))?;
             assert!(svg.contains("viewBox=\"0 0 24 24\""));
             assert!(notice.contains(source.name));

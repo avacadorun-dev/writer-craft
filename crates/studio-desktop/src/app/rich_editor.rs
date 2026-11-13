@@ -2,6 +2,12 @@
 //! This integration does not assert completion of the full-editor-parity release gate.
 #[path = "authoring.rs"]
 mod authoring;
+#[cfg(test)]
+#[path = "rich_editor/block_edit_tests.rs"]
+mod block_edit_tests;
+#[cfg(test)]
+#[path = "rich_editor/selection_reveal_tests.rs"]
+mod selection_reveal_tests;
 use super::*;
 use craft_editor_egui::{DocPoint, EditorSession, MarkState, Selection, canvas::CanvasStyle};
 use craft_editor_model as tables;
@@ -24,6 +30,9 @@ pub(super) struct RichState {
     dialog: Option<authoring::BlockDialog>,
     find_requested: bool,
     capture_scroll_offset: f32,
+    measured_scroll_offset: Option<f32>,
+    navigation_scroll_offset: Option<f32>,
+    measured_viewport: Option<egui::Vec2>,
     capture_text_visible: bool,
     statistics: std::cell::Cell<Option<(Revision, studio_core::DocumentStatistics)>>,
 }
@@ -55,6 +64,7 @@ impl RichState {
             .as_ref()
             .is_some_and(|draft| &draft.content != content);
         let mut session = EditorSession::new(tree, Revision(0));
+        session.set_table_column_limit(Some(63))?;
         session.options.id = egui::Id::new(("rich-manuscript", &document.id));
         Ok(Some(Self {
             session,
@@ -69,6 +79,9 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            measured_scroll_offset: None,
+            navigation_scroll_offset: None,
+            measured_viewport: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         }))
@@ -98,6 +111,52 @@ impl RichState {
         self.session.request_scroll_to_caret();
         Ok(())
     }
+    fn manuscript_scroll_area(&mut self, ui: &egui::Ui) -> egui::ScrollArea {
+        let salt = ("rich-scroll", self.session.options.id);
+        let area = egui::ScrollArea::vertical().id_salt(salt);
+        match self.navigation_scroll_offset.take() {
+            Some(offset) => {
+                // A saved bookmark overrides pending engine reveals AND host-owned animation.
+                // Reset only this manuscript's presentation state, leaving its session intact.
+                self.session.cancel_scroll_request();
+                let mut state = egui::scroll_area::State::default();
+                state.offset.y = offset;
+                // Match ScrollArea's stored IdSalt layer, rather than a raw tuple's different ID.
+                state.store(ui.ctx(), ui.make_persistent_id(egui::IdSalt::new(salt)));
+                area.vertical_scroll_offset(offset)
+            }
+            None => area,
+        }
+    }
+    fn reveal_after_viewport_change(&mut self, extent: egui::Vec2, restoring_scroll: bool) {
+        let changed = self
+            .measured_viewport
+            .replace(extent)
+            .is_some_and(|prior| prior != extent);
+        if changed
+            && !restoring_scroll
+            && !self.session.is_composing()
+            && self
+                .session
+                .selection()
+                .is_some_and(|selection| selection.anchor != selection.head)
+        {
+            self.session.request_scroll_to_selection();
+        }
+    }
+    /// Last measured native manuscript scroll offset, never an invented initial bookmark.
+    pub(super) fn measured_navigation_scroll_offset(&self) -> Option<f32> {
+        self.measured_scroll_offset
+    }
+    /// Queue presentation restoration after a guarded same-document return.
+    pub(super) fn restore_navigation_scroll(&mut self, offset: f32) -> AppResult<()> {
+        if !offset.is_finite() || offset < 0.0 {
+            return Err("invalid_navigation_scroll_offset".into());
+        }
+        self.session.cancel_scroll_request();
+        self.navigation_scroll_offset = Some(offset);
+        Ok(())
+    }
     pub(super) fn capture_readiness(
         &self,
         id: Option<&str>,
@@ -114,6 +173,8 @@ impl RichState {
             )
         {
             state.target_visible = self.capture_text_visible;
+            state.target_is_text = true;
+            state.visible_text_targets = usize::from(self.capture_text_visible);
         }
         state
     }
@@ -147,6 +208,7 @@ impl RichState {
             .ok_or("missing_saved_rich_document")?;
         let mut session =
             EditorSession::new(RichDocument::from_json(content.clone())?, Revision(0));
+        session.set_table_column_limit(Some(63))?;
         session.options.id = egui::Id::new(("rich-manuscript", &document.id));
         Ok(Self {
             session,
@@ -161,18 +223,32 @@ impl RichState {
             dialog: None,
             find_requested: false,
             capture_scroll_offset: 0.0,
+            measured_scroll_offset: None,
+            navigation_scroll_offset: None,
+            measured_viewport: None,
             capture_text_visible: false,
             statistics: std::cell::Cell::new(None),
         })
     }
 
-    #[cfg(test)]
     pub(super) fn pending_proof_count(&self) -> usize {
         self.pending_proofs.len()
     }
 
     pub(super) fn dialog_open(&self) -> bool {
         self.dialog.is_some()
+    }
+
+    /// Whether the manuscript currently has a whole-object target the source dialog can edit.
+    pub(super) fn editable_block_selected(&self) -> bool {
+        !self.read_only
+            && self.dialog.is_none()
+            && authoring::editable_target(&self.session).is_some()
+    }
+
+    /// Open the existing source dialog for the current editable object selection.
+    pub(super) fn open_selected_block(&mut self) -> AppResult<bool> {
+        authoring::open_selected_block(self)
     }
 
     fn write_draft(&mut self, workspace: &Workspace, document: &Document) -> AppResult<()> {
@@ -225,6 +301,20 @@ impl StudioApp {
             .cloned()
             .ok_or("missing_recovery_project")?;
         let documents = self.workspace.list_documents(&project.id)?;
+        let nodes = self.workspace.initialize_project_tree(&project.id)?;
+        if !super::project_tree::document_is_active(&nodes, &document.id) {
+            return Err(super::project_tree::TrashedDocument.into());
+        }
+        let outline = super::project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
+        let mut tree_ui = super::project_tree::TreeUi::with_structure(
+            nodes,
+            self.workspace.project_structure(&project.id)?,
+        );
+        tree_ui.selected = tree_ui
+            .nodes
+            .iter()
+            .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            .map(|node| node.logical_id.clone());
         let proposals = self.workspace.proposals(&document.id)?;
         let mut rich = RichState::open_saved_read_only(&document)?;
         rich.session.set_clipboard_provider(self.clipboard.clone());
@@ -240,6 +330,8 @@ impl StudioApp {
         self.projects = projects;
         self.project = Some(project);
         self.documents = documents;
+        self.project_outline = outline;
+        self.tree_ui = tree_ui;
         self.proposals = proposals;
         self.dirty = None;
         self.autosave_paused = false;
@@ -271,6 +363,41 @@ impl StudioApp {
     }
 
     pub(super) fn ensure_editor_showcase(&mut self, project: &Project) -> AppResult<Document> {
+        if let Ok(selector) = std::env::var("WRITERCRAFT_CAPTURE_DOCUMENT")
+            && !selector.is_empty()
+        {
+            if selector != "wide-tables" {
+                return Err("unknown_capture_document".into());
+            }
+            let runner = PathBuf::from(
+                std::env::var_os("RUNNER_TEMP")
+                    .ok_or("wide_table_capture_requires_hosted_runner")?,
+            )
+            .canonicalize()?;
+            let parent = self
+                .database
+                .parent()
+                .ok_or("wide_table_capture_database_parent_missing")?
+                .canonicalize()?;
+            if self.capture.is_none()
+                || !std::env::args().any(|argument| argument == "--demo")
+                || !std::env::args().any(|argument| argument == "--capture")
+                || std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true")
+                || !parent.starts_with(&runner)
+                || !parent.file_name().is_some_and(|name| {
+                    name.to_string_lossy()
+                        .starts_with("writercraft-startup-workspace-")
+                })
+            {
+                return Err("wide_table_capture_requires_fresh_hosted_synthetic_workspace".into());
+            }
+            if std::env::var("WRITERCRAFT_CAPTURE_SCENARIO")
+                .is_ok_and(|scenario| !scenario.is_empty())
+            {
+                return Err("capture_document_and_connected_scenario_are_exclusive".into());
+            }
+            return self.ensure_wide_table_capture(project);
+        }
         if let Some(document) = self
             .workspace
             .list_documents(&project.id)?
@@ -320,6 +447,29 @@ impl StudioApp {
         Ok(self
             .workspace
             .create_rich_document(&project.id, "00. All editor blocks", content)?)
+    }
+
+    fn ensure_wide_table_capture(&mut self, project: &Project) -> AppResult<Document> {
+        if let Some(document) = self
+            .workspace
+            .list_documents(&project.id)?
+            .into_iter()
+            .find(|document| {
+                document
+                    .rich_json
+                    .as_ref()
+                    .and_then(|value| value.get("writerCraftWideTableCapture"))
+                    .and_then(serde_json::Value::as_u64)
+                    == Some(1)
+            })
+        {
+            return Ok(document);
+        }
+        Ok(self.workspace.create_rich_document(
+            &project.id,
+            "Synthetic wide and nested tables",
+            serde_json::from_str(include_str!("editor_wide_tables.json"))?,
+        )?)
     }
 
     pub(super) fn save_rich_editor(&mut self) -> AppResult<()> {
@@ -397,7 +547,7 @@ impl StudioApp {
         } else {
             bounds.width()
         };
-        let gutter = if floating { 28.0 } else { 0.0 };
+        let gutter = if floating { 16.0 } else { 0.0 };
         let surface_rect = egui::Rect::from_min_size(
             egui::pos2(bounds.center().x - width * 0.5, bounds.top() + gutter),
             egui::vec2(width, (bounds.height() - gutter * 2.0).max(0.0)),
@@ -474,17 +624,27 @@ impl StudioApp {
                     if !media_ready {
                         ui.ctx().request_repaint_after(Duration::from_millis(50));
                     }
-                    let scroll = egui::ScrollArea::vertical()
-                        .id_salt(("rich-scroll", rich.session.options.id))
+                    let restoring_scroll = rich.navigation_scroll_offset.is_some();
+                    // Track the host pane, not the internal width that changes when a scrollbar
+                    // reappears after bookmark restoration. That must not submit a later reveal.
+                    rich.reveal_after_viewport_change(
+                        ui.available_rect_before_wrap().size(),
+                        restoring_scroll,
+                    );
+                    rich.manuscript_scroll_area(ui)
                         .auto_shrink([false, false])
-                        .show(ui, |ui| {
+                        .show_viewport(ui, |ui, viewport| {
+                            // egui advances its animation state after creating this viewport.
+                            // A return bookmark must describe what was actually painted.
+                            rich.capture_scroll_offset = viewport.min.y;
+                            rich.measured_scroll_offset = Some(viewport.min.y);
                             let available = ui.available_width();
                             let width = (available - 56.0).clamp(160.0, measure.max(160.0));
                             ui.horizontal(|ui| {
                                 ui.add_space(((available - width) * 0.5).max(0.0));
                                 ui.vertical(|ui| {
                                     ui.set_width(width);
-                                    ui.add_space(28.0);
+                                    ui.add_space(18.0);
                                     if rich.read_only {
                                         ui.label(
                                             RichText::new(l.text(if rich.recovery_read_only {
@@ -502,6 +662,9 @@ impl StudioApp {
                                         caret: t.accent,
                                         table_border: t.border,
                                         table_header: t.panel,
+                                        table_scroll_label: l
+                                            .text("Scroll table horizontally")
+                                            .into(),
                                         font_size: self.font_size,
                                         font_family: Some(preferences.font_family.family().into()),
                                         line_height: preferences.line_height,
@@ -599,9 +762,14 @@ impl StudioApp {
                                 });
                             });
                         });
-                    rich.capture_scroll_offset = scroll.state.offset.y;
                 });
         });
+        if let Some(response) = &manuscript_response
+            && let Err(error) = authoring::existing_block_gesture(ui.ctx(), &mut rich, response)
+            && operation_error.is_none()
+        {
+            operation_error = Some(error);
+        }
         if let Some(project) = &self.project {
             authoring::show_dialog(ui.ctx(), &mut rich, &self.workspace, &project.id, l, t);
         }
@@ -633,13 +801,6 @@ impl StudioApp {
     }
 }
 
-fn current_block(session: &EditorSession) -> Option<&Node> {
-    session
-        .document()
-        .block(&session.selection()?.head.block_id)
-        .ok()
-}
-
 fn find_path(node: &Node, id: &str, path: NodePath) -> Option<NodePath> {
     if node.block_id() == Some(id) {
         return Some(path);
@@ -651,58 +812,12 @@ fn find_path(node: &Node, id: &str, path: NodePath) -> Option<NodePath> {
 }
 
 fn set_block_kind(session: &mut EditorSession, level: u8) -> AppResult<()> {
-    fn text_blocks(node: &Node, ids: &mut Vec<String>) {
-        if matches!(
-            node.node_type.as_str(),
-            "paragraph" | "heading" | "codeBlock"
-        ) {
-            if let Some(id) = node.block_id() {
-                ids.push(id.to_owned());
-            }
-        } else {
-            for child in node.children() {
-                text_blocks(child, ids);
-            }
-        }
-    }
-    let selection = session.selection().ok_or("No selection")?;
-    let mut ids = vec![];
-    text_blocks(session.document().root(), &mut ids);
-    let a = ids
-        .iter()
-        .position(|id| id == &selection.anchor.block_id)
-        .ok_or("Missing anchor")?;
-    let b = ids
-        .iter()
-        .position(|id| id == &selection.head.block_id)
-        .ok_or("Missing caret")?;
-    let mut staged =
-        craft_editor_model::Editor::new(session.document().clone(), session.revision());
-    let mut commands = vec![];
-    for id in &ids[a.min(b)..=a.max(b)] {
-        let path = find_path(staged.document().root(), id, NodePath::root())
-            .ok_or("Missing text block")?;
-        let target = staged.document().node_ref(&path)?;
-        let mut replacement = target.expected.as_ref().clone();
-        replacement.node_type = if level == 0 { "paragraph" } else { "heading" }.into();
-        if level == 0 {
-            if let Some(attrs) = &mut replacement.attrs {
-                attrs.remove("level");
-            }
-        } else {
-            replacement
-                .attrs
-                .get_or_insert_default()
-                .insert("level".into(), json!(level));
-        }
-        let command = staged.document().replace_node(&target, replacement)?;
-        staged.apply(craft_editor_model::Transaction {
-            base_revision: staged.revision(),
-            commands: vec![command.clone()],
-        })?;
-        commands.push(command);
-    }
-    session.apply_commands(commands)?;
+    let kind = if level == 0 {
+        craft_editor_egui::TextBlockKind::Paragraph
+    } else {
+        craft_editor_egui::TextBlockKind::Heading { level }
+    };
+    session.set_text_block_kind(kind)?;
     Ok(())
 }
 
@@ -754,6 +869,7 @@ enum TableAction {
     AddColumn,
     DeleteRow,
     DeleteColumn,
+    DeleteTable,
     Merge,
     Split,
 }
@@ -766,6 +882,9 @@ struct TableContext {
 impl TableContext {
     fn at(session: &EditorSession, block_id: &str) -> Option<(NodePath, usize, usize)> {
         let path = find_path(session.document().root(), block_id, NodePath::root())?;
+        Self::at_path(session, &path)
+    }
+    fn at_path(session: &EditorSession, path: &NodePath) -> Option<(NodePath, usize, usize)> {
         for length in (0..path.0.len()).rev() {
             let ancestor = NodePath(path.0[..length].to_vec());
             if session.document().node(&ancestor).ok()?.node_type == "table" {
@@ -775,8 +894,25 @@ impl TableContext {
         None
     }
     fn current(session: &EditorSession) -> Option<Self> {
-        let selection = session.selection()?;
-        let (path, row, cell_index) = Self::at(session, &selection.head.block_id)?;
+        if let Some(selection) = session.cell_selection() {
+            let target = session.document().node_ref(&selection.table_path).ok()?;
+            let grid = TableGrid::new(&target.expected).ok()?;
+            let cell = grid
+                .cell_at(selection.head.row, selection.head.column)?
+                .clone();
+            let selected = Some(selection.rectangle(session.document()).ok()?);
+            return Some(Self {
+                target,
+                grid,
+                cell,
+                selected,
+            });
+        }
+        let (path, row, cell_index) = if let Some(reference) = session.node_selection() {
+            Self::at_path(session, &reference.path)?
+        } else {
+            Self::at(session, &session.selection()?.head.block_id)?
+        };
         let target = session.document().node_ref(&path).ok()?;
         let grid = TableGrid::new(&target.expected).ok()?;
         let cell = grid
@@ -784,22 +920,9 @@ impl TableContext {
             .iter()
             .find(|cell| cell.row == row && cell.cell_index == cell_index)?
             .clone();
-        let selected =
-            Self::at(session, &selection.anchor.block_id).and_then(|(anchor, row, index)| {
-                if anchor != path {
-                    return None;
-                }
-                let first = grid
-                    .cells
-                    .iter()
-                    .find(|cell| cell.row == row && cell.cell_index == index)?;
-                Some(CellSelection {
-                    top: first.row.min(cell.row),
-                    left: first.column.min(cell.column),
-                    bottom: first.bottom().max(cell.bottom()),
-                    right: first.right().max(cell.right()),
-                })
-            });
+        // Only the engine's typed CellSelection is a rectangular table range.
+        // A text range keeps the source command's head-cell policy.
+        let selected = None;
         Some(Self {
             target,
             grid,
@@ -807,45 +930,92 @@ impl TableContext {
             selected,
         })
     }
+    fn rectangle(&self) -> CellSelection {
+        self.selected.unwrap_or(CellSelection {
+            top: self.cell.row,
+            left: self.cell.column,
+            bottom: self.cell.bottom(),
+            right: self.cell.right(),
+        })
+    }
+    fn header_at(&self, row: usize, column: usize) -> bool {
+        self.grid.cell_at(row, column).is_some_and(|cell| {
+            self.target.expected.children()[cell.row].children()[cell.cell_index].node_type
+                == "tableHeader"
+        })
+    }
     fn allows(&self, action: TableAction) -> bool {
+        let selected = self.rectangle();
         match action {
             TableAction::AddColumn => self.grid.columns < 63,
-            TableAction::DeleteRow => self.grid.rows > 1,
-            TableAction::DeleteColumn => self.grid.columns > 1,
+            TableAction::DeleteRow => selected.bottom - selected.top < self.grid.rows,
+            TableAction::DeleteColumn => selected.right - selected.left < self.grid.columns,
             TableAction::Merge => self.selected.is_some_and(|selection| {
                 (selection.bottom - selection.top) * (selection.right - selection.left)
                     > self.cell.rowspan * self.cell.colspan
             }),
-            TableAction::Split => self.cell.rowspan > 1 || self.cell.colspan > 1,
-            TableAction::AddRow => true,
+            TableAction::Split => {
+                (self.cell.rowspan > 1 || self.cell.colspan > 1)
+                    && selected.top == self.cell.row
+                    && selected.left == self.cell.column
+                    && selected.bottom == self.cell.bottom()
+                    && selected.right == self.cell.right()
+            }
+            TableAction::AddRow | TableAction::DeleteTable => true,
         }
     }
     fn apply(&self, session: &mut EditorSession, action: TableAction) -> AppResult<()> {
+        if session.document().node(&self.target.path)? != self.target.expected.as_ref() {
+            return Err(craft_editor_model::Error::NodeReferenceConflict.into());
+        }
         if !self.allows(action) {
             return Err("Table operation is unavailable".into());
         }
+        if matches!(action, TableAction::DeleteTable) {
+            session.delete_current_table()?;
+            session.request_scroll_to_caret();
+            return Ok(());
+        }
+        let selected = self.rectangle();
         let document = session.document();
+        let mut commands = Vec::new();
         let command = match action {
             TableAction::AddRow => {
-                let index = self.cell.bottom();
-                let covered: usize = self
-                    .grid
-                    .cells
-                    .iter()
-                    .filter(|cell| cell.row < index && index < cell.bottom())
-                    .map(|cell| cell.colspan)
-                    .sum();
-                let row = Node::block(
-                    "tableRow",
-                    Map::new(),
-                    (covered..self.grid.columns)
-                        .map(|_| fresh_cell(false))
-                        .collect(),
-                );
-                tables::insert_table_row(document, &self.target, index, row)?
+                let index = selected.bottom;
+                let reference =
+                    if (0..self.grid.columns).all(|column| self.header_at(index - 1, column)) {
+                        (index < self.grid.rows).then_some(index)
+                    } else {
+                        Some(index - 1)
+                    };
+                let cells = (0..self.grid.columns)
+                    .filter(|column| {
+                        !self.grid.cells.iter().any(|cell| {
+                            cell.row < index
+                                && index < cell.bottom()
+                                && cell.column <= *column
+                                && *column < cell.right()
+                        })
+                    })
+                    .map(|column| {
+                        fresh_cell(reference.is_some_and(|row| self.header_at(row, column)))
+                    })
+                    .collect();
+                let row = Node::block("tableRow", Map::new(), cells);
+                Some(tables::insert_table_row(
+                    document,
+                    &self.target,
+                    index,
+                    row,
+                )?)
             }
             TableAction::AddColumn => {
-                let index = self.cell.right();
+                let index = selected.right;
+                let reference = if (0..self.grid.rows).all(|row| self.header_at(row, index - 1)) {
+                    (index < self.grid.columns).then_some(index)
+                } else {
+                    Some(index - 1)
+                };
                 let cells = (0..self.grid.rows)
                     .filter(|row| {
                         !self.grid.cells.iter().any(|cell| {
@@ -855,73 +1025,142 @@ impl TableContext {
                                 && index < cell.right()
                         })
                     })
-                    .map(|row| fresh_cell(row == 0))
+                    .map(|row| {
+                        fresh_cell(reference.is_some_and(|column| self.header_at(row, column)))
+                    })
                     .collect();
-                tables::insert_table_column(document, &self.target, index, cells)?
+                Some(tables::insert_table_column(
+                    document,
+                    &self.target,
+                    index,
+                    cells,
+                )?)
             }
-            TableAction::DeleteRow => {
-                tables::delete_table_row(document, &self.target, self.cell.row)?
+            TableAction::DeleteRow | TableAction::DeleteColumn => {
+                let mut candidate =
+                    craft_editor_model::Editor::new(document.clone(), session.revision());
+                let range = if matches!(action, TableAction::DeleteRow) {
+                    selected.top..selected.bottom
+                } else {
+                    selected.left..selected.right
+                };
+                for index in range.rev() {
+                    let target = candidate.document().node_ref(&self.target.path)?;
+                    let command = if matches!(action, TableAction::DeleteRow) {
+                        tables::delete_table_row(candidate.document(), &target, index)?
+                    } else {
+                        tables::delete_table_column(candidate.document(), &target, index)?
+                    };
+                    candidate.apply(craft_editor_model::Transaction {
+                        base_revision: candidate.revision(),
+                        commands: vec![command.clone()],
+                    })?;
+                    commands.push(command);
+                }
+                None
             }
-            TableAction::DeleteColumn => {
-                tables::delete_table_column(document, &self.target, self.cell.column)?
-            }
-            TableAction::Merge => tables::merge_table_cells(
+            TableAction::Merge => Some(tables::merge_table_cells(
                 document,
                 &self.target,
                 self.selected.ok_or("No cell selection")?,
-            )?,
-            TableAction::Split => {
-                let count = self.cell.rowspan * self.cell.colspan - 1;
-                tables::split_table_cell(
-                    document,
-                    &self.target,
-                    self.cell.row,
-                    self.cell.cell_index,
-                    (0..count).map(|_| fresh_cell(false)).collect(),
-                )?
-            }
+            )?),
+            TableAction::Split => Some(tables::split_table_cell(
+                document,
+                &self.target,
+                self.cell.row,
+                self.cell.cell_index,
+                (0..self.cell.rowspan * self.cell.colspan - 1)
+                    .map(|_| fresh_cell(false))
+                    .collect(),
+            )?),
+            TableAction::DeleteTable => return Err("Table operation is unavailable".into()),
         };
+        commands.extend(command);
         if matches!(action, TableAction::DeleteRow | TableAction::DeleteColumn) {
             let mut candidate =
-                craft_editor_model::Editor::new(session.document().clone(), session.revision());
+                craft_editor_model::Editor::new(document.clone(), session.revision());
             candidate.apply(craft_editor_model::Transaction {
                 base_revision: candidate.revision(),
-                commands: vec![command.clone()],
+                commands: commands.clone(),
             })?;
             let previous = session.selection().map(|selection| &selection.head);
-            let point = if let Some(point) =
+            if let Some(point) =
                 previous.filter(|point| candidate.document().block(&point.block_id).is_ok())
             {
-                point.clone()
+                session.apply_commands_with_selection(
+                    commands,
+                    Selection {
+                        anchor: point.clone(),
+                        head: point.clone(),
+                    },
+                )?;
             } else {
                 let table = candidate.document().node(&self.target.path)?;
                 let grid = TableGrid::new(table)?;
-                let row = self.cell.row.min(grid.rows.saturating_sub(1));
-                let column = self.cell.column.min(grid.columns.saturating_sub(1));
+                let row = selected.top.min(grid.rows - 1);
+                let column = selected.left.min(grid.columns - 1);
                 let cell = grid.cell_at(row, column).ok_or("Missing adjacent cell")?;
-                let node = table
-                    .children()
-                    .get(cell.row)
-                    .and_then(|row| row.children().get(cell.cell_index))
-                    .ok_or("Missing adjacent cell content")?;
-                DocPoint {
-                    block_id: first_text_identity(node)
-                        .ok_or("Missing adjacent text identity")?
-                        .to_owned(),
-                    offset: ScalarOffset(0),
+                let path = self.target.path.child(cell.row).child(cell.cell_index);
+                let node = candidate.document().node(&path)?;
+                if let Some(id) = first_text_identity(node) {
+                    let point = DocPoint {
+                        block_id: id.into(),
+                        offset: ScalarOffset(0),
+                    };
+                    session.apply_commands_with_selection(
+                        commands,
+                        Selection {
+                            anchor: point.clone(),
+                            head: point,
+                        },
+                    )?;
+                } else {
+                    fn atom(node: &Node, path: NodePath) -> Option<NodePath> {
+                        if matches!(
+                            node.node_type.as_str(),
+                            "imageBlock"
+                                | "mermaidBlock"
+                                | "mathBlock"
+                                | "horizontalRule"
+                                | "sceneBreak"
+                        ) {
+                            Some(path)
+                        } else {
+                            node.children()
+                                .iter()
+                                .enumerate()
+                                .find_map(|(index, node)| atom(node, path.child(index)))
+                        }
+                    }
+                    let path = atom(node, path).ok_or("Missing adjacent content")?;
+                    let target = candidate.document().node_ref(&path)?;
+                    session.apply_commands_with_node_selection(commands, target)?;
                 }
-            };
-            session.apply_commands_with_selection(
-                vec![command],
-                Selection {
-                    anchor: point.clone(),
-                    head: point,
-                },
-            )?;
-            session.request_scroll_to_caret();
+            }
+        } else if let Some(mut cells) = session.cell_selection().cloned() {
+            if matches!(action, TableAction::Split) {
+                cells.anchor = craft_editor_egui::CellPoint {
+                    row: self.cell.row,
+                    column: self.cell.column,
+                };
+                cells.head = craft_editor_egui::CellPoint {
+                    row: self.cell.bottom() - 1,
+                    column: self.cell.right() - 1,
+                };
+            } else if matches!(action, TableAction::Merge) {
+                cells.anchor = craft_editor_egui::CellPoint {
+                    row: selected.top,
+                    column: selected.left,
+                };
+                cells.head = cells.anchor;
+            }
+            // The guarded table builder replaces its table node. The host knows the exact
+            // post-selection; do not let an intentionally conservative path map discard it.
+            session.apply_commands_with_cell_selection(commands, cells)?;
         } else {
-            session.apply_commands(vec![command])?;
+            session.apply_commands(commands)?;
         }
+        session.request_scroll_to_caret();
         Ok(())
     }
 }
@@ -1214,7 +1453,7 @@ mod tests {
         let renderer =
             craft_editor_render::Renderer::new(craft_editor_render::RenderOptions::default())?;
         let catalog = renderer.prepare_document(&document, &assets, 1)?;
-        assert_eq!(catalog.len(), 6);
+        assert_eq!(catalog.len(), 8);
         assert!(
             catalog.failures().is_empty(),
             "Valid showcase source must produce real media: {:?}",
@@ -1227,6 +1466,43 @@ mod tests {
             &catalog,
         )?;
         assert!(geometry.extent().is_some());
+        assert_eq!(document.to_json()?, source);
+        Ok(())
+    }
+
+    #[test]
+    fn wide_table_fixture_retains_final_cell_and_nested_component_widths() -> AppResult<()> {
+        let source: serde_json::Value =
+            serde_json::from_str(include_str!("editor_wide_tables.json"))?;
+        let document = RichDocument::from_json(source.clone())?;
+        let wide = find_path(document.root(), "wide-table", NodePath::root())
+            .ok_or("missing wide capture table")?;
+        let inner = find_path(document.root(), "nested-inner", NodePath::root())
+            .ok_or("missing nested capture table")?;
+        let grid = TableGrid::new(document.node(&wide)?)?;
+        assert_eq!(grid.columns, 63);
+        assert_eq!(grid.column_widths.get(&62), Some(&80));
+        assert_eq!(TableGrid::new(document.node(&inner)?)?.columns, 3);
+        let mut geometry = craft_editor_egui::layout::FlowGeometry::new(&document, 550.0)?;
+        for id in ["wide-cell-62", "nested-cell-2"] {
+            let target = DocPoint {
+                block_id: id.into(),
+                offset: ScalarOffset(0),
+            };
+            geometry.reveal_caret(&target)?;
+            assert!(geometry.caret(&target)?.is_some());
+        }
+        let viewports = geometry.table_viewports();
+        assert!(
+            viewports
+                .iter()
+                .any(|viewport| { viewport.table_path == wide && viewport.offset > 0.0 })
+        );
+        assert!(
+            viewports
+                .iter()
+                .any(|viewport| { viewport.table_path == inner && viewport.offset > 0.0 })
+        );
         assert_eq!(document.to_json()?, source);
         Ok(())
     }
@@ -1543,6 +1819,338 @@ mod tests {
         assert_eq!(app.workspace.document(&target.id)?, target);
         assert_eq!(app.workspace.rich_draft(&target.id)?.as_ref(), Some(&draft));
         assert_eq!(app.workspace.annotation(&note.id)?, note);
+        Ok(())
+    }
+
+    #[test]
+    fn rectangular_native_selection_formats_once_and_restores_direction() -> AppResult<()> {
+        let (_directory, mut app) = fixture()?;
+        let session = &mut app.rich.as_mut().ok_or("Missing session")?.session;
+        assert_eq!(session.table_column_limit(), Some(63));
+        let path = TableContext::at(session, "right").ok_or("Missing table")?.0;
+        let cells = craft_editor_egui::TableSelection {
+            table_path: path,
+            anchor: craft_editor_egui::CellPoint { row: 2, column: 2 },
+            head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+        };
+        session.set_cell_selection(cells.clone())?;
+        let before = session.document().to_json()?;
+        set_block_kind(session, 2)?;
+        assert_eq!(session.cell_selection(), Some(&cells));
+        let context = TableContext::current(session).ok_or("Missing selected table")?;
+        assert_eq!(context.selected, Some(cells.rectangle(session.document())?));
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert_eq!(session.cell_selection(), Some(&cells));
+        session.redo()?;
+        assert_eq!(session.cell_selection(), Some(&cells));
+        Ok(())
+    }
+
+    fn rectangular_table_session() -> AppResult<EditorSession> {
+        let rows = (0..3)
+            .map(|row| {
+                Node::block(
+                    "tableRow",
+                    Map::new(),
+                    (0..3)
+                        .map(|column| {
+                            let mut cell =
+                                tables::empty_table_cell(&format!("r{row}c{column}"), row == 0);
+                            cell.content = Some(vec![Node::paragraph(
+                                format!("r{row}c{column}"),
+                                format!("Row {row}, column {column} 😀"),
+                            )]);
+                            cell.attrs
+                                .get_or_insert_default()
+                                .insert("preserve".into(), json!({"row":row,"column":column}));
+                            cell
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let document = RichDocument::from_root(Node::block(
+            "doc",
+            Map::from_iter([("schemaVersion".into(), json!(4))]),
+            vec![
+                Node::paragraph("before", "Before"),
+                Node::block(
+                    "table",
+                    Map::from_iter([("blockId".into(), json!("table"))]),
+                    rows,
+                ),
+                Node::paragraph("after", "After"),
+            ],
+        ))?;
+        let mut session = EditorSession::new(document, Revision(0));
+        session.set_table_column_limit(Some(63))?;
+        Ok(session)
+    }
+
+    #[test]
+    fn table_row_and_column_actions_cover_the_entire_reverse_rectangle_atomically() -> AppResult<()>
+    {
+        for rows in [true, false] {
+            let mut session = rectangular_table_session()?;
+            let cells = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: craft_editor_egui::CellPoint { row: 2, column: 1 },
+                head: craft_editor_egui::CellPoint { row: 1, column: 0 },
+            };
+            session.set_cell_selection(cells.clone())?;
+            let before = session.document().to_json()?;
+            let context = TableContext::current(&session).ok_or("Missing range")?;
+            context.apply(
+                &mut session,
+                if rows {
+                    TableAction::DeleteRow
+                } else {
+                    TableAction::DeleteColumn
+                },
+            )?;
+            let after = session.document().to_json()?;
+            let grid = TableGrid::new(session.document().node(&NodePath(vec![1]))?)?;
+            assert_eq!(
+                (grid.rows, grid.columns),
+                if rows { (1, 3) } else { (3, 1) }
+            );
+            if rows {
+                assert_eq!(
+                    after["content"][1]["content"][0],
+                    before["content"][1]["content"][0]
+                );
+            } else {
+                for row in 0..3 {
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][0],
+                        before["content"][1]["content"][row]["content"][2]
+                    );
+                }
+            }
+            assert_eq!(session.revision(), Revision(1));
+            assert!(session.selection().is_some());
+            session.undo()?;
+            assert_eq!(session.document().to_json()?, before);
+            assert_eq!(session.cell_selection(), Some(&cells));
+            assert!(!session.can_undo());
+            session.redo()?;
+            assert_eq!(session.document().to_json()?, after);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn table_insertion_uses_the_rectangle_end_and_source_header_reference() -> AppResult<()> {
+        for rows in [true, false] {
+            let mut session = rectangular_table_session()?;
+            let cells = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: craft_editor_egui::CellPoint { row: 1, column: 1 },
+                head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+            };
+            session.set_cell_selection(cells.clone())?;
+            let before = session.document().to_json()?;
+            TableContext::current(&session)
+                .ok_or("Missing range")?
+                .apply(
+                    &mut session,
+                    if rows {
+                        TableAction::AddRow
+                    } else {
+                        TableAction::AddColumn
+                    },
+                )?;
+            let after = session.document().to_json()?;
+            if rows {
+                assert_eq!(
+                    after["content"][1]["content"][3],
+                    before["content"][1]["content"][2]
+                );
+                assert!(
+                    session
+                        .document()
+                        .node(&NodePath(vec![1, 2]))?
+                        .children()
+                        .iter()
+                        .all(|cell| cell.node_type == "tableCell")
+                );
+            } else {
+                for row in 0..3 {
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][3],
+                        before["content"][1]["content"][row]["content"][2]
+                    );
+                    assert_eq!(
+                        after["content"][1]["content"][row]["content"][2]["type"],
+                        if row == 0 { "tableHeader" } else { "tableCell" }
+                    );
+                }
+            }
+            assert_eq!(session.cell_selection(), Some(&cells));
+            session.undo()?;
+            assert_eq!(session.document().to_json()?, before);
+            assert_eq!(session.cell_selection(), Some(&cells));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn deleting_the_whole_table_is_explicit_and_restores_original_selection_on_undo()
+    -> AppResult<()> {
+        let mut session = rectangular_table_session()?;
+        let cells = craft_editor_egui::TableSelection {
+            table_path: NodePath(vec![1]),
+            anchor: craft_editor_egui::CellPoint { row: 2, column: 2 },
+            head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+        };
+        session.set_cell_selection(cells.clone())?;
+        let before = session.document().to_json()?;
+        let context = TableContext::current(&session).ok_or("Missing table")?;
+        for action in [TableAction::DeleteRow, TableAction::DeleteColumn] {
+            assert!(!context.allows(action));
+            assert!(context.apply(&mut session, action).is_err());
+            assert_eq!(session.document().to_json()?, before);
+            assert!(!session.can_undo());
+        }
+        context.apply(&mut session, TableAction::DeleteTable)?;
+        assert_eq!(session.document().plain_text(), "Before\n\nAfter");
+        assert_eq!(
+            session
+                .selection()
+                .map(|selection| selection.head.block_id.as_str()),
+            Some("after")
+        );
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert_eq!(session.cell_selection(), Some(&cells));
+        assert!(!session.can_undo());
+        Ok(())
+    }
+
+    #[test]
+    fn table_commands_match_the_actual_frozen_source_corpus() -> AppResult<()> {
+        fn shape(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Array(values) => values.iter_mut().for_each(shape),
+                serde_json::Value::Object(object) => {
+                    if let Some(attrs) = object
+                        .get_mut("attrs")
+                        .and_then(serde_json::Value::as_object_mut)
+                    {
+                        attrs.remove("blockId");
+                        for key in ["colwidth", "align"] {
+                            if attrs.get(key).is_some_and(serde_json::Value::is_null) {
+                                attrs.remove(key);
+                            }
+                        }
+                        for key in ["colspan", "rowspan"] {
+                            if attrs.get(key) == Some(&json!(1)) {
+                                attrs.remove(key);
+                            }
+                        }
+                        if attrs.get("sourceRefs") == Some(&json!([])) {
+                            attrs.remove("sourceRefs");
+                        }
+                    }
+                    if object
+                        .get("attrs")
+                        .and_then(serde_json::Value::as_object)
+                        .is_some_and(serde_json::Map::is_empty)
+                    {
+                        object.remove("attrs");
+                    }
+                    if object
+                        .get("content")
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(Vec::is_empty)
+                    {
+                        object.remove("content");
+                    }
+                    object.values_mut().for_each(shape);
+                }
+                _ => {}
+            }
+        }
+        let corpus: serde_json::Value =
+            serde_json::from_str(include_str!("table_commands_source.json"))?;
+        let original = RichDocument::from_json(corpus["input"].clone())?;
+        for case in corpus["cases"].as_array().ok_or("Missing table cases")? {
+            let mut session = EditorSession::new(original.clone(), Revision(0));
+            session.set_table_column_limit(Some(63))?;
+            let endpoint = |key: &str| -> AppResult<craft_editor_egui::CellPoint> {
+                let id = case[key].as_str().ok_or("Missing source endpoint")?;
+                let path = find_path(original.root(), id, NodePath::root())
+                    .ok_or("Missing source cell")?;
+                let row = *path.0.get(1).ok_or("Missing row")?;
+                let column = *path.0.get(2).ok_or("Missing column")?;
+                Ok(craft_editor_egui::CellPoint { row, column })
+            };
+            let selected = craft_editor_egui::TableSelection {
+                table_path: NodePath(vec![1]),
+                anchor: endpoint("anchor")?,
+                head: endpoint("head")?,
+            };
+            session.set_cell_selection(selected.clone())?;
+            let action = match case["action"].as_str().ok_or("Missing source action")? {
+                "addRow" => TableAction::AddRow,
+                "addColumn" => TableAction::AddColumn,
+                "deleteRow" => TableAction::DeleteRow,
+                "deleteColumn" => TableAction::DeleteColumn,
+                "deleteTable" => TableAction::DeleteTable,
+                _ => return Err("Unknown source action".into()),
+            };
+            let context = TableContext::current(&session).ok_or("Missing source table")?;
+            if case["handled"] == false {
+                assert!(!context.allows(action));
+                assert!(context.apply(&mut session, action).is_err());
+                assert_eq!(session.document(), &original);
+                assert!(!session.can_undo());
+                continue;
+            }
+            context.apply(&mut session, action)?;
+            let exact = session.document().to_json()?;
+            let mut actual = exact.clone();
+            let mut expected = case["output"].clone();
+            shape(&mut actual);
+            shape(&mut expected);
+            assert_eq!(actual, expected, "{} / {}", case["name"], case["action"]);
+            assert_eq!(session.revision(), Revision(1));
+            session.undo()?;
+            assert_eq!(session.document(), &original);
+            assert_eq!(session.cell_selection(), Some(&selected));
+            assert!(!session.can_undo());
+            session.redo()?;
+            assert_eq!(session.document().to_json()?, exact);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_text_range_is_not_promoted_to_a_rectangular_table_command_target() -> AppResult<()> {
+        let mut session = rectangular_table_session()?;
+        session.set_selection(Selection {
+            anchor: DocPoint {
+                block_id: "r2c2".into(),
+                offset: ScalarOffset(3),
+            },
+            head: DocPoint {
+                block_id: "r0c0".into(),
+                offset: ScalarOffset(2),
+            },
+        })?;
+        let context = TableContext::current(&session).ok_or("Missing current cell")?;
+        assert!(context.selected.is_none());
+        assert!(!context.allows(TableAction::Merge));
+        let before = session.document().to_json()?;
+        context.apply(&mut session, TableAction::AddRow)?;
+        assert_eq!(
+            session.document().to_json()?["content"][1]["content"][2],
+            before["content"][1]["content"][1]
+        );
+        session.undo()?;
+        assert_eq!(session.document().to_json()?, before);
+        assert!(session.cell_selection().is_none());
         Ok(())
     }
 }

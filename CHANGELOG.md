@@ -2,6 +2,12 @@
 
 All notable product and compatibility changes are recorded here. Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html); release status and known limits are explicit.
 
+## [0.1.0-alpha.3] — Unreleased
+
+- Continue complete source-backed editor, project compatibility and portability work after the owner-tested alpha.2 checkpoint.
+- Qualify native table commands, reviewed structured edits and canonical project restore with exact-source checks and independent native acceptance before publication.
+
+
 ## [Unreleased]
 
 - Alpha.3 continues complete table/clipboard parity, note/dictionary and assistant integrations, full project/Canvas/media migration, portable restore and the remaining native acceptance matrix.

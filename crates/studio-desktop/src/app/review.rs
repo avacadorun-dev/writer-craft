@@ -63,12 +63,22 @@ impl StudioApp {
                         }
                     });
                 });
-                ui.add_space(14.0);
+                ui.add_space(8.0);
                 ui.separator();
-                ui.add_space(16.0);
+                ui.add_space(8.0);
                 #[cfg(feature = "editor-preview")]
                 if self.inspector == Inspector::Notes {
                     self.notes_panel(ui, t);
+                    return;
+                }
+                #[cfg(feature = "editor-preview")]
+                if self.inspector == Inspector::Review
+                    && self
+                        .document
+                        .as_ref()
+                        .is_some_and(|document| document.rich_json.is_some())
+                {
+                    self.rich_review_panel(ui, t);
                     return;
                 }
                 egui::ScrollArea::vertical()
@@ -91,9 +101,10 @@ impl StudioApp {
             .as_ref()
             .is_some_and(|document| document.rich_json.is_some())
         {
-            ui.label(RichText::new(l.text("Review")).size(17.0).strong());
-            ui.add_space(10.0);
-            ui.label(RichText::new(l.text("Rich-text proposals are not available in this preview. Your document remains unchanged.")).color(t.muted));
+            #[cfg(feature = "editor-preview")]
+            self.rich_review_panel(ui, t);
+            #[cfg(not(feature = "editor-preview"))]
+            ui.label(l.text("Original format · read only"));
             return;
         }
         ui.horizontal(|ui| {

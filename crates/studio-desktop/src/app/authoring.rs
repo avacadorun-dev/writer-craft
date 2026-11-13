@@ -1,6 +1,6 @@
 //! Source-backed authoring controls; every action commits through the shared rich session.
 use super::*;
-use craft_editor_egui::{ContentSlice, ListKind};
+use craft_editor_egui::{ContentSlice, ListKind, SelectionBookmark};
 use craft_editor_model::MarkMode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,8 +57,7 @@ impl Kind {
 pub(super) struct BlockDialog {
     kind: Kind,
     revision: Revision,
-    selection: Option<Selection>,
-    selected_node: Option<NodeRef>,
+    bookmark: SelectionBookmark,
     target: Option<NodeRef>,
     source: String,
     caption: String,
@@ -69,7 +68,8 @@ pub(super) struct BlockDialog {
     error: Option<String>,
 }
 impl BlockDialog {
-    fn new(session: &EditorSession, kind: Kind, target: Option<NodeRef>) -> Self {
+    fn new(session: &EditorSession, kind: Kind, target: Option<NodeRef>) -> AppResult<Self> {
+        let bookmark = session.capture_selection_bookmark()?;
         let node = target.as_ref().map(|target| target.expected.as_ref());
         let source = match kind {
             Kind::Mermaid => node
@@ -92,11 +92,10 @@ impl BlockDialog {
                 .into(),
             Kind::Link => link_at_selection(session).unwrap_or_default(),
         };
-        Self {
+        Ok(Self {
             kind,
             revision: session.revision(),
-            selection: session.selection().cloned(),
-            selected_node: session.node_selection().cloned(),
+            bookmark,
             caption: node
                 .and_then(|node| {
                     node.string_attr(if matches!(kind, Kind::Math | Kind::InlineMath) {
@@ -120,17 +119,13 @@ impl BlockDialog {
             image_path: None,
             focus: true,
             error: None,
-        }
+        })
     }
     fn restore_target(&self, session: &mut EditorSession) -> AppResult<()> {
         if session.revision() != self.revision {
             return Err("stale_block_dialog".into());
         }
-        if let Some(selection) = &self.selection {
-            session.set_selection(selection.clone())?;
-        } else if let Some(node) = &self.selected_node {
-            session.select_node(node.clone())?;
-        }
+        session.restore_selection_bookmark(&self.bookmark)?;
         Ok(())
     }
     fn can_apply(&self) -> bool {
@@ -260,6 +255,8 @@ impl BlockDialog {
                 head: map(&selection.head),
             };
             session.apply_commands_with_selection(commands, selection)?;
+        } else if let Some(cells) = session.cell_selection().cloned() {
+            session.apply_commands_with_cell_selection(commands, cells)?;
         } else {
             let mut candidate = Editor::new(session.document().clone(), session.revision());
             candidate.apply(Transaction {
@@ -395,7 +392,7 @@ fn commit_node(
     Ok(())
 }
 
-fn editable_target(session: &EditorSession) -> Option<NodeRef> {
+pub(super) fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     if let Some(node) = session.node_selection() {
         return Kind::from_node(&node.expected).map(|_| node.clone());
     }
@@ -403,6 +400,64 @@ fn editable_target(session: &EditorSession) -> Option<NodeRef> {
     let path = find_path(session.document().root(), id, NodePath::root())?;
     let node = session.document().node_ref(&path).ok()?;
     (node.expected.node_type == "codeBlock").then_some(node)
+}
+
+/// Whole-object targets only. A double-click on prose or on a code block's text keeps its
+/// ordinary word/caret selection instead of opening a source dialog.
+fn node_edit_target(session: &EditorSession) -> Option<NodeRef> {
+    let node = session.node_selection()?;
+    Kind::from_node(&node.expected).map(|_| node.clone())
+}
+
+/// Decide which direct gesture may open the existing source dialog. Callers have already
+/// established that the manuscript is writable, no modal owns the session and no IME
+/// composition is active; a single click always returns `None`.
+fn direct_edit_target(
+    session: &EditorSession,
+    double_clicked: bool,
+    keyboard: bool,
+) -> Option<NodeRef> {
+    if double_clicked {
+        node_edit_target(session)
+    } else if keyboard {
+        editable_target(session)
+    } else {
+        None
+    }
+}
+
+/// Open the existing revision-guarded source dialog for the current editable selection.
+pub(super) fn open_selected_block(rich: &mut RichState) -> AppResult<bool> {
+    if rich.read_only || rich.dialog.is_some() || rich.session.is_composing() {
+        return Ok(false);
+    }
+    let Some(target) = editable_target(&rich.session) else {
+        return Ok(false);
+    };
+    let kind = Kind::from_node(&target.expected).ok_or("unsupported_block_edit")?;
+    open_dialog(rich, kind, Some(target))?;
+    Ok(true)
+}
+
+/// Route a double-click on a rendered object or the direct F2 shortcut on the focused
+/// manuscript to the same editor as the More formatting → Edit block command.
+pub(super) fn existing_block_gesture(
+    ctx: &egui::Context,
+    rich: &mut RichState,
+    response: &egui::Response,
+) -> AppResult<bool> {
+    if rich.read_only || rich.dialog.is_some() || rich.session.is_composing() {
+        return Ok(false);
+    }
+    let double_clicked = response.double_clicked();
+    let keyboard = response.has_focus()
+        && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+    let Some(target) = direct_edit_target(&rich.session, double_clicked, keyboard) else {
+        return Ok(false);
+    };
+    let kind = Kind::from_node(&target.expected).ok_or("unsupported_block_edit")?;
+    open_dialog(rich, kind, Some(target))?;
+    Ok(true)
 }
 fn apply_link(session: &mut EditorSession, mark: Mark, mode: MarkMode) -> AppResult<()> {
     session.format_mark_range(mark, mode)?;
@@ -437,8 +492,9 @@ fn link_at_selection(session: &EditorSession) -> Option<String> {
     None
 }
 
-fn open_dialog(rich: &mut RichState, kind: Kind, target: Option<NodeRef>) {
-    rich.dialog = Some(BlockDialog::new(&rich.session, kind, target));
+fn open_dialog(rich: &mut RichState, kind: Kind, target: Option<NodeRef>) -> AppResult<()> {
+    rich.dialog = Some(BlockDialog::new(&rich.session, kind, target)?);
+    Ok(())
 }
 
 fn capture(result: AppResult<()>, error: &mut Option<Box<dyn std::error::Error + Send + Sync>>) {
@@ -507,7 +563,12 @@ fn mark_button(
     };
     let response = ui
         .add_enabled(
-            session.selection().is_some(),
+            session.selection().is_some()
+                || session.cell_selection().is_some()
+                || (matches!(action, Format::Mark(_))
+                    && session
+                        .node_selection()
+                        .is_some_and(|node| node.expected.node_type == "inlineMath")),
             egui::Button::new("")
                 .selected(state == MarkState::On)
                 .frame_when_inactive(state != MarkState::Off)
@@ -563,6 +624,22 @@ fn format_icon(action: Format) -> Icon {
     }
 }
 
+fn block_style_label(session: &EditorSession, language: Language) -> AppResult<&'static str> {
+    use craft_editor_egui::TextBlockState;
+    Ok(language.text(match session.text_block_state()? {
+        TextBlockState::Heading { level: 1 } => "Heading 1",
+        TextBlockState::Heading { level: 2 } => "Heading 2",
+        TextBlockState::Heading { level: 3 } => "Heading 3",
+        TextBlockState::Heading { level: 4 } => "Heading 4",
+        TextBlockState::Heading { level: 5 } => "Heading 5",
+        TextBlockState::Heading { level: 6 } => "Heading 6",
+        TextBlockState::Heading { .. } => "Heading",
+        TextBlockState::Code => "Code block",
+        TextBlockState::Mixed => "Mixed formatting",
+        TextBlockState::Paragraph | TextBlockState::Unavailable => "Paragraph",
+    }))
+}
+
 pub(super) fn toolbar(
     ui: &mut egui::Ui,
     rich: &mut RichState,
@@ -571,6 +648,7 @@ pub(super) fn toolbar(
     mode: crate::editor_preferences::ToolbarMode,
 ) -> AppResult<()> {
     let mut error = None;
+    let label = block_style_label(&rich.session, l)?;
     // Expanded remains bounded by physical space; all hidden actions stay in More.
     let expanded =
         mode != crate::editor_preferences::ToolbarMode::Compact && ui.available_width() >= 790.0;
@@ -583,45 +661,45 @@ pub(super) fn toolbar(
         !rich.read_only && !rich.session.is_composing() && rich.dialog.is_none(),
         |ui| {
             ui.horizontal_centered(|ui| {
-                let label = current_block(&rich.session).map_or(l.text("Paragraph"), |node| {
-                    if node.node_type == "heading" {
-                        match node
-                            .attrs
-                            .as_ref()
-                            .and_then(|a| a.get("level"))
-                            .and_then(serde_json::Value::as_u64)
-                        {
-                            Some(1) => l.text("Heading 1"),
-                            Some(2) => l.text("Heading 2"),
-                            Some(3) => l.text("Heading 3"),
-                            Some(4) => l.text("Heading 4"),
-                            Some(5) => l.text("Heading 5"),
-                            Some(6) => l.text("Heading 6"),
-                            _ => l.text("Heading"),
-                        }
-                    } else {
-                        l.text("Paragraph")
-                    }
-                });
-                ui.add_enabled_ui(rich.session.selection().is_some(), |ui| {
-                    ui.menu_button(label, |ui| {
-                        for (msgid, level) in [
-                            ("Paragraph", 0),
-                            ("Heading 1", 1),
-                            ("Heading 2", 2),
-                            ("Heading 3", 3),
-                            ("Heading 4", 4),
-                            ("Heading 5", 5),
-                            ("Heading 6", 6),
-                        ] {
-                            if ui.button(l.text(msgid)).clicked() {
-                                capture(set_block_kind(&mut rich.session, level), &mut error);
-                                rich.session.request_canvas_focus(ui.ctx());
-                                ui.close();
-                            }
-                        }
-                    });
-                });
+                ui.add_enabled_ui(
+                    rich.session.selection().is_some() || rich.session.cell_selection().is_some(),
+                    |ui| {
+                        let width = if minimal { 128.0 } else { 164.0 };
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(width, 32.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_max_width(width);
+                                let (button, _) = egui::menu::MenuButton::from_button(
+                                    egui::Button::new(label)
+                                        .truncate()
+                                        .min_size(egui::vec2(width, 32.0)),
+                                )
+                                .ui(ui, |ui| {
+                                    for (msgid, level) in [
+                                        ("Paragraph", 0),
+                                        ("Heading 1", 1),
+                                        ("Heading 2", 2),
+                                        ("Heading 3", 3),
+                                        ("Heading 4", 4),
+                                        ("Heading 5", 5),
+                                        ("Heading 6", 6),
+                                    ] {
+                                        if ui.button(l.text(msgid)).clicked() {
+                                            capture(
+                                                set_block_kind(&mut rich.session, level),
+                                                &mut error,
+                                            );
+                                            rich.session.request_canvas_focus(ui.ctx());
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                                button.on_hover_text(label);
+                            },
+                        );
+                    },
+                );
                 ui.separator();
                 for (mark, icon, msgid) in [
                     ("bold", Icon::Bold, "Bold"),
@@ -664,7 +742,7 @@ pub(super) fn toolbar(
                         if icons::labeled_button(ui, kind.icon(), l.text(kind.title()), false)
                             .clicked()
                         {
-                            open_dialog(rich, kind, None);
+                            capture(open_dialog(rich, kind, None), &mut error);
                             ui.close();
                         }
                     }
@@ -721,28 +799,11 @@ pub(super) fn toolbar(
                         rich.session.request_canvas_focus(ui.ctx());
                     }
                 }
-                if !minimal
-                    && icons::icon_button(ui, Icon::Search, l.text("Find in document")).clicked()
-                {
-                    rich.find_requested = true;
-                }
                 let more = icons::icon_button(ui, Icon::More, l.text("More formatting"));
                 egui::Popup::menu(&more).show(|ui| {
                     egui::ScrollArea::vertical()
                         .max_height((ui.ctx().content_rect().height() - 120.0).max(160.0))
                         .show(ui, |ui| {
-                            if icons::labeled_button(
-                                ui,
-                                Icon::Search,
-                                l.text("Find in document"),
-                                false,
-                            )
-                            .clicked()
-                            {
-                                rich.find_requested = true;
-                                ui.close();
-                            }
-                            ui.separator();
                             if minimal {
                                 for (mark, label) in [
                                     ("bold", "Bold"),
@@ -775,14 +836,18 @@ pub(super) fn toolbar(
                                 (Format::Outdent, "Decrease indent"),
                             ] {
                                 if ui
-                                    .add_enabled_ui(rich.session.selection().is_some(), |ui| {
-                                        icons::labeled_button(
-                                            ui,
-                                            format_icon(action),
-                                            l.text(msgid),
-                                            active(&rich.session, action) == MarkState::On,
-                                        )
-                                    })
+                                    .add_enabled_ui(
+                                        rich.session.selection().is_some()
+                                            || rich.session.cell_selection().is_some(),
+                                        |ui| {
+                                            icons::labeled_button(
+                                                ui,
+                                                format_icon(action),
+                                                l.text(msgid),
+                                                active(&rich.session, action) == MarkState::On,
+                                            )
+                                        },
+                                    )
                                     .inner
                                     .clicked()
                                 {
@@ -794,34 +859,41 @@ pub(super) fn toolbar(
                             ui.separator();
                             for kind in [Kind::InlineMath, Kind::Link] {
                                 if ui
-                                    .add_enabled_ui(rich.session.selection().is_some(), |ui| {
-                                        icons::labeled_button(
-                                            ui,
-                                            kind.icon(),
-                                            l.text(kind.title()),
-                                            false,
-                                        )
-                                    })
+                                    .add_enabled_ui(
+                                        rich.session.selection().is_some()
+                                            || rich.session.cell_selection().is_some(),
+                                        |ui| {
+                                            icons::labeled_button(
+                                                ui,
+                                                kind.icon(),
+                                                l.text(kind.title()),
+                                                false,
+                                            )
+                                        },
+                                    )
                                     .inner
                                     .clicked()
                                 {
-                                    open_dialog(rich, kind, None);
+                                    capture(open_dialog(rich, kind, None), &mut error);
                                     ui.close();
                                 }
                             }
-                            if let Some(target) = editable_target(&rich.session)
-                                && icons::labeled_button(
+                            if let Some(target) = editable_target(&rich.session) {
+                                let edit = icons::labeled_button(
                                     ui,
                                     Icon::TextCursor,
                                     l.text("Edit block"),
                                     false,
                                 )
-                                .clicked()
-                            {
-                                if let Some(kind) = Kind::from_node(&target.expected) {
-                                    open_dialog(rich, kind, Some(target));
+                                .on_hover_text(l.text(
+                                    "Double-click a rendered block, or press F2, to edit its source.",
+                                ));
+                                if edit.clicked() {
+                                    if let Some(kind) = Kind::from_node(&target.expected) {
+                                        capture(open_dialog(rich, kind, Some(target)), &mut error);
+                                    }
+                                    ui.close();
                                 }
-                                ui.close();
                             }
                             if rich.session.node_selection().is_some()
                                 && icons::labeled_button(
@@ -851,6 +923,7 @@ pub(super) fn toolbar(
                                     ("Delete column", TableAction::DeleteColumn),
                                     ("Merge selected cells", TableAction::Merge),
                                     ("Split cell", TableAction::Split),
+                                    ("Delete table", TableAction::DeleteTable),
                                 ] {
                                     if ui
                                         .add_enabled(
@@ -955,7 +1028,7 @@ pub(super) fn show_dialog(
                         ui.add_space(12.0);
                     }
                     if dialog.kind == Kind::Image {
-                        if ui.button(l.text("Choose image…")).clicked()
+                        if components::action(ui, l.text("Choose image…"), true, None).clicked()
                             && let Some(path) = rfd::FileDialog::new()
                                 .add_filter(l.text("Image"), &["png", "jpg", "jpeg", "gif", "webp"])
                                 .pick_file()
@@ -1207,7 +1280,7 @@ mod tests {
         let mut session = EditorSession::new(initial, Revision(0));
         for kind in [Kind::Mermaid, Kind::Math, Kind::InlineMath, Kind::Code] {
             select_seed(&mut session)?;
-            let mut dialog = BlockDialog::new(&session, kind, None);
+            let mut dialog = BlockDialog::new(&session, kind, None)?;
             if kind == Kind::Code {
                 dialog.source = "// Unicode α\nlet value = 42;\n".into();
                 dialog.language = "rust".into();
@@ -1228,7 +1301,7 @@ mod tests {
         let image_path = temporary.path().join("original.png");
         image::RgbaImage::from_pixel(2, 2, image::Rgba([20, 80, 160, 255])).save(&image_path)?;
         select_seed(&mut session)?;
-        let mut image_dialog = BlockDialog::new(&session, Kind::Image, None);
+        let mut image_dialog = BlockDialog::new(&session, Kind::Image, None)?;
         image_dialog.image_path = Some(image_path.clone());
         image_dialog.alt = "Synthetic image".into();
         image_dialog.caption = "Durable image".into();
@@ -1278,7 +1351,7 @@ mod tests {
         let mut session = EditorSession::new(tree, Revision(0));
         let target = session.document().node_ref(&NodePath(vec![0]))?;
         session.select_node(target.clone())?;
-        let mut dialog = BlockDialog::new(&session, Kind::Mermaid, Some(target));
+        let mut dialog = BlockDialog::new(&session, Kind::Mermaid, Some(target))?;
         dialog.source = "flowchart TB\nA-->C".into();
         dialog.caption = "After α".into();
         dialog.apply(&mut session, &workspace, &project.id)?;
@@ -1304,7 +1377,7 @@ mod tests {
         let project = workspace.create_project("Conflict")?;
         let mut session = EditorSession::new(RichDocument::plain("seed", "Before")?, Revision(0));
         select_seed(&mut session)?;
-        let dialog = BlockDialog::new(&session, Kind::Mermaid, None);
+        let dialog = BlockDialog::new(&session, Kind::Mermaid, None)?;
         session.insert_plain_text("New ")?;
         let before = session.document().to_json()?;
         assert!(dialog.apply(&mut session, &workspace, &project.id).is_err());
@@ -1317,12 +1390,144 @@ mod tests {
         let mut session = EditorSession::new(RichDocument::plain("seed", "Before")?, Revision(0));
         select_seed(&mut session)?;
         let before = session.document().to_json()?;
-        let mut dialog = BlockDialog::new(&session, Kind::Math, None);
+        let mut dialog = BlockDialog::new(&session, Kind::Math, None)?;
         dialog.source = "\\frac{1}{2}".into();
         drop(dialog);
         assert_eq!(session.document().to_json()?, before);
         assert!(!session.can_undo());
         Ok(())
+    }
+    #[test]
+    fn direct_edit_gesture_requires_a_whole_object_selection() -> AppResult<()> {
+        let tree = RichDocument::from_json(
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"p"},"content":[
+                    {"type":"text","text":"Prose "},
+                    {"type":"inlineMath","attrs":{"latex":"x^2","description":""}},
+                    {"type":"text","text":" tail"}
+                ]},
+                {"type":"mermaidBlock","attrs":{"blockId":"diagram","code":"flowchart LR\nA-->B","caption":"Original"}},
+                {"type":"codeBlock","attrs":{"blockId":"code","language":"rust"},"content":[{"type":"text","text":"fn main() {}"}]}
+            ]}),
+        )?;
+        let mut session = EditorSession::new(tree, Revision(0));
+        let point = DocPoint {
+            block_id: "p".into(),
+            offset: ScalarOffset(1),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        assert!(direct_edit_target(&session, false, false).is_none());
+        assert!(
+            direct_edit_target(&session, true, false).is_none(),
+            "a double-click in prose keeps word selection and opens nothing"
+        );
+        let diagram = session.document().node_ref(&NodePath(vec![1]))?;
+        session.select_node(diagram)?;
+        assert!(
+            direct_edit_target(&session, false, false).is_none(),
+            "a single click selects without editing"
+        );
+        assert_eq!(
+            direct_edit_target(&session, true, false).map(|target| target.path),
+            Some(NodePath(vec![1]))
+        );
+        assert_eq!(
+            direct_edit_target(&session, false, true).map(|target| target.path),
+            Some(NodePath(vec![1]))
+        );
+        let inline = session.document().node_ref(&NodePath(vec![0, 1]))?;
+        session.select_node(inline)?;
+        assert_eq!(
+            direct_edit_target(&session, true, false).map(|target| target.path),
+            Some(NodePath(vec![0, 1]))
+        );
+        let point = DocPoint {
+            block_id: "code".into(),
+            offset: ScalarOffset(2),
+        };
+        session.set_selection(Selection {
+            anchor: point.clone(),
+            head: point,
+        })?;
+        assert!(direct_edit_target(&session, true, false).is_none());
+        assert_eq!(
+            direct_edit_target(&session, false, true).map(|target| target.path),
+            Some(NodePath(vec![2])),
+            "the keyboard path matches the existing Edit block fallback for a code caret"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn direct_edit_opens_the_exact_selected_source_and_nothing_for_a_caret() -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Direct edit")?;
+        let document = workspace.create_rich_document(
+            &project.id,
+            "Synthetic direct edit",
+            json!({"type":"doc","attrs":{"schemaVersion":4},"content":[
+                {"type":"paragraph","attrs":{"blockId":"seed"},"content":[]},
+                {"type":"mermaidBlock","attrs":{"blockId":"diagram","code":"flowchart LR\nA-->B","caption":"Original","custom":{"value":7}}}
+            ]}),
+        )?;
+        let mut rich = RichState::open(&workspace, &document)?.ok_or("missing rich state")?;
+        assert!(!rich.open_selected_block()?, "no target means no dialog");
+        let diagram = rich.session.document().node_ref(&NodePath(vec![1]))?;
+        rich.session.select_node(diagram)?;
+        assert!(
+            rich.open_selected_block()?,
+            "the selected object opens its dialog"
+        );
+        assert!(
+            !rich.open_selected_block()?,
+            "an open dialog is never replaced"
+        );
+        let dialog = rich.dialog.as_ref().ok_or("missing block dialog")?;
+        assert_eq!(dialog.kind, Kind::Mermaid);
+        assert_eq!(dialog.source, "flowchart LR\nA-->B");
+        assert_eq!(dialog.caption, "Original");
+        assert!(dialog.target.is_some());
+        Ok(())
+    }
+    #[test]
+    fn every_block_dialog_label_resolves_in_all_eight_catalogs() {
+        let labels = [
+            "Mermaid diagram",
+            "Block formula",
+            "Inline formula",
+            "Code block",
+            "Image",
+            "Link",
+            "Source",
+            "LaTeX source",
+            "Caption",
+            "Description",
+            "Apply",
+            "Insert",
+            "Cancel",
+            "Language",
+            "Plain text",
+            "Choose image…",
+            "Alternative text",
+            "Link address",
+            "Leave empty to remove the link.",
+            "Copy code",
+            "The block could not be updated.",
+            "Double-click a rendered block, or press F2, to edit its source.",
+        ];
+        for language in Language::ALL {
+            for label in labels {
+                assert_ne!(
+                    language.text(label),
+                    "⟦missing translation⟧",
+                    "{}: {label}",
+                    language.code()
+                );
+            }
+        }
     }
     #[test]
     fn inline_formula_property_edit_keeps_the_exact_node_selected_through_history() -> AppResult<()>
@@ -1337,7 +1542,7 @@ mod tests {
         let mut session = EditorSession::new(tree, Revision(0));
         let target = session.document().node_ref(&NodePath(vec![0, 1]))?;
         session.select_node(target.clone())?;
-        let mut dialog = BlockDialog::new(&session, Kind::InlineMath, Some(target));
+        let mut dialog = BlockDialog::new(&session, Kind::InlineMath, Some(target))?;
         dialog.source = "y^3".into();
         dialog.apply(&mut session, &workspace, &project.id)?;
         assert_eq!(
@@ -1383,7 +1588,7 @@ mod tests {
             head: point,
         })?;
         let target = session.document().node_ref(&NodePath(vec![1]))?;
-        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target));
+        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target))?;
         dialog.source = "α".into();
         dialog.apply(&mut session, &workspace, &project.id)?;
         assert_eq!(
@@ -1429,13 +1634,13 @@ mod tests {
             head: point,
         };
         session.set_selection(original.clone())?;
-        let dialog = BlockDialog::new(&session, Kind::Link, None);
+        let dialog = BlockDialog::new(&session, Kind::Link, None)?;
         assert_eq!(dialog.source, "https://example.org");
         assert_eq!(session.selection(), Some(&original));
         session.extend_mark_range("link")?;
         dialog.restore_target(&mut session)?;
         assert_eq!(session.selection(), Some(&original));
-        let mut dialog = BlockDialog::new(&session, Kind::Link, None);
+        let mut dialog = BlockDialog::new(&session, Kind::Link, None)?;
         dialog.source = "https://example.net".into();
         dialog.apply(&mut session, &workspace, &project.id)?;
         let value = session.document().to_json()?;
@@ -1459,7 +1664,7 @@ mod tests {
         let project = workspace.create_project("Target")?;
         let mut session = EditorSession::new(RichDocument::plain("seed", "Writing")?, Revision(0));
         select_seed(&mut session)?;
-        let dialog = BlockDialog::new(&session, Kind::Mermaid, None);
+        let dialog = BlockDialog::new(&session, Kind::Mermaid, None)?;
         let point = DocPoint {
             block_id: "seed".into(),
             offset: ScalarOffset(7),
@@ -1505,7 +1710,7 @@ mod tests {
             head: point,
         })?;
         let target = session.document().node_ref(&NodePath(vec![0]))?;
-        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target));
+        let mut dialog = BlockDialog::new(&session, Kind::Code, Some(target))?;
         dialog.source = "α prefix NEW😀 suffix 界".into();
         dialog.apply(&mut session, &workspace, &project.id)?;
         let content = session.document().to_json()?;
@@ -1533,6 +1738,58 @@ mod tests {
         assert!(!session.can_undo());
         session.redo()?;
         assert_eq!(session.document().to_json()?, content);
+        Ok(())
+    }
+
+    #[test]
+    fn source_dialog_keeps_cells_and_rejects_foreign_same_revision_sessions() -> AppResult<()> {
+        let workspace = Workspace::memory()?;
+        let project = workspace.create_project("Dialog scope")?;
+        let tree = RichDocument::from_json(json!({
+            "type":"doc", "attrs":{"schemaVersion":4}, "content":[{
+                "type":"table", "attrs":{"blockId":"table"}, "content":[{
+                    "type":"tableRow", "content":[
+                        {"type":"tableCell", "content":[{"type":"paragraph", "attrs":{"blockId":"a"}, "content":[{"type":"text","text":"First"}]}]},
+                        {"type":"tableCell", "content":[{"type":"paragraph", "attrs":{"blockId":"b"}, "content":[{"type":"text","text":"Second"}]}]}
+                    ]
+                }]
+            }]
+        }))?;
+        let mut session = EditorSession::new(tree.clone(), Revision(0));
+        let cells = craft_editor_egui::TableSelection {
+            table_path: NodePath(vec![0]),
+            anchor: craft_editor_egui::CellPoint { row: 0, column: 1 },
+            head: craft_editor_egui::CellPoint { row: 0, column: 0 },
+        };
+        session.set_cell_selection(cells.clone())?;
+        let dialog = BlockDialog::new(&session, Kind::Mermaid, None)?;
+        let caret = DocPoint {
+            block_id: "b".into(),
+            offset: ScalarOffset(2),
+        };
+        session.set_selection(Selection {
+            anchor: caret.clone(),
+            head: caret,
+        })?;
+        dialog.restore_target(&mut session)?;
+        assert_eq!(session.cell_selection(), Some(&cells));
+        assert!(session.selection().is_none());
+
+        let mut foreign = EditorSession::new(tree, Revision(0));
+        let caret = DocPoint {
+            block_id: "b".into(),
+            offset: ScalarOffset(3),
+        };
+        foreign.set_selection(Selection {
+            anchor: caret.clone(),
+            head: caret,
+        })?;
+        let before = foreign.document().to_json()?;
+        let selection = foreign.selection_state()?;
+        assert!(dialog.apply(&mut foreign, &workspace, &project.id).is_err());
+        assert_eq!(foreign.document().to_json()?, before);
+        assert_eq!(foreign.selection_state()?, selection);
+        assert!(!foreign.can_undo());
         Ok(())
     }
 }

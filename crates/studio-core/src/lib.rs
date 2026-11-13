@@ -7,14 +7,17 @@ mod annotations;
 mod assets;
 mod assistant_selection;
 mod daily_controls;
+mod project_labels;
 mod project_portability;
+mod project_structure;
 mod rich;
+mod rich_review;
 mod workspace_backup;
 mod workspace_paths;
 pub use annotations::{
     AnchorStatus, AnnotationAnchor, AnnotationEvent, AnnotationPatch, AnnotationPreviewSnapshot,
     AnnotationStatus, LegacyAnchorProjection, LegacyAnchorResolution, PassageAnnotation,
-    RichRecoverySnapshot,
+    ProjectAnnotationSummary, ProjectTagSnapshot, RichRecoverySnapshot,
 };
 pub use assets::{
     ImageAsset, ImageAssetFailure, ImageAssetFailureKind, ImageAssetSnapshot, ImageTransfer,
@@ -26,17 +29,28 @@ pub use daily_controls::{
     DocumentStatistics, FindMatch, document_statistics, find_first_document_match,
     find_first_text_match, rich_document_statistics,
 };
+pub use project_labels::{ProjectLabel, ProjectLabelCatalog, ProjectLabelColor};
 pub use project_portability::{
     EvidenceReferenceInput, EvidenceReferenceQuery, EvidenceReferenceSummary, ImportAssetSource,
     ImportedProject, ImportedProjectAnnotation, MAX_EVIDENCE_METADATA_BYTES,
-    MAX_EVIDENCE_OBJECT_BYTES, MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES,
-    ProjectAssetSource, ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo,
-    ProjectCanvasRevision, ProjectCanvasRevisionInfo, ProjectCanvasSnapshot,
-    ProjectEvidenceSnapshot, ProjectExportSnapshot, ProjectImportWorker,
-    ProjectTransferCancellation, ProjectTreeNode, ValidatedEvidenceObject,
-    ValidatedEvidenceReference, ValidatedProjectImport,
+    MAX_EVIDENCE_OBJECT_BYTES, MAX_PORTABLE_COMPANION_V1_BYTES, MAX_PORTABLE_MATERIALIZED_BYTES,
+    MAX_PORTABLE_MEMBERS, MAX_PORTABLE_RECORD_BYTES, MAX_PORTABLE_RECORDS, MAX_PORTABLE_ROOT_BYTES,
+    MAX_PORTABLE_SHARD_BYTES, MAX_PORTABLE_SHARD_RECORDS, MAX_PORTABLE_SHARDS,
+    MAX_PORTABLE_TRANSPORT_BYTES, MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS,
+    MAX_PROJECT_MANIFEST_BYTES, MAX_PROJECT_TRANSFER_BYTES, PortableObjectReference,
+    PortableObjectSource, PortableProjectHeader, PortableProjectScope, PortableProjectSummary,
+    PortableResourceBudget, PortableShardDescriptor, PreparedPortableProject, ProjectAssetSource,
+    ProjectAttachment, ProjectCanvasDraft, ProjectCanvasInfo, ProjectCanvasRevision,
+    ProjectCanvasRevisionInfo, ProjectCanvasSnapshot, ProjectEvidenceSnapshot,
+    ProjectExportSnapshot, ProjectImportWorker, ProjectPortableExportWorker, ProjectReadingCanvas,
+    ProjectReadingDocument, ProjectReadingNode, ProjectTransferCancellation, ProjectTreeNode,
+    ValidatedEvidenceObject, ValidatedEvidenceReference, ValidatedPortableProjectImport,
+    ValidatedProjectImport, VerifiedPortableProjectStream, VerifiedPortableRecord,
+    visit_portable_shard,
 };
-pub use rich::{RichDraft, RichRevision};
+pub use project_structure::ImportedProjectStructure;
+pub use rich::{CreatedProject, InitialManuscript, RichDraft, RichRevision};
+pub use rich_review::{RichProposal, RichProposalSummary};
 pub use workspace_backup::{WorkspaceBackup, backup_workspace};
 pub use workspace_paths::is_workspace_data_path;
 
@@ -51,7 +65,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 11;
 const APPLICATION_ID: i64 = 0x5753544e;
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 
@@ -67,6 +81,16 @@ pub enum StudioError {
     /// The requested local resource does not exist.
     #[error("{kind} {id} was not found; refresh the project list")]
     NotFound { kind: &'static str, id: String },
+    /// Structure-aware creation used an outdated saved project schema.
+    #[error(
+        "The project structure changed from revision {expected} to {actual}; refresh before creating a node"
+    )]
+    ProjectStructureConflict { expected: u64, actual: u64 },
+    /// A first-content request no longer matches the exact saved project node.
+    #[error(
+        "Project node {node_id} changed in project {project_id}; refresh before writing its first content"
+    )]
+    ProjectNodeChanged { project_id: String, node_id: String },
     /// The editor is based on an older revision.
     #[error("Document changed from revision {expected} to {actual}; reload before saving")]
     RevisionConflict { expected: i64, actual: i64 },
@@ -334,6 +358,8 @@ impl Workspace {
             transaction.execute_batch(include_str!("rich_annotation_drafts.sql"))?;
             transaction.execute_batch(include_str!("project_portability.sql"))?;
             transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
+            transaction.execute_batch(include_str!("rich_review.sql"))?;
+            transaction.execute_batch(include_str!("project_labels.sql"))?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         } else if application_id != APPLICATION_ID {
@@ -359,6 +385,17 @@ impl Workspace {
             }
             if version < 8 {
                 transaction.execute_batch(include_str!("project_portable_evidence.sql"))?;
+            }
+            if version < 9 {
+                transaction.execute_batch(include_str!("rich_review.sql"))?;
+            }
+            // Version 10 adds author tags to existing annotation JSON. No row rewrite:
+            // old notes default to no tags, and older binaries must refuse this database
+            // rather than deserialize and silently discard tags on their next save.
+            if version < 11 {
+                // Definitions remain separate: opening an old workspace never rewrites notes,
+                // assignment strings or immutable annotation history to materialize defaults.
+                transaction.execute_batch(include_str!("project_labels.sql"))?;
             }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }

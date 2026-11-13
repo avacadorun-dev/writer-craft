@@ -10,6 +10,12 @@ pub(super) struct MarkdownRenderer<'a> {
     pub(super) current: &'a str,
     pub(super) project: &'a str,
     pub(super) nodes: &'a HashMap<String, String>,
+    pub(super) anchors: &'a HashMap<String, String>,
+    pub(super) heading_offset: u8,
+    /// Folder exports keep per-block HTML anchors; a reader manuscript omits that invisible markup.
+    pub(super) block_anchors: bool,
+    /// Folder exports can link the canonical companion; a reader manuscript never emits that link.
+    pub(super) companion_links: bool,
     pub(super) assets: &'a HashMap<String, String>,
     pub(super) conversions: BTreeSet<String>,
 }
@@ -26,7 +32,12 @@ impl MarkdownRenderer<'_> {
             "paragraph" => self.inline(children),
             "heading" => Ok(format!(
                 "{} {}",
-                "#".repeat(attrs["level"].as_u64().unwrap_or(1).clamp(1, 6) as usize),
+                "#".repeat(
+                    u8::try_from(attrs["level"].as_u64().unwrap_or(1).clamp(1, 6))
+                        .unwrap_or(1)
+                        .saturating_add(self.heading_offset)
+                        .min(6) as usize
+                ),
                 self.inline(children)?
             )),
             "hardBreak" => Ok("  \n".into()),
@@ -137,13 +148,20 @@ impl MarkdownRenderer<'_> {
             _ => {
                 self.conversions
                     .insert(format!("unsupported-rich-node:{kind}"));
-                Ok(format!(
-                    "[Preserved rich content](<{}>)",
-                    relative_link(self.current, ".writercraft/project.json")?
-                ))
+                if self.companion_links {
+                    Ok(format!(
+                        "[Preserved rich content](<{}>)",
+                        relative_link(self.current, ".writercraft/project.json")?
+                    ))
+                } else {
+                    // A reader manuscript has no canonical companion, so it must not publish a
+                    // dangling link to one. The conversion disclosure names the omission.
+                    Ok(String::new())
+                }
             }
         }?;
-        if !matches!(kind, "text" | "hardBreak" | "inlineMath")
+        if self.block_anchors
+            && !matches!(kind, "text" | "hardBreak" | "inlineMath")
             && let Some(id) = attrs["blockId"].as_str().filter(|id| !id.is_empty())
         {
             self.conversions.insert("block-identity-html-anchor".into());
@@ -232,6 +250,9 @@ impl MarkdownRenderer<'_> {
             .strip_prefix("writers-studio://documents/")
             .or_else(|| target.strip_prefix(&format!("/projects/{}/studio/", self.project)));
         if let Some(id) = document {
+            if let Some(anchor) = self.anchors.get(id) {
+                return Ok(Some(anchor.clone()));
+            }
             if let Some(path) = self.nodes.get(id) {
                 let mut relative = relative_link(self.current, path)?;
                 if !fragment.is_empty() {
@@ -587,10 +608,15 @@ mod tests {
     fn complex_tables_should_keep_nested_blocks_spans_and_unicode_visible() {
         let nodes = HashMap::new();
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
+            block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -615,13 +641,53 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_nodes_without_a_companion_should_leave_no_dangling_link() {
+        let nodes = HashMap::new();
+        let assets = HashMap::new();
+        let anchors = HashMap::new();
+        let unknown = json!({"type":"mysteryBlock","attrs":{"blockId":"mystery"}});
+        let conversions = |companion_links: bool| {
+            let mut renderer = MarkdownRenderer {
+                current: "Manuscript.md",
+                project: "project",
+                nodes: &nodes,
+                anchors: &anchors,
+                heading_offset: 0,
+                block_anchors: false,
+                companion_links,
+                assets: &assets,
+                conversions: BTreeSet::new(),
+            };
+            let rendered = renderer.render(&unknown).unwrap();
+            (rendered, renderer.conversions)
+        };
+        let (folder, folder_conversions) = conversions(true);
+        assert!(folder.contains(".writercraft/project.json"));
+        assert!(
+            folder_conversions.contains("unsupported-rich-node:mysteryBlock"),
+            "the folder export still reports the preserved rich node"
+        );
+        let (reader, reader_conversions) = conversions(false);
+        assert_eq!(reader, "", "the reader copy has no canonical companion");
+        assert!(
+            reader_conversions.contains("unsupported-rich-node:mysteryBlock"),
+            "the omission is still disclosed"
+        );
+    }
+
+    #[test]
     fn document_links_should_rewrite_and_outside_selection_links_should_be_reported() {
         let nodes = HashMap::from([("selected".into(), "documents/Автор.md".into())]);
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
+            block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };
@@ -649,10 +715,15 @@ mod tests {
     fn opaque_image_locations_should_have_readable_fallbacks_without_invented_local_links() {
         let nodes = HashMap::new();
         let assets = HashMap::new();
+        let anchors = HashMap::new();
         let mut renderer = MarkdownRenderer {
             current: "documents/a.md",
             project: "project",
             nodes: &nodes,
+            anchors: &anchors,
+            heading_offset: 0,
+            block_anchors: true,
+            companion_links: true,
             assets: &assets,
             conversions: BTreeSet::new(),
         };

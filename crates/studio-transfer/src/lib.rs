@@ -5,12 +5,28 @@
 //! flattening the original rich documents, histories or owned artifacts.
 #![deny(missing_docs)]
 
+mod canonical_archive;
+mod canonical_folder;
+mod canonical_reader;
+mod canonical_reading;
+mod compiled_markdown;
 mod markdown_render;
 mod portable_file;
 mod portable_markdown;
 mod portable_paths;
 mod portable_selection;
 mod project_archive;
+pub use canonical_archive::{
+    export_canonical_project_archive_file, write_canonical_project_archive,
+};
+pub use canonical_folder::{
+    CanonicalFolderReceipt, CanonicalProjectFolder, export_canonical_project_folder,
+};
+pub use canonical_reader::CanonicalProjectArchive;
+pub use compiled_markdown::{
+    CompiledManuscriptProgress, CompiledManuscriptReceipt, ManuscriptEntry, ManuscriptPlan,
+    ManuscriptSelection, compile_manuscript, compile_manuscript_with_progress, plan_manuscript,
+};
 pub use portable_file::{PortableFileReceipt, export_project_archive_file};
 pub use portable_markdown::{
     MarkdownConversion, MarkdownExportProgress, MarkdownExportReceipt, MarkdownExportSelection,
@@ -64,8 +80,8 @@ pub struct ImportedDocument {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransferError {
-    /// The archive could not be read from disk.
-    #[error("Cannot read project archive: {0}")]
+    /// Project data could not be read from or written to disk.
+    #[error("Cannot read or write project data: {0}")]
     Io(#[from] std::io::Error),
     /// ZIP structure, compression or an entry checksum is invalid.
     #[error("Cannot read ZIP project archive: {0}")]

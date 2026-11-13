@@ -11,7 +11,7 @@ impl StudioApp {
             egui::containers::panel::PanelState::load(&ctx, egui::Id::new("inspector"))
                 .map_or(320.0, |state| state.outer_rect.width().clamp(280.0, 460.0));
         egui::Panel::top("commands")
-            .exact_size(48.0)
+            .exact_size(36.0)
             .resizable(false)
             .frame(egui::Frame::new().fill(t.panel))
             .show(ui, |ui| {
@@ -31,16 +31,17 @@ impl StudioApp {
                 }
                 ui.scope_builder(
                     egui::UiBuilder::new()
-                        .max_rect(identity.shrink2(egui::vec2(12.0, 5.0)))
+                        .max_rect(identity.shrink2(egui::vec2(12.0, 3.0)))
                         .layout(Layout::left_to_right(Align::Center)),
                     |ui| {
                         ui.set_clip_rect(identity);
                         if cfg!(target_os = "macos") {
                             ui.add_space(76.0);
                         }
-                        crate::brand::mark(ui, 28.0, t.accent, t.text);
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        crate::brand::mark(ui, 24.0);
                         ui.add(
-                            egui::Label::new(RichText::new("WriterCraft").size(17.0).strong())
+                            egui::Label::new(RichText::new("WriterCraft").size(15.0).strong())
                                 .truncate(),
                         )
                         .on_hover_text("WriterCraft");
@@ -57,12 +58,16 @@ impl StudioApp {
                 }
                 ui.scope_builder(
                     egui::UiBuilder::new()
-                        .max_rect(commands.shrink2(egui::vec2(12.0, 5.0)))
+                        .max_rect(commands.shrink2(egui::vec2(12.0, 3.0)))
                         .layout(Layout::left_to_right(Align::Center)),
                     |ui| {
                         ui.set_clip_rect(commands);
                         if icons::icon_button(ui, Icon::Home, l.text("Project library")).clicked() {
-                            let result = self.save_explicit();
+                            let result = (|| -> AppResult<()> {
+                                #[cfg(feature = "editor-preview")]
+                                self.ensure_canvas_navigation()?;
+                                self.save_explicit()
+                            })();
                             if result.is_ok() {
                                 self.library = true;
                             }
@@ -77,8 +82,39 @@ impl StudioApp {
                                 self.choose_archive();
                                 ui.close();
                             }
-                            if ui.button(l.text("Export text…")).clicked() {
+                            if ui
+                                .add_enabled(
+                                    !self.library && self.document.is_some(),
+                                    egui::Button::new(l.text("Export text…")),
+                                )
+                                .clicked()
+                            {
                                 self.export_text();
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui
+                                .add_enabled(
+                                    self.project.is_some(),
+                                    egui::Button::new(l.text("Export project…")),
+                                )
+                                .clicked()
+                            {
+                                self.open_project_export();
+                                ui.close();
+                            }
+                            if ui.button(l.text("Restore project…")).clicked() {
+                                self.open_project_restore();
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.project_transfer.has_state(),
+                                    egui::Button::new(l.text("Project transfer…")),
+                                )
+                                .clicked()
+                            {
+                                self.show_project_transfer();
                                 ui.close();
                             }
                         });
@@ -185,10 +221,19 @@ impl StudioApp {
                     let unsaved_notes = self.notes.has_unsaved_drafts();
                     #[cfg(not(feature = "editor-preview"))]
                     let unsaved_notes = false;
-                    let status = l.text(self.save_status_msgid(unsaved_notes));
+                    #[cfg(feature = "editor-preview")]
+                    let unsaved_review = self.rich_review.has_unsaved_drafts();
+                    #[cfg(not(feature = "editor-preview"))]
+                    let unsaved_review = false;
+                    let status = l.text(if unsaved_review && self.error.is_none() {
+                        "Unsaved edit drafts"
+                    } else {
+                        self.save_status_msgid(unsaved_notes)
+                    });
                     ui.label(RichText::new(status).size(12.0).color(
                         if self.error.is_some()
                             || unsaved_notes
+                            || unsaved_review
                             || self.preferences_need_attention()
                         {
                             t.warning

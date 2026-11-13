@@ -1,0 +1,65 @@
+{
+  "source_commit": "c4e33025ec9f14b6736b46e20eb3523a033c430f",
+  "preview_run": 42550098189,
+  "artifact_id": 13644949394,
+  "archive_sha256": "0f2aaaea4c3f76a518623064e937aaa39a374df00cdd5ef2733d30e00dfdad3d",
+  "original_signature_valid": true,
+  "exact_packaged_icns": true,
+  "compiled_runtime_and_header_png_bytes_match": true,
+  "local_repackaging": [
+    "separate bundle identity/display name",
+    "explicit synthetic workspace environment",
+    "ad-hoc signing updates embedded Mach-O signature; native code/data sections unchanged"
+  ],
+  "executable_unchanged": false,
+  "release": false,
+  "native_code_data_sections_unchanged": true,
+  "verified_section_count": 13,
+  "cases": [
+    {
+      "file": "workspace-dark-compact.png",
+      "sha256": "b751f036ab998414703aae870148da28fbcef1c75a55efa3a7e676add28d0fb7",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 2.0
+    },
+    {
+      "file": "workspace-light-compact.png",
+      "sha256": "f49cfa7b53023b81c2b0500a0fb39df33504928c7aed01ebac753d622657ed29",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 2.0
+    },
+    {
+      "file": "workspace-dark-wide.png",
+      "sha256": "4e10905761487cad3a46826cf84707dd31ee145174cf7523342e065c52102b3c",
+      "observed_inner_size_points": [
+        1440.0,
+        923.0
+      ],
+      "pixels_per_point": 2.0
+    },
+    {
+      "file": "workspace-light-wide.png",
+      "sha256": "9b43c0b67a527efb50a3ba8c58d88bd8475d7fbe35e606532e957dde86ed12bf",
+      "observed_inner_size_points": [
+        1440.0,
+        923.0
+      ],
+      "pixels_per_point": 2.0
+    }
+  ],
+  "os_icon": {
+    "source": "NSRunningApplication.icon",
+    "fresh_isolated_running_bundle": true,
+    "file": "running-os-icon.png",
+    "sha256": "e331083a1de80a3ff210277808d49c804e255dbbbc6d532633810c22c1b829ed",
+    "dock_pixels_observed": false
+  },
+  "scope": "lion-brand-identity",
+  "full_alpha3_acceptance": false
+}

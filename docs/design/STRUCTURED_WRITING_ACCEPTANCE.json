@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "scope": "structured-writing-alpha",
+  "boundary": "Selected non-Canvas engineering prerelease contract, not accepted evidence or full-editor-parity. UX_GATE.json remains authoritative. Full Canvas #17, full parity #4 and unfinished broad issue criteria remain open.",
+  "contract_inputs": [
+    "docs/governance/ALPHA3_MILESTONE.md",
+    "docs/governance/ALPHA3_STRUCTURED_WRITING_PLAN.md",
+    "docs/governance/NEXT_RELEASE.md",
+    "docs/design/UX_ACCEPTANCE.md",
+    "docs/design/USER_FEEDBACK.md",
+    "openspec/changes/structured-writing-alpha/proposal.md",
+    "openspec/changes/structured-writing-alpha/design.md",
+    "openspec/changes/structured-writing-alpha/tasks.md",
+    "openspec/changes/structured-writing-alpha/specs/structured-writing/spec.md"
+  ],
+  "evidence_policy": "Each accepted coverage.journeys row requires independent SHA-256-bound Markdown evidence with a writercraft-evidence receipt naming this scope, version, exact source fingerprint, reviewer, hosted build and tested platform. Every required author path needs a passed native-journey/native-os observation and path_result. Each declared required_semantic_operation separately needs a passed semantic/automated-test operation_result from the same exact candidate; stale/conflict/failed-save preservation checks remain mandatory hosted corroboration and must never be relabelled as native input. Source audits, API seeding, injected application events and prepared galleries cannot establish the native author journeys. One report may cover several observations or both methods only by explicitly identifying and substantiating each. The validator checks consistency, not whether an observation actually occurred.",
+  "observations": [
+    {
+      "id": "A3-WRITE-01",
+      "title": "Create, organize and revise a substantial story through the native workspace",
+      "issues": [
+        14
+      ],
+      "requirements": "Create The Last Light from the native Library, with four chapters, two meaningful scenes per chapter and separate character/reference branches. Preserve stable identity, text, history and unknown imported data throughout lifecycle and consultation. An API-created project does not qualify.",
+      "required_paths": [
+        "native-project-and-connected-manuscript",
+        "folder-document-create-read-edit-rename",
+        "schema-aware-move-and-reorder",
+        "tree-drag-drop-highlights-autoscroll-expand-cancel",
+        "subtree-trash-restore-and-independent-trash",
+        "duplicate-title-identity",
+        "reference-edit-exact-return-and-dialogue-revision",
+        "changed-origin-and-trashed-target",
+        "form-cancel-and-invalid-placement-preserves-draft",
+        "save-quit-reopen-and-continue",
+        "full-width-tree-pointer-and-keyboard-context-actions"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "stale-conflicting-tree-change-no-partial-mutation",
+          "title": "Stale or conflicting tree operations retain stable identities, text, history and prior structure without partial mutation",
+          "native_os_required": false
+        },
+        {
+          "id": "failed-save-preserves-draft-and-return",
+          "title": "A failed or stale save preserves the draft and exact consultation return authority instead of acknowledging a false save",
+          "native_os_required": false
+        }
+      ]
+    },
+    {
+      "id": "A3-MARK-01",
+      "title": "Follow author-defined passage markup across the manuscript",
+      "issues": [
+        14
+      ],
+      "requirements": "Use meaningful manual labels across scenes and exact repeated occurrences. Distinguish one assignment from a project-wide label operation. Exercise pending passage-composer cancel/resume and the draft preflight before project-wide label mutation. Retain annotation identity, Unicode-scalar anchors, history and detached states without name-based retargeting. Compiled F-55 rework must show the whole short wrapped selection after inspector reflow and Apply/Undo; note labels/overflow stay inside their row hit/background geometry, and Resume appears only for a retained unapplied draft.",
+      "required_paths": [
+        "create-tag-only-and-noted-passages",
+        "project-filter-exact-occurrence-and-return",
+        "edit-mark-and-remove-one-assignment",
+        "project-label-rename-and-remove",
+        "pending-composer-cancel-and-resume",
+        "bulk-label-mutation-draft-preflight",
+        "delete-and-restore-same-id",
+        "detached-and-trashed-targets",
+        "save-reopen-with-markup-history",
+        "project-label-create-color-reuse-and-reopen",
+        "consistent-inline-sidebar-primary-color-and-named-chips",
+        "compact-note-inspector-and-label-picker",
+        "one-action-remove-mark-and-guarded-undo",
+        "one-action-local-label-unassignment",
+        "short-inline-correction-loop-preserves-draft-and-caret",
+        "filtered-markup-previous-next-inline-apply-and-parked-replacement",
+        "applied-correction-resolve-note-next-completion-and-reopen"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "stale-bulk-label-change-no-partial-mutation",
+          "title": "Stale or conflicting bulk label changes refuse before any affected mark or history is partially changed",
+          "native_os_required": false
+        },
+        {
+          "id": "failed-markup-save-preserves-draft-and-anchor",
+          "title": "Failed markup saves preserve the pending draft, canonical mark identity, exact anchor and prior history",
+          "native_os_required": false
+        },
+        {
+          "id": "label-catalog-roundtrip-and-recolor-preserves-prose-anchors",
+          "title": "Recoloring preserves prose/anchors and canonical restore retains active and unused project label definitions with guarded rename/removal",
+          "native_os_required": false
+        }
+      ]
+    },
+    {
+      "id": "A3-REEDIT-01",
+      "title": "Directly edit existing formula and Mermaid objects",
+      "issues": [
+        7
+      ],
+      "requirements": "The later sequential #7 correction must qualify existing Mermaid, block formula and inline formula source editing. Preserve single-click selection and the compact toolbar; all entry routes use the same guarded edit flow.",
+      "required_paths": [
+        "double-click-existing-objects",
+        "object-context-menu-edit",
+        "keyboard-equivalent",
+        "apply-render-and-single-click-selection",
+        "cancel-escape-and-invalid-source",
+        "undo-redo-save-reopen"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "block-edit-preserves-id-source-and-unknown-fields",
+          "title": "Editing existing objects preserves their stable IDs, source and unknown imported fields across Apply and history",
+          "native_os_required": false
+        },
+        {
+          "id": "stale-conflict-failed-save-no-partial-block-mutation",
+          "title": "Stale, conflicting or failed block edits retain the pending source and canonical block without partial mutation",
+          "native_os_required": false
+        }
+      ]
+    },
+    {
+      "id": "A3-HANDOFF-01",
+      "title": "Deliver the selected ordered manuscript as DOCX and Markdown",
+      "issues": [
+        19,
+        20
+      ],
+      "requirements": "Export the deliberately selected manuscript in displayed tree order as one editable DOCX and one UTF-8 Markdown document with portable relative assets. Inspect actual output in independent readers and disclose supported rich-content fallbacks/refusals and annotation privacy. Preserve the workspace, rich source, history and original assets. Complete canonical project recovery remains deferred in #11; optional EPUB #21 is not a release prerequisite.",
+      "required_paths": [
+        "manuscript-scope-order-and-annotation-privacy",
+        "native-ordered-markdown-and-portable-assets",
+        "native-editable-docx-and-independent-reader",
+        "moved-markdown-assets-open-in-independent-reader",
+        "cancel-output-without-misleading-success"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "failed-export-no-published-partial-output",
+          "title": "Failed exports do not publish incomplete output, overwrite unrelated files or acknowledge success",
+          "native_os_required": false
+        },
+        {
+          "id": "snapshot-order-and-source-preservation",
+          "title": "A consistent selected-revision compilation preserves displayed order and source rich JSON, identities, histories and original asset bytes; stale or unsupported content receives explicit preflight handling",
+          "native_os_required": false
+        }
+      ]
+    },
+    {
+      "id": "F52-VISUAL-01",
+      "title": "Independently review every visited native surface and dialog",
+      "issues": [
+        14,
+        7,
+        18,
+        19,
+        20
+      ],
+      "requirements": "The report must declare a complete visited_surfaces index, surface_results with passed dispositions, concrete assessments and capture paths present in the hashed gate evidence, and an explicit unvisited_surfaces list. Include all additional dialogs actually visited, beyond the required surface groups below. Each result identifies its relevant A3 journey IDs. State actual platform coverage. Blocking findings require rework and fresh compiled observation; command success alone does not establish visual acceptance.",
+      "required_paths": [
+        "complete-visited-surface-capture-index",
+        "action-grouping-and-discoverability",
+        "spacing-and-content-density",
+        "pane-and-modal-bounds",
+        "hierarchy-keyboard-focus-and-icon-recognition",
+        "blocking-findings-reworked-and-reobserved"
+      ],
+      "required_surfaces": [
+        "library-and-project-creation",
+        "manuscript-tree-and-editor",
+        "hierarchy-create-rename-move",
+        "trash-and-restore",
+        "reference-consultation-and-return",
+        "passage-markup-editor",
+        "project-markup-results",
+        "project-label-lifecycle",
+        "existing-formula-mermaid-edit",
+        "reader-export",
+        "sequential-markup-review-and-inline-replacement",
+        "docx-export-and-result",
+        "compiled-markdown-export-and-assets",
+        "responsive-home-and-project-continuation"
+      ]
+    }
+  ],
+  "deferred_project_recovery": {
+    "issue": 11,
+    "status": "pending",
+    "decision": "Explicit 2026-11-10 milestone boundary: the previous A3-HANDOFF-01 canonical-export/independent-restore journey remains a broad #11 obligation outside this release. Manuscript DOCX/Markdown delivery cannot satisfy it.",
+    "previous_contract": {
+      "id": "A3-HANDOFF-01",
+      "title": "Deliver readable work and restore a complete independent copy",
+      "issues": [
+        11
+      ],
+      "requirements": "The later sequential #11 work must qualify actual native export/import of the completed manuscript. Inspect readable organization and real assets separately from canonical tree, rich text, tags, notes, histories, stable logical references and original-media preservation. Explain annotation privacy and reader-format limitations before export.",
+      "required_paths": [
+        "reader-scope-and-annotation-privacy",
+        "readable-markdown-hierarchy-and-assets",
+        "canonical-export-and-independent-restore",
+        "restored-tree-text-markup-history-and-media",
+        "cancel-output-without-misleading-success"
+      ],
+      "required_semantic_operations": [
+        {
+          "id": "failed-export-no-published-partial-output",
+          "title": "Failed exports do not publish incomplete output or acknowledge success",
+          "native_os_required": false
+        },
+        {
+          "id": "failed-restore-no-partial-project",
+          "title": "Failed or conflicting canonical restore preserves existing work without committing a partial project",
+          "native_os_required": false
+        }
+      ]
+    }
+  }
+}

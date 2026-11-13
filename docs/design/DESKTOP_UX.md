@@ -117,7 +117,7 @@ Review General, Appearance, Editor and at least one informational parity categor
 
 ### Settings reference refinements
 
-The selected shell uses a left-aligned category hierarchy with a coherent licensed utility icon family. Final family selection follows the comparison and owner participation recorded in F-25; no Lucide preference is assumed. Group labels follow the same inset grid as navigation content. The normal header and footer have explicit heights; content allocation cannot stretch either row. Appearance uses miniature-window mode/palette cards with a selected accent outline and accessible labels. These refinements supersede earlier plain swatch-button presentation. The monk/book crest remains the product identity in the command bar and app icon.
+The selected shell uses a left-aligned category hierarchy with a coherent licensed utility icon family. Final family selection follows the comparison and owner participation recorded in F-25; no Lucide preference is assumed. Group labels follow the same inset grid as navigation content. The normal header and footer have explicit heights; content allocation cannot stretch either row. Appearance uses miniature-window mode/palette cards with a selected accent outline and accessible labels. These refinements supersede earlier plain swatch-button presentation. The approved lion writer supersedes the monk/book crest in the command bar and app icon (#16, F-44). The header uses a 32 px visible rounded tile and an 8 px gap to the wordmark; OS exports have their own safe-area padding. Preserve the supplied artwork and original blue texture in both appearance modes.
 
 ### Final utility family choice
 

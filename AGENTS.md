@@ -54,6 +54,58 @@ The alpha.2 named independent scope is `native-rich-editor-alpha`, an engineerin
 
 The complete source-backed editor contract, all 21 nodes/six marks, integration journeys, source-project/Canvas/media compatibility and portable restore remain required migration work; their unfinished parts move to alpha.3, rather than becoming implemented or being removed. The sole approved native table capacity exception remains 63 logical columns with lossless wider-data preservation and refusal before mutation.
 
-Freeze new feature integration while finalizing this release. Do not repin unqualified editor/Canvas foundations or restart the owner's preview. Use only synthetic public CI fixtures; original manuscripts, archives and media remain private/read-only. Specialized generic mechanics remain in separate repositories.
+The alpha.2 freeze was lifted by the subsequent alpha.3 authorization below. Do not repin unqualified editor/Canvas foundations or restart the owner's preview. Use only synthetic public CI fixtures; original manuscripts, archives and media remain private/read-only. Specialized generic mechanics remain in separate repositories.
 
 Routine administrative edits (license changes, repository About/topics, release housekeeping and tool setup) do not require separate issues unless the owner explicitly requests one. Track actual owner-reported bugs and product enhancements; do not turn every instruction into an issue.
+
+
+## Current owner authorization — alpha.3 execution
+
+On 2026-11-08, after testing the published alpha.2 on macOS and confirming it functional, the owner explicitly authorized closing issues whose complete criteria were satisfied by that release, then implementing alpha.3 and closing the remaining issues as their complete acceptance is established. This supersedes the alpha.2 freeze and the requirement to request the same owner approval again for verified alpha.2 completions. It does not waive any unmet technical or independent UX criterion, establish untested Windows/Linux GUI behavior, or permit mass closure of partial issues.
+
+Develop alpha.3 against the complete existing source-backed scope in `docs/governance/NEXT_RELEASE.md`. Preserve published alpha.1/alpha.2 tags and assets. Use `feature/alpha3-parity`, focused commits, exact-source hosted checks and independent actual native acceptance. Keep the alpha.2 accepted gate as historical evidence; alpha.3 requires its own current `full-editor-parity` gate. Continue issue audits after each completed slice and record the precise evidence when closing a finished issue. Do not create new product features to satisfy the plan.
+
+
+## Issue prose and researched formatting
+
+Write issues as direct product problems or feature requirements. Do not introduce them with `Owner report`, `The owner wants`, attribution to the requester, or similar filler. Use `Summary`, `Current behavior`, `Expected behavior`, research evidence and concrete acceptance checks. Preserve meaningful historical acceptance/build evidence without adding repetitive requester attribution.
+
+The requested formatting discovery and object-sizing extension is tracked in issue #14. Research actual screenwriter/editor/writer needs, distinguish first-hand requests from competitor documentation and implementation inference, and record the selected feature scope before implementation. Existing `.wstudio` transfer versions1–8/editor schemas1–4 must continue to import and work. Schema extensions require explicit compatible defaults/migration, unknown-field and original-media preservation, and semantic round-trip checks; formatting additions cannot silently replace the Studio compatibility contract.
+
+
+## Evidence-based project profiles and user scenarios
+
+Issue #14 also covers project types specifically. Existing seven kinds are a backward-compatibility baseline, not a validated new-project taxonomy. Research STARC, Final Draft, WriterDuet/WriterSolo separately, Fade In, Celtx, Scrivener, Obsidian, FocusWriter and Google Docs as relevant workflow references. Separate project kinds, starting templates, document editing modes and output profiles through explicit hypotheses and evidence. Record stable-ID user scenarios and trace them to specifications, implementation, semantic tests and independent native acceptance. Do not implement a nominal selector as proof that professional project workflows are complete. Read `docs/research/PROJECT_TYPES_AND_FORMATTING.md` before changing creation profiles; preserve import of old kinds and custom schemas throughout.
+
+
+## Connected writing and direct Canvas authoring
+
+Read F-42/F-43 before changing Canvas input or board/document relationships. Issue #15 requires actual in-card writing, not a modal presented as inline editing, with native input ownership, guarded save acknowledgements and exact draft preservation. Issue #14 additionally requires researched board↔document↔character/lore/dictionary/memory workflows. Preserve existing document references and promotion semantics; do not claim the source had no integration. Compare canonical views, live links, snapshots and independent notes before selecting synchronization or deletion behavior. Keep stable scenario IDs and exact-context return navigation, and include these corrections in the independent UX gate. Layout changes cannot silently mutate manuscript order/content.
+
+
+## Explicit engine publication authorization — 2026-11-09
+
+The user explicitly authorized publishing the reviewed commit e3316ff and subsequent alpha.3 editor-engine changes to `git@github.com:avacadorun-dev/craft-editor.git`, responding “Да, разрешаю публикацию изменений alpha.3 в этом репозитории” to that exact destination. Continue ordinary focused pushes and hosted qualification there within this scope; no duplicate permission question is required. This does not authorize other destinations, private manuscript/fixture uploads, destructive history changes or unrelated releases. Preserve synthetic public fixtures and the existing source/independent acceptance gates. The previous automatic-review push rejection was resolved by this explicit user authorization, not bypassed.
+
+
+## Completion-focused execution — 2026-11-09
+
+The user resumed alpha.3 and explicitly corrected fragmented delivery. Read `docs/governance/ALPHA3_RELEASE_MAP.md` for the authoritative P0–P11 order and `docs/governance/ALPHA3_DELIVERY.md` for evidence and historical checkpoints. Limit product implementation to one active issue. Root owns integration, hosted build dispatch and acceptance; each delegated task names one issue, a bounded deliverable, owned files, required evidence and stop condition. A reviewer independently checks the same issue. Keep other feature streams parked, including already drafted work; do not churn their dependencies while accepting the active issue. If blocked, record the exact blocker and continue resolving the active issue. Advancing or deferring it requires an explicit user decision recorded in the issue; the release map supersedes older queue-switching discretion.
+
+Finish in order: specification, integrated behavior, relevant checks, actual native evidence, independent acceptance, issue update/closure. Source-only progress stays explicitly partial. The approved lion writer supersedes the old monk as the current brand (#16); immutable historical releases and their recorded evidence remain historical.
+
+## Two-axis parity acceptance — 2026-11-09
+
+Read `docs/migration/PARITY_SCOPE.json`, `docs/migration/CANVAS_PARITY_MATRIX.md` and `docs/design/ROLE_JOURNEYS.md`. The existing `UX_GATE.json` owns both source-inventory/capability acceptance and complete role-journey acceptance. Both are mandatory for alpha.3, regardless of the pre-1.0 version. Keep inventories pending until independently reviewed for omissions; source coverage scaffolding is not exhaustive verification. Import/render/model support is not reachable authoring. Preserve the single approved table-capacity exception and require explicit authorization for any other baseline reduction.
+
+For each active issue, connect source-backed stable IDs, OpenSpec, reachable commands, semantic checks and actual exact-candidate native evidence. Hash reviewed reports. An issue may close only for its entire verified scope; closing #15 does not close full Canvas #17. Root retains WIP=1; review the same issue before moving on. Classify role stories and research as baseline, requested enhancement or unselected hypothesis; vendor documentation and designed personas are not observed user validation. User corrections update feedback, the relevant task and independent review criteria before reacceptance.
+
+## Explicit Canvas engine publication authorization — 2026-11-09
+
+The user explicitly authorized publishing the reviewed commit e5dc514 and subsequent alpha.3 Canvas engine changes to `git@github.com:avacadorun-dev/craft-canvas.git`, answering “Разрешить публикацию в craft-canvas” to that exact destination. Continue ordinary focused pushes and hosted qualification there within this scope; no duplicate publication question is required. Preserve synthetic public fixtures, source/independent acceptance gates, and qualify an exact engine revision before application adoption. This does not authorize other destinations, private manuscript/media uploads, destructive history changes or unrelated releases. The earlier automatic-review push rejection was resolved by this explicit user authorization, not bypassed.
+
+## Latest separation of work and alpha.3 boundary — 2026-11-09
+
+F-48/F-49 supersede the earlier engine/app WIP and all-parity alpha.3 boundary. The Canvas workstream focuses on standalone production CraftCanvas with a strict issue roadmap: current WriterCraft needs first, then complete React Flow parity. A separate application agent may complete a concrete character/screenwriting scenario and other unblocked issues, and publish a bounded alpha.3 without waiting for full Canvas. Read the latest overrides in `docs/governance/ALPHA3_RELEASE_MAP.md`, `docs/governance/NEXT_RELEASE.md` and `docs/verification/ALPHA3_NON_CANVAS_HANDOFF.md`.
+
+Keep one active issue within each workstream and explicit file ownership. Application integration of new Canvas waits for an exact qualified engine handoff; the library agent does not concurrently edit app behavior. Preserve all unfinished parity/data contracts and current work. A bounded alpha.3 needs its own honest named independent gate; do not accept `full-editor-parity`, close #17/#4 or imply completed Canvas to enable release. Existing publication/data/preview protections remain in force.

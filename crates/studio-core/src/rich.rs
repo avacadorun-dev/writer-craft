@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    Document, Result, StudioError, Workspace, append_revision, read_document, require_project,
-    require_revision, validate_body, validate_title, write_revision,
+    Document, Project, Result, StudioError, Workspace, append_revision, read_document,
+    require_project, require_revision, validate_body, validate_title, write_revision,
 };
 
 /// A complete recoverable structured draft pinned to its canonical base.
@@ -39,7 +39,71 @@ pub struct RichRevision {
     pub source: String,
 }
 
+/// Native representation for the first empty manuscript; this is not a project-type taxonomy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InitialManuscript {
+    /// Original native MVP prose representation.
+    Plain,
+    /// Canonical structured manuscript for the complete native editor.
+    Structured,
+}
+
+/// One acknowledged aggregate creation; project and manuscript never exist only halfway.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreatedProject {
+    /// Newly saved native project.
+    pub project: Project,
+    /// Its matching initial canonical manuscript and revision1.
+    pub manuscript: Document,
+}
+
 impl Workspace {
+    /// Create the project and its first empty manuscript/history atomically.
+    /// Validation or any insertion failure leaves the existing library unchanged.
+    pub fn create_project_with_manuscript(
+        &self,
+        title: &str,
+        manuscript_title: &str,
+        format: InitialManuscript,
+    ) -> Result<CreatedProject> {
+        let title = validate_title(title, 120)?;
+        let manuscript_title = validate_title(manuscript_title, 200)?;
+        let rich = match format {
+            InitialManuscript::Plain => None,
+            InitialManuscript::Structured => {
+                let content = RichTree::plain(uuid::Uuid::new_v4().to_string(), "")
+                    .map_err(model_error)?
+                    .to_json()
+                    .map_err(model_error)?;
+                let (_, _, encoded) = validate_tree(content)?;
+                Some(encoded)
+            }
+        };
+        let project = Project {
+            id: uuid::Uuid::new_v4().to_string(),
+            title: title.into(),
+        };
+        let manuscript_id = uuid::Uuid::new_v4().to_string();
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        transaction.execute(
+            "INSERT INTO projects(id,title) VALUES(?1,?2)",
+            params![project.id, project.title],
+        )?;
+        let manuscript = insert_initial_manuscript(
+            &transaction,
+            &project.id,
+            &manuscript_id,
+            manuscript_title,
+            "",
+            rich.as_deref(),
+        )?;
+        transaction.commit()?;
+        Ok(CreatedProject {
+            project,
+            manuscript,
+        })
+    }
     /// Create a structured document and both histories in one transaction.
     pub fn create_rich_document(
         &self,
@@ -53,13 +117,8 @@ impl Workspace {
         let mut connection = self.connection()?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         require_project(&transaction, project_id)?;
-        transaction.execute(
-            "INSERT INTO documents(id,project_id,title,body,revision,read_only,source_json) VALUES(?1,?2,?3,?4,1,0,NULL)",
-            params![id, project_id, title, body],
-        )?;
-        append_revision(&transaction, &id, 1, &body, "manual")?;
-        write_rich_snapshot(&transaction, &id, 1, &encoded)?;
-        let result = read_document(&transaction, &id)?;
+        let result =
+            insert_initial_manuscript(&transaction, project_id, &id, title, &body, Some(&encoded))?;
         transaction.commit()?;
         Ok(result)
     }
@@ -332,4 +391,21 @@ pub(super) fn write_rich_snapshot(
         params![id, revision, encoded],
     )?;
     Ok(())
+}
+
+/// Internal insertion for already validated text/tree pairs, under the caller's transaction.
+pub(super) fn insert_initial_manuscript(
+    connection: &rusqlite::Connection,
+    project: &str,
+    id: &str,
+    title: &str,
+    body: &str,
+    encoded: Option<&str>,
+) -> Result<Document> {
+    connection.execute("INSERT INTO documents(id,project_id,title,body,revision,read_only,source_json) VALUES(?1,?2,?3,?4,1,0,NULL)", params![id,project,title,body])?;
+    append_revision(connection, id, 1, body, "manual")?;
+    if let Some(encoded) = encoded {
+        write_rich_snapshot(connection, id, 1, encoded)?;
+    }
+    read_document(connection, id)
 }

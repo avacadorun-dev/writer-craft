@@ -125,6 +125,7 @@ pub struct ProjectExportSnapshot {
     recovery: Value,
     native_state: Value,
     requires_companion: bool,
+    retained_evidence: bool,
     attachments: Vec<ProjectAttachment>,
     assets: ProjectAssetSource,
 }
@@ -154,8 +155,17 @@ impl ProjectExportSnapshot {
     pub fn requires_canonical_companion(&self) -> bool {
         self.requires_companion
     }
-    /// Complete saved source plus native state/evidence; importing it grants no replay authority.
+    /// Whether flat imported native/unknown evidence requires the format-2 streaming export.
+    pub fn has_retained_evidence(&self) -> bool {
+        self.retained_evidence
+    }
+    /// Historical format-1 companion compatibility; imported flat evidence requires format 2.
     pub fn canonical_manifest_bytes(&self) -> Result<Vec<u8>> {
+        if self.retained_evidence {
+            return invalid(
+                "This project contains retained native evidence; use native canonical format-2 export or a whole-workspace backup",
+            );
+        }
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Canonical<'a> {
@@ -193,6 +203,78 @@ impl ProjectExportSnapshot {
 }
 
 impl Workspace {
+    /// Capture only one same-project media resource, without reading manuscripts or other assets.
+    ///
+    /// Source logical aliases and native-created media handles are scoped to this project. The
+    /// returned descriptor is the exact identity accepted by the one-object byte capability.
+    /// Open a separate media-worker Workspace before calling this method: subsequent copy/load
+    /// operations intentionally hold that worker's own connection while verifying immutable bytes.
+    /// Non-image originals retain their existing MIME-specific bounds, never the image 12 MiB cap.
+    pub fn project_media_source(
+        &self,
+        project: &str,
+        logical_id: &str,
+    ) -> Result<(ProjectAttachment, ProjectAssetSource)> {
+        let connection = self.connection()?;
+        require_project(&connection, project)?;
+        let mut statement = connection.prepare("SELECT a.rowid,a.id,a.sha256,a.byte_size,a.media_type,a.original_name,a.width,a.height,m.logical_id,m.archive_path FROM project_assets a LEFT JOIN project_asset_metadata m ON m.project_id=a.project_id AND m.native_asset_id=a.id WHERE a.project_id=?1 AND (m.resource_kind IS NULL OR m.resource_kind='media') AND (m.logical_id=?2 OR a.id=?2) LIMIT 2")?;
+        let rows = statement
+            .query_map(params![project, logical_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    read_unsigned(row, 3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<u32>>(6)?,
+                    row.get::<_, Option<u32>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if rows.len() > 1 {
+            return invalid(
+                "Media identity is ambiguous inside this project; select its explicit logical reference",
+            );
+        }
+        let (rowid, native, sha, size, mime, name, width, height, logical, path) = rows
+            .into_iter()
+            .next()
+            .ok_or_else(|| StudioError::NotFound {
+                kind: "project media",
+                id: logical_id.to_owned(),
+            })?;
+        if size > super::MAX_PROJECT_TRANSFER_BYTES {
+            return invalid("Media original exceeds the explicit 512 MiB resource bound");
+        }
+        let logical = logical.unwrap_or(native);
+        let path = path.unwrap_or_else(|| format!("media/native-{}{}", logical, extension(&mime)));
+        let descriptor = ProjectAttachment {
+            resource_kind: "media".into(),
+            logical_id: logical,
+            path: path.clone(),
+            sha256: sha,
+            byte_size: size,
+            media_type: mime,
+            original_name: name,
+            width,
+            height,
+        };
+        let assets = ProjectAssetSource {
+            connection: Arc::clone(&self.connection),
+            project_id: project.to_owned(),
+            assets: HashMap::from([(
+                path,
+                CapturedAsset {
+                    rowid,
+                    descriptor: descriptor.clone(),
+                },
+            )]),
+        };
+        Ok((descriptor, assets))
+    }
     /// Capture canonical records, metadata, histories and recovery in one read transaction.
     /// Run sizeable captures and subsequent asset copies on a separately opened worker Workspace.
     pub fn project_export_snapshot(&self, project: &str) -> Result<ProjectExportSnapshot> {
@@ -363,7 +445,13 @@ impl Workspace {
         capture_saved_canvases(&transaction, project, &mut manifest)?;
         let (mut native_state, native_changed) = capture_native_state(&transaction, project)?;
         native_state["documentAliases"] = serde_json::to_value(&node_map)?;
-        let requires_companion = native_changed || !prose.is_empty() || !rich.is_empty();
+        let retained_evidence: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM project_evidence_references WHERE project_id=?1)",
+            [project],
+            |row| row.get(0),
+        )?;
+        let requires_companion =
+            native_changed || !prose.is_empty() || !rich.is_empty() || retained_evidence;
         let manifest_bytes = match original {
             Some(raw) => super::json::encode_preserving_manifest(&raw, &manifest)?,
             None => serde_json::to_vec_pretty(&manifest)?,
@@ -376,6 +464,7 @@ impl Workspace {
             recovery,
             native_state,
             requires_companion,
+            retained_evidence,
             attachments,
             assets: ProjectAssetSource {
                 connection: Arc::clone(&self.connection),
@@ -385,8 +474,8 @@ impl Workspace {
         })
     }
 }
-fn native_manifest(project: &str, title: &str) -> Value {
-    json!({"format":"writers-studio-project","formatVersion":8,"exportedAt":"0001-01-01T00:00:00Z","project":{"id":project,"title":title,"kind":"free","language":"ru","synopsis":"","structureRevision":1,"structure":{"schemaVersion":1,"template":"free","rootLabel":"Manuscript","nodeTypes":[{"key":"document","label":"Document","pluralLabel":"Documents","icon":"file-text","contentBearing":true,"allowedChildren":["document"],"canBeRoot":true}]},"createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"},"nodes":[],"documentRevisions":[],"namedVersions":[],"dictionaryTerms":[],"documentAnnotations":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[]})
+pub(super) fn native_manifest(project: &str, title: &str) -> Value {
+    json!({"format":"writers-studio-project","formatVersion":8,"exportedAt":"0001-01-01T00:00:00Z","project":{"id":project,"title":title,"kind":"free","language":"ru","synopsis":"","structureRevision":1,"structure":crate::project_structure::native_free_structure(),"createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z"},"nodes":[],"documentRevisions":[],"namedVersions":[],"dictionaryTerms":[],"documentAnnotations":[],"dictationSessions":[],"transcriptArtifacts":[],"transcriptDrafts":[],"transcriptDraftRevisions":[],"audio":[],"media":[],"canvases":[],"canvasRevisions":[],"projectMemory":[],"projectMemoryRevisions":[]})
 }
 fn capture_assets(
     connection: &Connection,
@@ -420,34 +509,51 @@ fn capture_assets(
         .filter_map(|item| item["path"].as_str())
         .map(str::to_lowercase)
         .collect();
-    let mut new_media = Vec::new();
+    let mut declared = HashSet::new();
+    for (domain, key) in [("media", "id"), ("audio", "sessionId")] {
+        for record in array(manifest, domain)? {
+            declared.insert((domain.to_owned(), string(record, key)?.to_owned()));
+        }
+    }
+    let mut appended: HashMap<String, Vec<Value>> = HashMap::new();
     for (rowid, native, sha, size, mime, name, width, height, kind, logical, path, raw) in rows {
         let kind = kind.unwrap_or_else(|| "media".into());
         let logical = logical.unwrap_or(native);
-        let path = match path {
-            Some(path) => path,
-            None => {
-                let path = format!("media/native-{logical}{}", extension(&mime));
-                if !paths.insert(path.to_lowercase()) {
-                    return invalid("native export asset path collides with retained source");
-                }
-                manifest["formatVersion"] = json!(8);
-                new_media.push(json!({"id":logical,"path":path,"sha256":sha,"byteSize":size,"mediaType":mime,"originalName":name,"width":width,"height":height}));
-                path
-            }
-        };
-        if let Some(raw) = raw {
-            let original: Value = serde_json::from_str(&raw)?;
-            if original["sha256"]
+        let path = path.unwrap_or_else(|| format!("media/native-{logical}{}", extension(&mime)));
+        let original = raw
+            .map(|raw| serde_json::from_str::<Value>(&raw))
+            .transpose()?;
+        if let Some(original) = original.as_ref()
+            && (original["sha256"]
                 .as_str()
                 .is_none_or(|value| !value.eq_ignore_ascii_case(&sha))
                 || original["byteSize"].as_u64() != Some(size)
-                || original["mediaType"].as_str() != Some(mime.as_str())
-            {
-                return Err(StudioError::CorruptData(
-                    "Original project asset metadata changed".into(),
-                ));
+                || original["mediaType"].as_str() != Some(mime.as_str()))
+        {
+            return Err(StudioError::CorruptData(
+                "Original project asset metadata changed".into(),
+            ));
+        }
+        if !declared.contains(&(kind.clone(), logical.clone())) {
+            if !paths.insert(path.to_lowercase()) {
+                return invalid("native export asset path collides with retained source");
             }
+            let mut record=original.unwrap_or_else(||json!({"path":path,"sha256":sha,"byteSize":size,"mediaType":mime,"originalName":name,"width":width,"height":height}));
+            let key = match kind.as_str() {
+                "media" => "id",
+                "audio" => "sessionId",
+                _ => return invalid("Unknown captured artifact resource kind"),
+            };
+            if record
+                .get(key)
+                .is_some_and(|id| id.as_str() != Some(logical.as_str()))
+                || record["path"].as_str() != Some(path.as_str())
+            {
+                return invalid("Native artifact identity/path differs from its retained metadata");
+            }
+            record[key] = json!(logical);
+            appended.entry(kind.clone()).or_default().push(record);
+            manifest["formatVersion"] = json!(8);
         }
         let descriptor = ProjectAttachment {
             resource_kind: kind,
@@ -468,10 +574,10 @@ fn capture_assets(
             return invalid("duplicate export attachment path");
         }
     }
-    if !new_media.is_empty() {
-        let mut media = array(manifest, "media")?.to_vec();
-        media.extend(new_media);
-        manifest["media"] = Value::Array(media);
+    for (domain, records) in appended {
+        let mut all = array(manifest, &domain)?.to_vec();
+        all.extend(records);
+        manifest[&domain] = Value::Array(all);
     }
     for domain in ["media", "audio"] {
         for record in array(manifest, domain)? {
@@ -552,6 +658,7 @@ fn refresh_canvases(connection: &Connection, project: &str, manifest: &mut Value
 }
 
 fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value, bool)> {
+    let labels = crate::project_labels::capture_catalog(connection, project)?;
     let mut statement=connection.prepare("SELECT a.id,a.document_id,a.annotation_json,p.logical_id,p.native_projection_json FROM document_annotations a JOIN documents d ON d.id=a.document_id LEFT JOIN project_annotation_projections p ON p.project_id=d.project_id AND p.native_annotation_id=a.id WHERE d.project_id=?1 ORDER BY a.rowid")?;
     let rows = statement
         .query_map([project], |row| {
@@ -574,7 +681,8 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(opaque_statement);
-    let mut changed = !opaque_rows.is_empty();
+    let mut changed =
+        !opaque_rows.is_empty() || labels != json!({"schemaVersion":1,"revision":0,"labels":[]});
     let opaque_documents=opaque_rows.into_iter().map(|(document,raw)|->Result<Value>{Ok(json!({"nativeDocumentId":document,"readOnly":true,"sourceJsonRaw":raw,"sourceJson":serde_json::from_str::<Value>(&raw)?}))}).collect::<Result<Vec<_>>>()?;
     let mut annotations = Vec::new();
     for (native, document, raw, logical, baseline) in rows {
@@ -649,7 +757,7 @@ fn capture_native_state(connection: &Connection, project: &str) -> Result<(Value
     changed |= !rows.is_empty();
     let proposals=rows.into_iter().map(|(id,document,base,before,after,reason,status,applied,undone,anchor,before_hash,after_hash)|->Result<Value>{Ok(json!({"nativeId":id,"nativeDocumentId":document,"baseRevision":base,"before":before,"after":after,"reason":reason,"status":status,"appliedRevision":applied,"undoneRevision":undone,"anchor":serde_json::from_str::<Value>(&anchor)?,"beforeHash":before_hash,"afterHash":after_hash}))}).collect::<Result<Vec<_>>>()?;
     Ok((
-        json!({"authority":"untrusted-on-import","opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
+        json!({"authority":"untrusted-on-import","projectLabels":labels,"opaqueDocuments":opaque_documents,"annotations":annotations,"annotationHistory":history,"attachmentSnapshots":attachments,"canvasDrafts":canvas_drafts,"reviewEvidence":proposals}),
         changed,
     ))
 }

@@ -369,6 +369,8 @@ impl RenderState {
             generation: self.surface.generation,
             scroll_offset_bits: 0,
             visible_atoms: visible.len(),
+            target_is_text: false,
+            visible_text_targets: 0,
             pending_atoms,
             failed_atoms,
             target_visible,

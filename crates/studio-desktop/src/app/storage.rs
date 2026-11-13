@@ -12,6 +12,8 @@ pub(super) struct StorageState {
     attempt: Option<BackupAttempt>,
     #[cfg(feature = "editor-preview")]
     preflight: Option<BackupPreflight>,
+    #[cfg(feature = "editor-preview")]
+    board_preflight: Option<BoardBackupPreflight>,
 }
 struct StorageJob {
     receiver: mpsc::Receiver<AppResult<StorageOutcome>>,
@@ -25,6 +27,8 @@ enum StorageOutcome {
 enum BackupAttempt {
     #[cfg(feature = "editor-preview")]
     WaitingForNotes,
+    #[cfg(feature = "editor-preview")]
+    WaitingForBoard,
     Selecting,
     Running,
     Verified,
@@ -36,6 +40,8 @@ impl BackupAttempt {
         match self {
             #[cfg(feature = "editor-preview")]
             Self::WaitingForNotes => "Review pending notes before backing up.",
+            #[cfg(feature = "editor-preview")]
+            Self::WaitingForBoard => "Waiting for the board to finish saving.",
             Self::Selecting => "Choose a backup file.",
             Self::Running => "Backing up workspace…",
             Self::Verified => "Backup created and verified.",
@@ -49,6 +55,12 @@ struct BackupPreflight {
     documents: Vec<PendingNoteDocument>,
 }
 #[cfg(feature = "editor-preview")]
+struct BoardBackupPreflight {
+    project_id: String,
+    board_id: String,
+    title: String,
+}
+#[cfg(feature = "editor-preview")]
 struct PendingNoteDocument {
     id: String,
     title: String,
@@ -58,7 +70,7 @@ struct PendingNoteDocument {
 impl StorageState {
     pub(super) fn modal_open(&self) -> bool {
         #[cfg(feature = "editor-preview")]
-        if self.preflight.is_some() {
+        if self.preflight.is_some() || self.board_preflight.is_some() {
             return true;
         }
         self.job.as_ref().is_some_and(|job| job.cancel.is_some())
@@ -135,6 +147,25 @@ impl StudioApp {
     /// Prepare explicit backup prerequisites without committing a note or opening a file dialog.
     pub(super) fn prepare_workspace_backup(&mut self) -> AppResult<bool> {
         self.storage.attempt = Some(BackupAttempt::Selecting);
+        #[cfg(feature = "editor-preview")]
+        match self.flush_canvas_for_transfer(None) {
+            Ok(false) => {
+                if let Some(state) = &self.canvas {
+                    self.storage.board_preflight = Some(BoardBackupPreflight {
+                        project_id: state.project_id.clone(),
+                        board_id: state.snapshot.canvas.id.clone(),
+                        title: state.snapshot.canvas.title.clone(),
+                    });
+                    self.storage.attempt = Some(BackupAttempt::WaitingForBoard);
+                    return Ok(false);
+                }
+            }
+            Err(error) => {
+                self.storage.attempt = Some(BackupAttempt::Failed);
+                return Err(error);
+            }
+            Ok(true) => {}
+        }
         if let Err(error) = self.save_explicit() {
             self.storage.attempt = Some(BackupAttempt::Failed);
             return Err(error);
@@ -148,6 +179,11 @@ impl StudioApp {
             self.storage.attempt = Some(BackupAttempt::WaitingForNotes);
             return Ok(false);
         }
+        #[cfg(feature = "editor-preview")]
+        {
+            self.storage.preflight = None;
+            self.storage.board_preflight = None;
+        }
         Ok(true)
     }
     fn start_workspace_backup(&mut self, ctx: &egui::Context) -> AppResult<()> {
@@ -157,6 +193,15 @@ impl StudioApp {
         Ok(())
     }
     fn choose_workspace_backup_destination(&mut self, ctx: &egui::Context) {
+        // Every entry route rechecks asynchronous writing and note prerequisites immediately.
+        match self.prepare_workspace_backup() {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => {
+                self.record_error(Err(error));
+                return;
+            }
+        }
         self.storage.attempt = Some(BackupAttempt::Selecting);
         let mut dialog = rfd::FileDialog::new()
             .set_title(self.language.text("Back up workspace…"))
@@ -254,6 +299,7 @@ impl StudioApp {
         self.open_document(document)?;
         self.notes.select_pending_draft(id);
         self.storage.preflight = None;
+        self.storage.board_preflight = None;
         self.storage.attempt = Some(BackupAttempt::Cancelled);
         self.settings_open = false;
         self.inspector = Inspector::Notes;
@@ -266,6 +312,7 @@ impl StudioApp {
     #[cfg(feature = "editor-preview")]
     pub(super) fn cancel_workspace_backup_preflight(&mut self) {
         self.storage.preflight = None;
+        self.storage.board_preflight = None;
         self.storage.attempt = Some(BackupAttempt::Cancelled);
     }
 
@@ -317,9 +364,85 @@ impl StudioApp {
         }
     }
 
+    #[cfg(feature = "editor-preview")]
+    fn board_backup_dialog(&mut self, ctx: &egui::Context, t: Tokens) -> bool {
+        let Some(preflight) = &self.storage.board_preflight else {
+            return false;
+        };
+        let l = self.language;
+        let same = self.canvas.as_ref().is_some_and(|state| {
+            state.project_id == preflight.project_id
+                && state.snapshot.canvas.id == preflight.board_id
+        });
+        let ready = same
+            && self
+                .canvas
+                .as_ref()
+                .is_some_and(|state| !state.blocks_navigation());
+        let status = self
+            .canvas
+            .as_ref()
+            .map(|state| state.durability_status())
+            .unwrap_or("Attention needed");
+        let project_title = self
+            .projects
+            .iter()
+            .find(|project| project.id == preflight.project_id)
+            .map(|project| project.title.as_str())
+            .unwrap_or_default();
+        let mut review = false;
+        let mut cancel = false;
+        let mut proceed = false;
+        let response = modal(
+            ctx,
+            l,
+            "workspace-board-prerequisite",
+            l.text("Back up workspace…"),
+            560.0,
+            |ui| {
+                ui.add(egui::Label::new(RichText::new(&preflight.title).strong()).truncate())
+                    .on_hover_text(&preflight.title);
+                if !project_title.is_empty() {
+                    ui.add(
+                        egui::Label::new(RichText::new(project_title).color(t.muted)).truncate(),
+                    );
+                }
+                ui.add_space(12.0);
+                ui.label(l.text(if !same {
+                    "The board changed. Review it before backing up."
+                } else if ready {
+                    "Choose a backup file."
+                } else {
+                    "Waiting for the board to finish saving."
+                }));
+                ui.label(RichText::new(l.text(status)).color(if ready { t.good } else { t.muted }));
+                components::footer(ui, |ui| {
+                    proceed = components::action(ui, l.text("Back up workspace…"), ready, Some(t))
+                        .clicked();
+                    review = components::action(ui, l.text("Review board"), same, None).clicked();
+                    cancel = components::action(ui, l.text("Cancel"), true, None).clicked();
+                });
+            },
+        );
+        if cancel || response.should_close() {
+            self.cancel_workspace_backup_preflight();
+        } else if review {
+            // End only the backup attempt, preserving the same native card/editor/draft.
+            self.cancel_workspace_backup_preflight();
+            self.settings_open = false;
+        } else if proceed {
+            self.choose_workspace_backup_destination(ctx);
+        }
+        true
+    }
+
     pub(super) fn storage_dialog(&mut self, ctx: &egui::Context, t: Tokens) {
         // Let the existing actionable error modal win; dismissing it returns to this preflight.
         if self.error.is_some() {
+            return;
+        }
+        #[cfg(feature = "editor-preview")]
+        if self.board_backup_dialog(ctx, t) {
             return;
         }
         #[cfg(feature = "editor-preview")]

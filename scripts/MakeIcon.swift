@@ -1,150 +1,202 @@
+// Native export of the approved raster artwork. No tracing, recoloring or replacement drawing.
 import AppKit
+import CryptoKit
+import Darwin
 import Foundation
 
-guard CommandLine.arguments.count == 2 else {
-    throw NSError(domain: "WriterCraftIcon", code: 1, userInfo: [NSLocalizedDescriptionKey: "Supply one destination iconset folder."])
-}
-let destination = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
-try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+private let sourceSHA256 = "43cd82c1e450674a2dca93a1c68c8f89002c361d0112aea44f5a073b98fa3329"
+private let cornerFraction = CGFloat(250) / 1254
+private let safeAreaFraction: CGFloat = 0.875
 
-func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat = 1) -> NSColor {
-    NSColor(calibratedRed: red / 255, green: green / 255, blue: blue / 255, alpha: alpha)
+private func failure(_ message: String) -> NSError {
+    NSError(domain: "WriterCraftIcon", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
 }
 
-func path(_ points: [(CGFloat, CGFloat)]) -> NSBezierPath {
-    let result = NSBezierPath()
-    if let first = points.first {
-        result.move(to: NSPoint(x: first.0, y: first.1))
-        for point in points.dropFirst() {
-            result.line(to: NSPoint(x: point.0, y: point.1))
+private func color(_ hex: UInt32) -> NSColor {
+    NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
+            green: CGFloat((hex >> 8) & 255) / 255,
+            blue: CGFloat(hex & 255) / 255, alpha: 1)
+}
+
+private func bitmap(_ pixels: Int) throws -> CGContext {
+    guard pixels > 0, pixels <= 4096,
+          let space = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(data: nil, width: pixels, height: pixels,
+                                  bitsPerComponent: 8, bytesPerRow: pixels * 4, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue |
+                                      CGBitmapInfo.byteOrder32Big.rawValue) else {
+        throw failure("Cannot allocate a bounded sRGB icon bitmap.")
+    }
+    context.interpolationQuality = .high
+    context.setShouldAntialias(true)
+    return context
+}
+
+private func encode(_ image: CGImage, to path: URL) throws {
+    let representation = NSBitmapImageRep(cgImage: image)
+    guard let png = representation.representation(using: .png, properties: [:]) else {
+        throw failure("Cannot encode a native PNG.")
+    }
+    try png.write(to: path, options: .atomic)
+}
+
+private func roundedContains(_ x: CGFloat, _ y: CGFloat, rect: CGRect, radius: CGFloat) -> Bool {
+    guard rect.contains(CGPoint(x: x, y: y)) else { return false }
+    let centerX = min(max(x, rect.minX + radius), rect.maxX - radius)
+    let centerY = min(max(y, rect.minY + radius), rect.maxY - radius)
+    return hypot(x - centerX, y - centerY) < radius
+}
+
+private func render(_ source: CGImage, pixels: Int, safeArea: Bool) throws -> (CGImage, [String: Any]) {
+    let context = try bitmap(pixels)
+    let side = CGFloat(pixels) * (safeArea ? safeAreaFraction : 1)
+    let inset = (CGFloat(pixels) - side) / 2
+    let tile = CGRect(x: inset, y: inset, width: side, height: side)
+    let radius = side * cornerFraction
+    context.addPath(CGPath(roundedRect: tile, cornerWidth: radius, cornerHeight: radius, transform: nil))
+    context.clip()
+    context.draw(source, in: tile)
+    guard let image = context.makeImage(), let raw = context.data else {
+        throw failure("Cannot finish the native icon bitmap.")
+    }
+    let bytes = raw.bindMemory(to: UInt8.self, capacity: pixels * pixels * 4)
+    var bounds = [pixels, pixels, -1, -1]
+    var opaqueInterior = 0
+    for y in 0..<pixels {
+        for x in 0..<pixels {
+            let alpha = bytes[(y * pixels + x) * 4 + 3]
+            if alpha > 0 {
+                bounds[0] = min(bounds[0], x)
+                bounds[1] = min(bounds[1], y)
+                bounds[2] = max(bounds[2], x)
+                bounds[3] = max(bounds[3], y)
+            }
+            // Exclude only the one-pixel antialias boundary of the approved rounded tile.
+            if roundedContains(CGFloat(x) + 0.5, CGFloat(y) + 0.5,
+                               rect: tile.insetBy(dx: 1, dy: 1), radius: max(0, radius - 1)) {
+                guard alpha == 255 else { throw failure("The rounded icon has a nonopaque interior.") }
+                opaqueInterior += 1
+            }
         }
-        result.close()
     }
-    result.lineJoinStyle = .round
-    result.lineCapStyle = .round
-    return result
+    let expectedMin = Int(inset)
+    let expectedMax = pixels - expectedMin - 1
+    guard bounds == [expectedMin, expectedMin, expectedMax, expectedMax], opaqueInterior > 0 else {
+        throw failure("The icon's visible bounds do not match its full-tile/safe-area contract.")
+    }
+    return (image, ["pixels": pixels, "visible_bounds_inclusive": bounds,
+                    "opaque_interior_pixels": opaqueInterior, "safe_area": safeArea])
 }
 
-func drawMark() {
-    let blueInk = rgb(31, 55, 86)
-    let paper = rgb(255, 248, 232)
-    let crest = NSBezierPath()
-    crest.move(to: NSPoint(x: 20, y: 1.5))
-    crest.curve(to: NSPoint(x: 35.5, y: 16), controlPoint1: NSPoint(x: 29, y: 1.5), controlPoint2: NSPoint(x: 35.5, y: 7))
-    crest.line(to: NSPoint(x: 35.5, y: 26.2))
-    crest.curve(to: NSPoint(x: 20, y: 38.1), controlPoint1: NSPoint(x: 35.5, y: 31.4), controlPoint2: NSPoint(x: 28.5, y: 35.2))
-    crest.curve(to: NSPoint(x: 4.5, y: 26.2), controlPoint1: NSPoint(x: 11.5, y: 35.2), controlPoint2: NSPoint(x: 4.5, y: 31.4))
-    crest.line(to: NSPoint(x: 4.5, y: 16))
-    crest.curve(to: NSPoint(x: 20, y: 1.5), controlPoint1: NSPoint(x: 4.5, y: 7), controlPoint2: NSPoint(x: 11, y: 1.5))
-    crest.close()
-    rgb(225, 234, 245).setFill()
-    crest.fill()
-    rgb(107, 139, 180, 0.8).setStroke()
-    crest.lineWidth = 0.5
-    crest.stroke()
-
-    let hood = NSBezierPath()
-    hood.move(to: NSPoint(x: 10, y: 30))
-    hood.curve(to: NSPoint(x: 15, y: 9.5), controlPoint1: NSPoint(x: 11.2, y: 22), controlPoint2: NSPoint(x: 12, y: 13))
-    hood.curve(to: NSPoint(x: 20, y: 6), controlPoint1: NSPoint(x: 16.8, y: 7.2), controlPoint2: NSPoint(x: 18.4, y: 6))
-    hood.curve(to: NSPoint(x: 25, y: 9.5), controlPoint1: NSPoint(x: 21.6, y: 6), controlPoint2: NSPoint(x: 23.2, y: 7.2))
-    hood.curve(to: NSPoint(x: 30, y: 30), controlPoint1: NSPoint(x: 28, y: 13), controlPoint2: NSPoint(x: 28.8, y: 22))
-    hood.close()
-    if let robeGradient = NSGradient(starting: rgb(91, 137, 193), ending: rgb(45, 86, 140)) {
-        robeGradient.draw(in: hood, angle: 90)
-    } else {
-        rgb(66, 108, 165).setFill()
-        hood.fill()
-    }
-    blueInk.setStroke()
-    hood.lineWidth = 0.75
-    hood.lineJoinStyle = .round
-    hood.stroke()
-
-    let opening = NSBezierPath()
-    opening.move(to: NSPoint(x: 20, y: 10))
-    opening.curve(to: NSPoint(x: 15.1, y: 16), controlPoint1: NSPoint(x: 16.8, y: 12), controlPoint2: NSPoint(x: 15.1, y: 14))
-    opening.curve(to: NSPoint(x: 20, y: 23.5), controlPoint1: NSPoint(x: 15.2, y: 19.5), controlPoint2: NSPoint(x: 17, y: 22.1))
-    opening.curve(to: NSPoint(x: 24.9, y: 16), controlPoint1: NSPoint(x: 23, y: 22.1), controlPoint2: NSPoint(x: 24.8, y: 19.5))
-    opening.curve(to: NSPoint(x: 20, y: 10), controlPoint1: NSPoint(x: 24.9, y: 14), controlPoint2: NSPoint(x: 23.2, y: 12))
-    opening.close()
-    blueInk.setFill()
-    opening.fill()
-
-    let face = NSBezierPath()
-    face.move(to: NSPoint(x: 20, y: 12.2))
-    face.curve(to: NSPoint(x: 16.8, y: 16.8), controlPoint1: NSPoint(x: 17.9, y: 13.6), controlPoint2: NSPoint(x: 16.8, y: 15.1))
-    face.curve(to: NSPoint(x: 20, y: 21.8), controlPoint1: NSPoint(x: 16.8, y: 18.8), controlPoint2: NSPoint(x: 18.1, y: 20.5))
-    face.curve(to: NSPoint(x: 23.2, y: 16.8), controlPoint1: NSPoint(x: 21.9, y: 20.5), controlPoint2: NSPoint(x: 23.2, y: 18.8))
-    face.curve(to: NSPoint(x: 20, y: 12.2), controlPoint1: NSPoint(x: 23.2, y: 15.1), controlPoint2: NSPoint(x: 22.1, y: 13.6))
-    face.close()
-    paper.setFill()
-    face.fill()
-
-    let folds = NSBezierPath()
-    folds.move(to: NSPoint(x: 15.7, y: 21.4)); folds.line(to: NSPoint(x: 13.5, y: 27))
-    folds.move(to: NSPoint(x: 24.3, y: 21.4)); folds.line(to: NSPoint(x: 26.5, y: 27))
-    folds.lineWidth = 0.75
-    folds.lineCapStyle = .round
-    blueInk.withAlphaComponent(0.6).setStroke()
-    folds.stroke()
-
-    for points: [(CGFloat, CGFloat)] in [
-        [(7, 25), (20, 27), (20, 35), (7.5, 33)],
-        [(20, 27), (33, 25), (32.5, 33), (20, 35)],
-    ] {
-        let page = path(points)
-        paper.setFill()
-        page.fill()
-        blueInk.setStroke()
-        page.lineWidth = 0.8
-        page.stroke()
-    }
-    let rules = NSBezierPath()
-    for segment: [(CGFloat, CGFloat)] in [
-        [(10.2, 28.3), (17.2, 29.5)], [(29.8, 28.3), (22.8, 29.5)],
-        [(10.4, 30.6), (17.2, 31.8)], [(29.6, 30.6), (22.8, 31.8)],
-    ] {
-        rules.move(to: NSPoint(x: segment[0].0, y: segment[0].1))
-        rules.line(to: NSPoint(x: segment[1].0, y: segment[1].1))
-    }
-    rules.lineWidth = 0.55
-    rules.lineCapStyle = .round
-    blueInk.withAlphaComponent(0.65).setStroke()
-    rules.stroke()
-}
-
-let variants = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)]
-for (size, scale) in variants {
-    let pixels = size * scale
-    guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
-          let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
-        throw NSError(domain: "WriterCraftIcon", code: 2, userInfo: [NSLocalizedDescriptionKey: "Cannot create the icon bitmap."])
+private func comparison(_ source: CGImage, destination: URL) throws {
+    let width = 1200
+    let height = 740
+    guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(data: nil, width: width, height: height,
+                                  bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue |
+                                      CGBitmapInfo.byteOrder32Big.rawValue) else {
+        throw failure("Cannot allocate the comparison bitmap.")
     }
     NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = context
-    context.imageInterpolation = .high
-    context.cgContext.setShouldAntialias(true)
-    context.cgContext.translateBy(x: 0, y: CGFloat(pixels))
-    context.cgContext.scaleBy(x: CGFloat(pixels) / 40, y: -CGFloat(pixels) / 40)
-
-    let tile = NSBezierPath(roundedRect: NSRect(x: 2.5, y: 2.5, width: 35, height: 35), xRadius: 7.4, yRadius: 7.4)
-    rgb(244, 239, 226).setFill()
-    tile.fill()
-    if let gradient = NSGradient(starting: rgb(255, 251, 241), ending: rgb(229, 221, 207)) {
-        gradient.draw(in: tile, angle: 90)
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    context.translateBy(x: 0, y: CGFloat(height))
+    context.scaleBy(x: 1, y: -1)
+    func label(_ text: String, x: CGFloat, y: CGFloat, size: CGFloat, hex: UInt32, bold: Bool = false) {
+        // AppKit text is drawn upright inside the comparison's top-down layout.
+        context.saveGState()
+        context.translateBy(x: x, y: y + size * 1.4)
+        context.scaleBy(x: 1, y: -1)
+        (text as NSString).draw(at: .zero, withAttributes: [
+            .font: bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size),
+            .foregroundColor: color(hex),
+        ])
+        context.restoreGState()
     }
-    rgb(183, 174, 158, 0.45).setStroke()
-    tile.lineWidth = 0.25
-    tile.stroke()
-    context.cgContext.translateBy(x: 4, y: 3.5)
-    context.cgContext.scaleBy(x: 0.8, y: 0.8)
-    drawMark()
-    NSGraphicsContext.restoreGraphicsState()
-
-    guard let png = bitmap.representation(using: .png, properties: [:]) else {
-        throw NSError(domain: "WriterCraftIcon", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot encode the icon PNG."])
+    color(0xf0f2f6).setFill()
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    label("WriterCraft — approved lion", x: 36, y: 22, size: 26, hex: 0x252c38, bold: true)
+    label("Original artwork and blue texture preserved. Native AppKit exports at actual pixel sizes.",
+          x: 36, y: 66, size: 16, hex: 0x5d697a)
+    for (row, theme) in [("Light", (UInt32(0xf7f8fa), UInt32(0x252c38))),
+                          ("Dark", (UInt32(0x21252b), UInt32(0xe8ecf3)))].enumerated() {
+        let top = CGFloat(122 + row * 258)
+        color(theme.1.0).setFill()
+        context.fill(CGRect(x: 20, y: top, width: 1160, height: 242))
+        label(theme.0 + " theme panel", x: 38, y: top + 14, size: 16, hex: theme.1.1, bold: true)
+        for (column, size) in [32, 64, 128, 32, 64, 128].enumerated() {
+            let safeArea = column >= 3
+            let x = CGFloat(62 + column * 190)
+            let y = top + 68 + CGFloat(128 - size) / 2
+            let (image, _) = try render(source, pixels: size, safeArea: safeArea)
+            context.saveGState()
+            context.translateBy(x: x, y: y + CGFloat(size))
+            context.scaleBy(x: 1, y: -1)
+            context.draw(image, in: CGRect(x: 0, y: 0, width: size, height: size))
+            context.restoreGState()
+            label("\(safeArea ? "OS icon" : "Full tile") · \(size) px", x: x - 5,
+                  y: top + 211, size: 13, hex: theme.1.1)
+        }
     }
-    let suffix = scale == 2 ? "@2x" : ""
-    try png.write(to: destination.appendingPathComponent("icon_\(size)x\(size)\(suffix).png"))
+    label("Full tile: no outer padding. OS icon: 87.5% tile, transparent safe area, no backing or shadow.",
+          x: 36, y: 665, size: 15, hex: 0x5d697a)
+    label("Asset comparison only — not an application screenshot.", x: 36, y: 696, size: 13, hex: 0x5d697a)
+    guard let image = context.makeImage() else { throw failure("Cannot finish the comparison.") }
+    try encode(image, to: destination)
+}
+
+private func main() throws {
+    guard CommandLine.arguments.count == 3 else {
+        throw failure("Usage: MakeIcon.swift APPROVED_SOURCE_PNG OUTPUT_FOLDER")
+    }
+    let sourceURL = URL(fileURLWithPath: CommandLine.arguments[1])
+    let destination = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
+    let data = try Data(contentsOf: sourceURL)
+    let sourceHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    guard sourceHash == sourceSHA256,
+          let representation = NSBitmapImageRep(data: data),
+          representation.pixelsWide == 1254, representation.pixelsHigh == 1254,
+          !representation.hasAlpha, let source = representation.cgImage else {
+        throw failure("Use the unchanged approved opaque 1254×1254 lion PNG with its recorded SHA-256.")
+    }
+    let iconset = destination.appendingPathComponent("WriterCraft.iconset", isDirectory: true)
+    try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
+    var report: [[String: Any]] = []
+    for (size, scale) in [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2),
+                          (256, 1), (256, 2), (512, 1), (512, 2)] {
+        let (image, evidence) = try render(source, pixels: size * scale, safeArea: true)
+        let suffix = scale == 2 ? "@2x" : ""
+        try encode(image, to: iconset.appendingPathComponent("icon_\(size)x\(size)\(suffix).png"))
+        report.append(evidence)
+    }
+    var toolbarRenditions: [[String: Any]] = []
+    for size in [32, 64, 128] {
+        let (image, evidence) = try render(source, pixels: size, safeArea: false)
+        try encode(image, to: destination.appendingPathComponent("writercraft-mark-\(size).png"))
+        toolbarRenditions.append(evidence)
+    }
+    let (toolbar, toolbarEvidence) = try render(source, pixels: 512, safeArea: false)
+    try encode(toolbar, to: destination.appendingPathComponent("writercraft-mark.png"))
+    let (application, _) = try render(source, pixels: 512, safeArea: true)
+    try encode(application, to: destination.appendingPathComponent("WriterCraft.png"))
+    try comparison(source, destination: destination.appendingPathComponent("comparison.png"))
+    let receipt: [String: Any] = [
+        "source_sha256": sourceHash, "source_pixels": 1254,
+        "source_unchanged": true, "recoloring": false,
+        "rounded_corner_fraction": Double(cornerFraction),
+        "os_safe_area_fraction": Double(safeAreaFraction),
+        "toolbar": toolbarEvidence, "toolbar_renditions": toolbarRenditions,
+        "os_renditions": report,
+        "color_space": "sRGB", "renderer": "native AppKit/CoreGraphics",
+    ]
+    let json = try JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys])
+    try json.write(to: destination.appendingPathComponent("icon-generation.json"), options: .atomic)
+}
+
+do {
+    try main()
+} catch {
+    fputs("WriterCraft icon export failed: \(error.localizedDescription)\n", stderr)
+    exit(EXIT_FAILURE)
 }

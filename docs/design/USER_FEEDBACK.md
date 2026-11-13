@@ -166,3 +166,157 @@ Regression evidence: actual compiled captures must reach the affected blocks aft
 ## F-38 — publish the completed checkpoint and continue parity in alpha.3
 
 Date: 2026-11-08. The owner requested finalizing the completed coherent application as alpha.2 now, publishing native installers including a macOS DMG, and moving unfinished large blocks to alpha.3. The owner also explicitly requested updating README with real current application screenshots. This supersedes the earlier all-open-issues alpha.2 scheduling decision; it does not waive data preservation, create full-parity evidence, close unfinished issues or authorize additional features. Regression/release checks: the installer must launch the current native rich editor under the normal application identity, screenshot claims must match a real compiled build, published alpha.1 stays immutable, and deferred work remains visible in issues and the alpha.3 plan.
+
+
+## F-39 — owner-tested alpha.2 and complete alpha.3 execution
+
+Date: 2026-11-08. The owner tested the published alpha.2 on macOS, confirmed it functional, and instructed the team to close issues whose complete criteria were met in that release. The continuing goal is to implement alpha.3 and close all remaining issues on complete verification. This lifts the checkpoint release freeze and supplies owner acceptance for already verified alpha.2 completions; it does not waive unfinished technical/native criteria or certify untested platforms. Reviewers must distinguish the closed installer request from remaining editor, workflow and compatibility gaps, preserve prior release evidence, and review alpha.3 independently against its exact compiled source.
+
+
+## F-40 — researched manuscript formatting and direct issue prose
+
+Date: 2026-11-08. Add research and resulting concrete formatting improvements for screenwriters, editors and writers in issue #14, starting with resizing images, rich visual blocks and tables directly on the native working surface. Distinguish object dimensions from workspace zoom, manuscript flow from free Canvas placement, and discovered needs from unselected competitor features. Issues should describe the requirement directly, without `Owner report` or repetitive attribution.
+
+Existing Studio format compatibility is mandatory: current `.wstudio` archives must import and work, with additive schema extensions/defaults/migration and exact preservation of existing content, unknown fields and original media. New formatting requires old-project import plus native persistence/export/restore regressions. This clarifies the compatibility contract; it does not authorize flattening old content or abandoning the supplied private reference acceptance.
+
+
+## F-41 — validate meaningful project types and record user scenarios
+
+Date: 2026-11-08. The project kinds themselves require the research in issue #14: their prior definitions were added without hypotheses or comparison with professional writing products, and some distinctions are only nominal. Evaluate real tasks before fixing the new creation model. The comparison set includes STARC, Final Draft, WriterDuet/WriterSolo, Fade In, Celtx, Scrivener, Obsidian, FocusWriter and Google Docs. Record stable-ID persona/task/main/alternative/failure/migration scenarios, concrete outcomes, hypotheses/evidence and traceability into specs/tests/native review. Preserve all existing Studio kinds/custom schemas through migration regardless of the eventual creation-profile model. Initial evidence and proposed scenarios live in `docs/research/PROJECT_TYPES_AND_FORMATTING.md`; no completed research or native acceptance is implied.
+
+
+## F-42 — write directly inside Canvas text cards
+
+Date: 2026-11-09. During the isolated e501837 alpha.3 development preview, the supplied screenshots show a selected text card and a separate Markdown edit modal. Primary card writing must happen inside the card, with immediate focus for a newly created card and discoverable pointer/keyboard entry. Track [issue #15](https://github.com/avacadorun-dev/writer-craft/issues/15), alongside #10 and #9. The original `CanvasTextCard` has in-card textarea editing; the modal-only native path is a migration gap, not an accepted final interaction.
+
+Regression requirements: real native typing, selection, clipboard, Unicode/IME, text-owned Undo while editing and board-owned Undo after leaving; correct zoom/pan/clip and caret geometry; no unintended drag/delete while typing; exact acknowledgement of saves without replacing a later draft. Cancel, stale updates, failed saves, navigation and restart must preserve acknowledged content and recoverable unsaved work. The separate source dialog must not remain the only writing path. User exploration does not authorize driving/restarting that running preview; source/event tests do not replace independent native acceptance.
+
+## F-43 — coherent boards, manuscripts and narrative knowledge
+
+Date: 2026-11-09. Extend existing [research issue #14](https://github.com/avacadorun-dev/writer-craft/issues/14) to establish a well-designed relationship between boards and documents for scripts/scenes/beats, character profiles/behavior, lore/world rules and related dictionary/memory records. These views must support one writing task, with predictable editing and return navigation. Investigate workflow hypotheses; do not claim the original application had no relationships or already offered complete synchronization.
+
+Compare canonical multi-view records, stable live references, revision-pinned excerpts/snapshots and independent notes. Define editing authority, refresh/conflict handling, rename/move/delete/restore and source-compatible persistence before choosing synchronization. Board layout changes must not silently reorder or edit the manuscript. Maintain PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02, including precise starting/return context, failure/cancel/stale and export/restore outcomes. Research/proposed architecture is not implementation acceptance. Use this correction in the designer's next review and preserve all original Studio data while evaluating additions.
+
+
+## F-44 — approved lion identity and completion-focused execution
+
+On2026-11-09 the user supplied the lion-writer handoff and requested replacement of the old logo throughout current branding, native application and platform icons, with deliberate size/background treatment. Preserve the supplied character; maintain Light/Dark coherence and exact source provenance. Independent review must inspect actual compiled header and packaged icon, not only an asset board. Historical released screenshots remain historical evidence. Tracked in #16.
+
+The same instruction corrects fragmented delivery: limit implementation to one product issue at a time, assign bounded file ownership and observable acceptance, and integrate/review/verify before starting another feature. Root owns the queue, CI and closure evidence. Research or a green library alone is not issue completion.
+
+## F-45 — full Canvas and coherent task acceptance
+
+2026-11-09: the latest preview exposed a reduced board, prompting a request for complete original Canvas coverage and an operational gate proving that migrated functionality is actually usable. Track the explicit original board inventory in #17, separately from direct card input #15 and migration #10. Balance exhaustive capability checks with complete writer/screenwriter/editor journeys and researched human needs in #14. Do not substitute a feature gallery for real work, or a polished journey for omitted baseline functions. No new reduction of the source contract was authorized.
+
+Require both axes in the existing release/UX gate, including alpha.3. Missing source coverage, unreviewed inventory completeness, stale evidence or an unfinished role journey blocks parity acceptance. Existing product-scope boundaries remain explicit; role hypotheses and competitor references are not claims of user validation.
+
+
+## F-46 — edit existing rendered blocks and reduce image size
+
+2026-11-09, running macOS ARM64 preview68db76e: double-clicking an existing formula or Mermaid diagram does not open source/properties editing. The expected interaction is to edit already-created blocks directly. Source inspection confirms a hidden More formatting → Edit block fallback; a rendered specimen or reachable insertion menu does not establish discoverable re-editing. Reopened #7 supersedes its earlier complete-editing acceptance. Preserve historical closure evidence, but retest double-click, visible selected-block/keyboard entry, edit/Apply/render, Cancel/Escape, Undo/Redo, save/reopen, stable IDs/source/unknown fields and stale/failure behavior in the actual compiled application before reacceptance.
+
+The same feedback explicitly requests making existing images smaller. #14 already selects direct sizing and exact width/height with aspect lock; those controls remain unimplemented in this preview. Changing workspace zoom is not a substitute. Preserve original media bytes, compatible stored dimensions and adjacent text flow.
+
+The user additionally reaffirmed that Canvas must be completed. #17 remains the active implementation issue under WIP=1; record this finding and update review criteria without abandoning or silently deferring B01–B26. Do not drive, replace or restart the preview while the user explores it.
+
+
+### F-46 interaction clarification
+
+2026-11-09: the user found the existing Edit block command and confirmed that the main problem is its distant, undiscoverable location. Keep the main toolbar compact. Use double-click on an existing rendered formula or Mermaid diagram as the primary editing gesture, retaining single-click selection; provide Edit in the object context menu with a keyboard-accessible equivalent. Do not add a permanent row of block commands. This refines the earlier selected-block action requirement; it does not establish native acceptance of the proposed interaction.
+
+
+## F-47 — reject improvised connection UX; evaluate native React Flow behavior
+
+2026-11-09: exploration of the running preview68db76e found the connection interaction unacceptable. React Flow is the explicit interaction reference. Further menu/two-click mechanics and improved line geometry alone do not resolve this correction. Evaluate existing native Rust graph libraries first; if none fits, consider a deliberate native implementation of React Flow behavior in the separately maintained CraftCanvas engine. The user subsequently identified `avinkrisv/egui-xyflow` as a useful visual/technical reference while questioning maintenance activity and missing required capabilities; it is not an approved drop-in dependency or proof of complete Canvas parity.
+
+Keep #17 active. Compare actual candidate source against B01–B26 and the existing durable authority/embedded-input contracts, rather than asking for the requirements again or replacing them with a node-editor demonstration. Primary creation and reconnection must work directly by dragging handles/endpoints with clear target feedback and cancellation. Selection, labels, keyboard actions, camera behavior and embedded text/media controls must form a coherent native interaction. Secondary properties menus remain useful but cannot substitute for these primary gestures.
+
+Preserve current source, prepared drafts and exact verification history, including data-safety fixes, without treating them as independent UX acceptance. Native Rust, canonical JSON/IDs, unknown fields, media and history remain required. The running user preview stays untouched. Fresh independent compiled interaction review against this correction is required before accepting the connection workflow.
+
+### F-47 delivery clarification
+
+2026-11-09: waiting weeks for an upstream maintainer is unacceptable for this project. Upstream research informs implementation; delivery and fixes must remain under CraftCanvas maintenance. Do not make the schedule conditional on egui-xyflow releases or imply that upstream activity establishes readiness.
+
+## F-48 — production CraftCanvas and complete React Flow parity first
+
+2026-11-09: explicitly set other product work aside and focus on CraftCanvas as a standalone production-quality native Rust library with functional React Flow parity. Use that qualified library in WriterCraft to deliver complete original Writers Studio Canvas parity. This supersedes the immediate app connection-slice priority, not the retained B01–B26 scope or data-preservation contracts. Preserve unfinished work, existing public releases and the running preview.
+
+Prepare a source-backed full capability inventory, native equivalents, architecture and concrete acceptance before freezing a narrow interaction API. React component syntax and browser plumbing need native equivalents; their observable capabilities cannot disappear by categorization. Keep core functionality and official example/integration patterns visible with explicit dispositions. Generic library readiness and actual WriterCraft journeys are separate required outcomes; neither a node demo nor a polished connector establishes either outcome.
+
+CraftCanvas owns its maintenance and delivery. Reuse qualified open-source work with attribution when suitable, without waiting on another project's roadmap. Retain guarded canonical authority, stable identities, unknown data, original media, exact input ownership and recoverable history. Independently review inventory completeness and exact compiled interactions. The next app integration adopts only a hosted-qualified engine revision; no current production/full-parity claim is made.
+
+### F-48 roadmap and independent-library distribution
+
+The same instruction subsequently requests a published, strictly ordered issue roadmap with a first checkpoint covering current WriterCraft needs and the remaining full React Flow goal afterward. Close each library issue only for its verified scope. Expand the standalone README and repository description; prepare meaningful Cargo packages and a release/publication process with truthful prerelease status. Package registration is not production acceptance.
+
+## F-49 — independent non-Canvas alpha.3 delivery
+
+2026-11-09: prepare a handoff for another agent to assemble alpha.3 from the existing implementation, defer full Canvas, and complete a concrete user scenario such as character/profile and screenwriting work plus another unblocked issue. The Canvas agent continues standalone CraftCanvas; the WriterCraft agent resumes Canvas integration only after a qualified engine handoff.
+
+This explicitly supersedes the requirement that full Canvas or full-product parity block alpha.3. It does not close #17/#4, remove B01–B26, accept the rejected connection UX or authorize misleading parity claims. Define a named bounded engineering-release scope, complete its chosen end-to-end native workflow, and retain full parity inventories/gates for the later integration. Existing preview, alpha.1/alpha.2, private data and unfinished work remain protected. Parallel engine and app workstreams are now authorized, each with one active issue and separate file ownership.
+
+## F-50 — complete author workflows, hierarchy and manual markup
+
+2026-11-09: the resumed application task was corrected after it narrowed the character example to an isolated entity form. Begin from an author's real working session and the original tree structure, informed by competitor workflows and #14. Complete organization, drafting, reference consultation, exact return and export instead of implementing the nouns of the request literally. Project-kind taxonomy is explicitly undecided and must not become a nominal mandatory selector.
+
+The user explicitly requests expanding existing exact passage notes into author-defined tags/markers with different meanings and useful cross-document scenarios. This selects manual markup as an enhancement; it does not request automatic extraction or infer a fixed taxonomy. Documents, folders and markup need complete CRUD: create/read/edit/rename as applicable, move/reorder for tree items, remove and recover without breaking content/references. Record this in #14 and preserve the broader #10/#11 obligations.
+
+## F-51 — substantial native acceptance manuscript and goal-directed delivery
+
+2026-11-09: prepare a large coherent working project with several chapters, character branches, motivations and descriptions. Acceptance must follow how an author creates and works with it in the actual native interface. A synthetic test matrix, API-created project or successful command call is not user acceptance. Use newly authored demonstration content without private user manuscripts; public CI fixtures remain synthetic and separate from the editorial interaction record. Do not describe this as observed human research or pretend the authoring was performed by a person.
+
+The user requested an explicit plan and goal covering all corrections, followed by execution. The selected scenarios and sequence are recorded in ALPHA3_STRUCTURED_WRITING_PLAN.md and the structured-writing-alpha OpenSpec change. Independent reviewers must reject feature-gallery or isolated-form acceptance and require the whole author outcome on the exact candidate.
+
+## F-52 — visual and usability review during the real author journey
+
+2026-11-09: capture every visited screen and dialog while exercising the native workflow. Inspect excessive spacing, unsuitable icons, unclear placement and accumulated buttons alongside functional correctness. The requested result is a coherent production-quality desktop design. Improvements discovered during this walkthrough are authorized; a functionally successful sequence does not excuse awkward or visually unfinished interaction.
+
+Assess an appropriate coherent desktop icon treatment, including custom or filled/solid shapes where they improve recognition. This is a direction to evaluate visually, not approval to mix unrelated icon families or remove accessible labels. Review action hierarchy, density, grouping, contextual visibility, keyboard access, modal sizing and space for authored text. Record the observed problem, changed surface and fresh exact-candidate capture for each correction. Preserve native architecture, content, current preview and all unfinished parity obligations; polished appearance alone cannot qualify broader feature completeness.
+
+## F-53 — direct hierarchy manipulation and compact nesting
+
+2026-11-09: the bottom Organize project control is rejected. Authors need drag-and-drop directly in the tree, small adjacent folder creation controls and compact indentation that remains useful at three or four nested levels. A move dialog alone does not satisfy this correction.
+
+Review highlighted valid folder targets, insertion lines for sibling ordering, explicit invalid placement feedback, edge autoscroll, delayed expansion of a hovered folder and Escape cancellation. Drop must be one guarded structure operation; dragging, hovering, cancellation and rejected placement must not mutate manuscript content or order. Preserve accessible contextual/keyboard alternatives, imported schema constraints and exact identities. Use a populated native-authored tree, including collapsed branches and nested documents, for acceptance.
+
+## F-54 — full-width tree rows and meaningful colored project labels
+
+2026-11-09: actual exploration of the e4157d1 candidate rejects permanent Add and More controls beside every tree item because they consume title space. This supersedes F-53's adjacent creation-control presentation, not its direct drag-and-drop requirement. Use the item's right-click context menu with a keyboard equivalent for creation and lifecycle actions. Keep shared controls in the structure header and an appropriate board Add control.
+
+Passage labels must be reusable project definitions with an author-chosen name and color, assigned to notes so the same meaning is visible in the manuscript and note list without opening a note. The current uniformly amber marks and raw multiline tag input do not satisfy this workflow. Existing labels/notes/anchors must remain compatible; multiple labels stay explicit, with a clear primary color instead of an ambiguous blend. Label definitions, including unused ones, survive save/reopen and canonical export/restore. Creating, recoloring, renaming and removing a label must have explicit project scope and preserve text/history with guarded mutation.
+
+The right inspector currently mixes selected quote, authored note and tags, and reserves excessive blank space between list and detail. Review a compact, content-sized list with separate quote, note preview and named colored chips; selected details follow it directly with an existing-label picker and deliberate label creation. Keep draft preservation, cancel/resume, detached/trashed states, keyboard access and named color cues in both Light and Dark. These are required corrections to A3-WRITE-01/A3-MARK-01 before fresh independent acceptance; pre-F-54 captures are historical only.
+
+### F-54 palette clarification
+
+The same-day follow-up requires label colors to harmonize with the application's main palettes rather than use garish high-saturation colors. Use restrained named accents with soft text highlights and readable glyphs in Light and Dark. Verify recognizability, selected/hovered states and palette compatibility independently; do not assign semantic label meaning from the current appearance palette.
+
+## F-55 — finish a correction and remove its markup directly
+
+2026-11-10: removing a completed correction mark must take one direct action. The current side-panel workflow requires too many buttons and is confusing for a single correction. Expose removal beside the passage mark, with immediate recoverable removal and a nearby Undo; do not require a More menu and confirmation for this local recoverable action. Removing one label assignment must not remove its project definition or other usages, and must not require a second Save action. Keep the stronger disclosed scope for project-wide label deletion.
+
+Keep the ordinary passage → read note → revise manuscript → remove mark sequence visible and short. Preserve exact occurrence, caret/scroll, original prose and history. Pending authored note text must remain recoverable when a mark is removed; stale or failed actions retain the draft and offer an actionable result. The subsequent screenshot explicitly identifies the separate Review tab: introductory text, duplicate whole-document prefixes and hidden actions obscure a single correction. Simplify selection → inline replacement → explicit Apply, with actual changed excerpts and nearby actions. The follow-up requests annotator-style previous/next navigation through marked passages while making corrections; retain unapplied wording when navigating. Fresh same-issue native and independent acceptance must count the ordinary interaction steps and verify Undo, repeated deletion and label-only notes.
+
+### F-55 compiled walkthrough correction — 2026-11-10
+
+Independent inspection of the first native authoring batch on compiled source `18afda6` (the same tree as `ddf09a7`) requires two presentation corrections: reveal the complete short selected passage after inspector reflow and Review Apply/Undo, and contain every note-label chip within its row background/hit area. The Review Resume affordance must correspond to an actual retained unapplied draft; deleting a mark after Apply must not invent one. These findings refine the existing F-52/F-55 acceptance rather than add a product feature. Fresh compiled observations must repeat the affected sequence, including reversed/wrapped ranges, compact panes and overflow labels. Exact selection, typing/IME ownership, explicit return scroll and recoverable note data remain unchanged.
+
+## F-56 — resolve the note after applying its correction
+
+2026-11-10: the applied-result screen has no direct way to finish its associated note and continue reviewing the next one. Applying prose alone is insufficient for the sequential annotator workflow. Preserve the originating note identity through Apply; expose Resolve note and next (Resolve note for the last item) directly beside the applied result. Resolution uses the existing recoverable completed-note lifecycle, retaining its body, labels and history; it is distinct from deletion and from Undo of the manuscript replacement. Keep actual pending note drafts, refuse stale note/context changes before resolution, skip completed entries and disclose the end of the queue. Reopening a completed note must remain available. Recapturing a subrange of that same exact marked passage must retain its queue context; unrelated selections must not acquire a note by title or quote search.
+
+## F-57 — home/project-library body
+
+2026-11-10: a separately prepared visual handoff selects a medieval-scribe banner and horizontal project-list composition for the home body, with responsive reflow. Preserve the shared shell, current logo, defaults and seven palettes; use established sans-serif UI typography. The rejected promotional subtitle must not ship. The archive is design input, not implemented or independently accepted evidence. Schedule this bounded home slice after the active #14 correction workflow; it does not silently accept or replace unfinished authoring requirements.
+
+### F-57 recovered design input — 2026-11-12
+
+The original chat retains the verified handoff archive, so no replacement owner upload is required. Its four references and English instructions are now retained in `docs/design/home-body/`, with hashes and the standalone generated artwork provenance. Reproduce the selected banner and project-list body recognizably at comparable available width; the illustrated header/footer and incidental navigation do not require shell changes. Responsive reflow is mandatory. The earlier serif UI treatment was rejected; exact replacement font metrics were not independently approved. Omit both rejected subtitle wordings and translated equivalents rather than invent a new promotional slogan. The copper variant was an assistant recommendation, not a new user-selected default. A3-HOME-01 remains pending until exact compiled native review.
+
+### F-57 actual native containment and fidelity correction — 2026-11-12
+
+The owner opened the explicitly authorized local debug candidate and supplied a native screenshot: banner text, primary action and project rows extend underneath the navigator and are clipped. The 1280px maximum was incorrectly used as a centered width setter rather than clamped to the actual remaining body. This is a blocking P1 geometry defect; the earlier source-only geometry preflight is superseded. Regression fixtures must allocate the real shared header/footer/sidebar and central margins, then compare against the central body bounds with their nonzero origin across sidebar widths, minimum/laptop/wide/short windows, locales and live resize.
+
+The owner then reattached the blue-Light and copper-Dark selected concepts and stated that the solution had not been brought to completion. Fixing clipping alone is insufficient: preserve the visible inset/rounded banner, meaningful right-aligned illustration presence, subtle engraved/paper field, text/action hierarchy, trailing project-section actions at wide widths, and contained horizontal rows. Compare actual new native captures with these references before claiming fidelity. Preserve truthful data/fallback identity; synthetic counts and covers remain illustrative. Do not replace the owner's open candidate while correcting this. The user explicitly allowed a local build and isolated launch for this preview after GitHub dispatches failed before creating jobs; this is not hosted qualification or release acceptance.
+
+The follow-up explicitly rejects the inset between the scribe and the banner contour. The visible artwork must meet the right and bottom banner edges, as in the reference. Retain text/button insets independently; transparent PNG export margins do not count as intended artwork padding. Trim only transparent canvas at render preparation, preserve visible art/pigment/alpha and the banner corner contour, and verify wide and constrained native states again.

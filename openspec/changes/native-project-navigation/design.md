@@ -1,0 +1,9 @@
+# Native hierarchy projection
+
+Read the original `src/widgets/project-tree/model/project-outline.ts` and the validated project node contract. Keep the imported scoped logical ID distinct from its native document handle. Build a presentation index once per opened project from `Workspace::project_tree`; retain source kind/parent/position/title and exclude trashed rows from active navigation. Missing/inactive parents become visible roots rather than hiding descendants. A cycle-safe iterative traversal prevents stack overflow and duplicate rows, even if damaged internal data reaches presentation.
+
+Synchronize only current document labels and newly created native document identities; do not clone rich trees or manuscript bodies into navigation. Retain the complete mapped-document set, including trashed source rows, so fallback entries cannot leak trashed manuscripts. Use stable sibling ordering and virtualized fixed-height rows. Search exposes matching ancestors temporarily without overwriting the author's collapsed state. Exact selected document changes reveal its ancestors, preserving collapse choices otherwise.
+
+Reuse the comfortable row rhythm, theme tokens, Lucide geometry and localized disclosure labels. Contentless sections expand in place; content-bearing rows open the existing guarded document workflow. A source node with no saved text must remain identified rather than silently creating an unrelated document. Its source-compatible first-content command is a separate uncompleted authoring task.
+
+Opening a project prepares the projection before publishing a new UI context. A failure or explicit recovery choice leaves the prior context intact. Navigation and search are presentation only; canonical hierarchy mutations require separate shared core transactions, schema/placement validation, history and transfer integration before their controls are exposed.

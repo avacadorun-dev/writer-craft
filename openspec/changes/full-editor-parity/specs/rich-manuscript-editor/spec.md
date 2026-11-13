@@ -99,3 +99,29 @@ The continuous manuscript SHALL appear as a centered bounded surface with exteri
 #### Scenario: The author opens or closes side panels
 - **WHEN** available editor width crosses the approved floating/docked threshold
 - **THEN** the document surface adapts while retaining the bounded text measure, exact selection and local scroll state; focus does not stretch prose across the whole window
+
+
+### Requirement: Durable reviewed structured edits
+
+The native review panel and command adapters SHALL stage project-scoped typed transactions without canonical changes. Apply SHALL revalidate and atomically commit content, history, note mappings and status against the exact base. Reject SHALL change status only. Undo Apply SHALL require the unchanged applied state. Drafts and imported evidence SHALL NOT become implicit mutation authority.
+
+#### Scenario: Formatting changes before proposal Apply
+- **WHEN** a staged structured proposal is reviewed after a formatting-only canonical change
+- **THEN** Apply refuses the stale revision/tree and leaves canonical content, annotations, drafts, history and proposal state unchanged
+
+#### Scenario: Note metadata changes after Apply
+- **WHEN** an author edits a note after applying a proposal and then chooses Undo Apply without intervening document edits
+- **THEN** the compensating revision restores the prior proven attachment and retains the author's current note text and lifecycle
+
+#### Scenario: A proposal introduces an unavailable resource or over-capacity table
+- **WHEN** a structured proposal references an image outside its project or creates a table wider than the supported native capacity
+- **THEN** preparation or Apply refuses before mutation and preserves all existing content, notes and history
+
+#### Scenario: Exact selected passage is attached to review
+- **WHEN** the author captures a supported native selection for review
+- **THEN** the saved selection chip retains exact project/revision/ranges and supports reveal, clear and explicit recapture without searching for another occurrence; actual document edits make it visibly stale
+
+
+#### Scenario: Review meets a pending draft or imported evidence
+- **WHEN** Apply or Undo encounters an unresolved working draft, or an imported archive contains proposal/replay data
+- **THEN** the draft is preserved and blocks mutation, while imported proposal data remains quarantined preservation evidence rather than active proposals

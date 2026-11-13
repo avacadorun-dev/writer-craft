@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "status": "captured",
+  "error": null,
+  "target_block": null,
+  "target_kind": "viewport",
+  "frame": 11,
+  "stable_frames": 11,
+  "readback_requests": 1,
+  "render_readiness": {
+    "generation": 0,
+    "scroll_offset_bits": 0,
+    "visible_atoms": 0,
+    "target_is_text": false,
+    "visible_text_targets": 0,
+    "pending_atoms": 0,
+    "failed_atoms": 0,
+    "target_visible": true,
+    "settled": true
+  },
+  "canonical_unchanged": true,
+  "connected_capture": null,
+  "observed_inner_size_points": [
+    1440.0,
+    923.0
+  ],
+  "pixels_per_point": 2.0,
+  "image_size_pixels": [
+    2880,
+    1846
+  ],
+  "language": "ru",
+  "font_size": 19.0,
+  "editor_preferences": {
+    "font_family": "sofia",
+    "font_size": 19.0,
+    "line_height": 1.75,
+    "paragraph_spacing": 0.9,
+    "list_item_spacing": 0.25,
+    "manuscript_width": 70,
+    "toolbar_mode": "auto",
+    "spellcheck": true,
+    "word_goal": 0,
+    "auto_play_source": false
+  },
+  "focus_mode": false,
+  "settings_open": false,
+  "editor_acceptance": false,
+  "native_interaction_acceptance": false
+}

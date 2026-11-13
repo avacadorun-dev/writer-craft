@@ -1,0 +1,51 @@
+{
+  "source_commit": "8c61a8872810c7e1a5b84bd7bf329f8a9a268a1a",
+  "binary_sha256": "66d5b05df54f9b10248955008df2a32ed43a5cfcfbf9595f5e0c75a35ae69b6b",
+  "build_origin": "user-authorized local debug preview; locked editor-preview build",
+  "tests_executed": false,
+  "hosted_qualification": false,
+  "native_interaction_acceptance": false,
+  "captures": [
+    {
+      "case": "blue-light",
+      "appearance": "light",
+      "palette": "solid-craft-blue",
+      "png_sha256": "b74a9a7bd0db49b35f552e731683a262026f1879d5a25b88b25021ab96e9d3ee",
+      "sidecar_sha256": "2f9f99372d60bff9e51ffd629ce928812bef8a5103b883e5f19cfd91234878a2",
+      "observed_inner_size_points": [
+        1440.0,
+        923.0
+      ],
+      "pixels_per_point": 2.0,
+      "canonical_unchanged": true
+    },
+    {
+      "case": "copper-dark",
+      "appearance": "dark",
+      "palette": "cedar-and-copper",
+      "png_sha256": "36cb9c7964c74a723f455d94012fcbee86bf6e3fef672977c089fae105bfd5b8",
+      "sidecar_sha256": "2f9f99372d60bff9e51ffd629ce928812bef8a5103b883e5f19cfd91234878a2",
+      "observed_inner_size_points": [
+        1440.0,
+        923.0
+      ],
+      "pixels_per_point": 2.0,
+      "canonical_unchanged": true
+    },
+    {
+      "case": "compact",
+      "appearance": "dark",
+      "palette": "solid-craft-blue",
+      "png_sha256": "4ae73503d9a320e9b1625ed44f6e082a62dbb81c4f577d63d1ab20c66d8f2e0a",
+      "sidecar_sha256": "610f328543b1a9dd7fe9aa439c6bcb77c6aac2549b26c0526fd768a27fba197b",
+      "observed_inner_size_points": [
+        1000.0,
+        680.0
+      ],
+      "pixels_per_point": 2.0,
+      "canonical_unchanged": true
+    }
+  ],
+  "signed_interactive_binary_sha256": "149fe2bb3ce6b661c333606991d8f82502a4018ebf24c4ef4c256c4ea6480ad3",
+  "evidence_boundary": "Actual native readbacks of isolated synthetic fixtures from a user-authorized local debug build; limited visual review only, not hosted qualification or complete native interaction acceptance."
+}

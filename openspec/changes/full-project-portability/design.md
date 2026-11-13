@@ -19,3 +19,32 @@ native Value. The 1 GiB native transport guard is finite and makes no universal 
 
 Schema 8 adds scoped evidence object/reference tables and migration tests after the qualified native
 baseline. No imported checkpoint or staged change populates trusted replay/proposal tables.
+
+## Streamed native Markdown/artifact folder
+
+The concrete format-2 layout/control contract is in [portable folder format2](../../../docs/architecture/PORTABLE_FOLDER_FORMAT_2.md). The current saved reading projection shares the canonical preparation transaction and persists in its private job index. Transfer materializes metadata/path maps only, then renders one saved document or current graph at a time through the established Markdown converter. Reading indexes, file inventories, digest mappings and conversion reports are paged. All canonical payloads use exact prepared object capabilities; original media files can serve both reading and canonical mapping roles without a second encoded copy solely for transport.
+
+ADR-014's exact cap-std directory capability confines member reads/writes. A new directory is created exclusively, opened and checked empty before its incomplete marker; all later I/O is relative to the pinned root and uses exclusive file creation. No recursive cleanup or merge is permitted. The final controls must still equal the prepared publication intent, then the untrusted folder validator rehashes every file and inventories actual members before the incomplete marker is removed. Restoring edited reading files is explicitly refused rather than quietly importing older canonical content. Complete-project export is the first qualified slice; selected-document stream/privacy and localized native interaction remain separate required work.
+
+## Native whole-project transfer orchestration
+
+Use a separate `app/project_transfer.rs` state machine and the existing shared modal/components.
+Export offers native archive or readable Markdown/artifact folder (both retain canonical restore
+objects), shows the fixed current-project title, and explains the separate whole-workspace backup.
+After explicit Continue, save current writing and wait for `flush_canvas_for_transfer` for that
+project. Filter pending note identities by actual project-owned documents; Review returns to that
+note without discarding paused transfer intent or parked notes in other projects. Native pickers
+choose an absent archive path or a parent plus validated new folder name. Prepare/export run on a
+separate worker with the actual database path.
+
+Restore opens either a user-selected native archive or readable folder on its checking worker,
+retains only a verified private canonical stream and lightweight preserved-content summary for
+preview, then consumes that same stream after current-work prerequisites and explicit Restore.
+Preview counts are current items/boards/artifacts; native delta revision counts are never called
+complete historical totals. Explain preserved data separately from editable capability. Completed
+restores expose the new project identity and an explicit Open action; a navigation failure cannot
+become a false restore failure or cause duplicate automatic import. Success acknowledgement takes
+precedence over cancellation flags. Failed or missing acknowledgements retain truthful diagnostic
+and retry/review state without an automatic ambient source reopen. Actual native minimum-window,
+localized keyboard/cancel/failure/collision/referenced-media interactions and independent UX
+review remain required; source/controller checks alone do not complete issue11.

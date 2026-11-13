@@ -332,6 +332,344 @@
       ]
     },
     {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-levels",
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Levels that organize a long manuscript"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-level-3",
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Act, part or movement"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-level-3-text"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Third-level headings separate acts, viewpoints or dated sections. They keep the author oriented without turning the page into a table of contents."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-level-4",
+        "level": 4
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Scene within a movement"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-level-4-text"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Fourth-level headings suit individual scenes: "
+        },
+        {
+          "type": "text",
+          "text": "the arrival",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", the argument, the morning after."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-level-5",
+        "level": 5
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A beat in the scene"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-level-5-text"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Fifth-level headings mark a single beat, such as a change of location or a flashback the reader should notice."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-level-6",
+        "level": 6
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A line worth pinning"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-level-6-text"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Sixth-level headings are quiet: useful for an in-document note, a checklist item or a fragment awaiting a better home."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-prose-1"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Paragraphs remain the working surface of the manuscript. A long scene is still written one sentence at a time, and every block above keeps its own address in the document tree. Nothing here is a screenshot: edit any line and the exact structure is preserved between sessions."
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "attrs": {
+        "blockId": "showcase-quote-nested",
+        "sourceRefs": []
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-quote-nested-text"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "A quotation may also hold a list when a character is reasoning aloud:"
+            }
+          ]
+        },
+        {
+          "type": "orderedList",
+          "attrs": {
+            "start": 1,
+            "type": null
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-quote-list-1"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "the tide turns before dawn,"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-quote-list-2"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "the keeper does not answer the bell,"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-quote-list-3"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "and the letter waits on the sill."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "blockId": "showcase-callout-plan",
+        "kind": "idea"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "showcase-callout-plan-text"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "A callout can carry structured planning, not only a sentence:"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-callout-bullet-1"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Open on the letter, not on the weather."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "showcase-callout-bullet-2"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Let the lighthouse appear only once the choice is made."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-prose-fragment-1"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "The house remembered the wind. It travelled along the shutters and stopped at the kitchen table, where the kettle had gone cold hours earlier."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-prose-fragment-2"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Asya set the letter down and listened. Somewhere below the street a bicycle bell answered a gull, and the ordinary sound made the decision feel possible."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-prose-fragment-3"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "By morning the fog had lifted from the harbour. She took the road along the wall, past the boats that had not moved in years, toward the light that had been dark for nineteen winters."
+        }
+      ]
+    },
+    {
+      "type": "sceneBreak"
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-pull-quote"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "“You do not repair a lighthouse,” the keeper said. “You keep it company.”",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
       "type": "horizontalRule"
     },
     {
@@ -714,6 +1052,93 @@
         "latex": "\\sum_{n=1}^{\\infty}\\frac{1}{n^2}=\\frac{\\pi^2}{6}",
         "description": "The sum of reciprocal squares equals pi squared divided by six."
       }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-image-small-title",
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "The same reference at a smaller size"
+        }
+      ]
+    },
+    {
+      "type": "imageBlock",
+      "attrs": {
+        "blockId": "showcase-image-small",
+        "src": "asset://showcase-lighthouse",
+        "assetId": "showcase-lighthouse",
+        "alt": "The lighthouse artwork shown at a quarter of its original rendered size.",
+        "caption": "The same owned asset, placed at a different authored size.",
+        "width": 360,
+        "height": 200
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockId": "showcase-config-title",
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Notes that stay in the manuscript"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "blockId": "showcase-code-config",
+        "language": "json"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"chapter\": 3,\n  \"pov\": \"Asya\",\n  \"open_questions\": [\"Who sent the letter?\", \"Why now?\"]\n}"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockId": "showcase-inline-equation-2"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A second inline expression keeps its own source: the distance to the horizon is "
+        },
+        {
+          "type": "inlineMath",
+          "attrs": {
+            "latex": "d=\\sqrt{2Rh}",
+            "description": "Distance to the horizon for a given height."
+          }
+        },
+        {
+          "type": "text",
+          "text": " for an observer of height "
+        },
+        {
+          "type": "text",
+          "text": "h",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", which the keeper could estimate without leaving the gallery."
+        }
+      ]
     },
     {
       "type": "paragraph",

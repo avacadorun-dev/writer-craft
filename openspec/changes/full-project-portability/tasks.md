@@ -35,3 +35,17 @@ All tasks remain open until exact-source evidence exists. P identifiers refer to
   unknown fields, precise numbers, scoped privacy and corruption/cancellation rollback.
 - [ ] Measure separate source/native peak memory and responsiveness on hosted synthetic workloads,
   including 512 MiB streamed media, before claiming memory qualification.
+
+## Alpha.3 restart (2026-11-08)
+
+- [ ] Requalify the corrected format-2 root/shard framing constructor against hosted default/all-feature tests; framing alone is not semantic restore acceptance.
+- [ ] Implement bounded format-1 compatibility semantic validation, fresh-namespace atomic restore and flat quarantine before wiring native restoration.
+- [ ] Replace legacy monolithic export with the paged format-2 object stream and qualify both transport adapters and native UI.
+
+## Streamed native folder implementation checkpoint (2026-11-09)
+
+- [x] Resolve exact cap-std4.0.3/disabled-default graph on isolated hosted metadata job42508206569; preserve existing pins and review eleven added registry checksum/license declarations (95a88db).
+- [x] Capture current saved writing/Canvas/frontmatter and lightweight hierarchy in the canonical read transaction (9193cf0); Linux/Windows source tests passed in42507414205, native final fixture qualification remains separate.
+- [ ] Qualify the native streamed Markdown/Canvas/artifact folder and independent pinned-root reader against all-blocks roundtrip, changes/incomplete/collision/root-replacement/symlink/cancellation/resource faults. Source implementation is not completion evidence.
+- [ ] Implement selected-document format-2 closure/privacy without including complete original raw source, unselected recovery/history/guide/memory/transcripts or unrelated media.
+- [ ] Wire explicit eight-locale native export/restore review, progress/cancellation/error/result states and conservative evidence recovery; complete independent UX/private reference acceptance.

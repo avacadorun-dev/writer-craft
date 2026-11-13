@@ -25,8 +25,8 @@ Use this structure for a reproducible bug, retaining the same issue as the inves
 ## Summary
 <One concrete symptom and its effect on the author.>
 
-## Report and environment
-- Source: owner report, <date>.
+## Environment
+- Report date: <date>.
 - App version / build: <verified value, or unknown>.
 - Platform: <OS and architecture actually observed>.
 - Source / CI / artifact: <permalinks if available>.
@@ -93,3 +93,15 @@ Keep every remaining product issue open until owner acceptance of the complete c
 ## Latest scheduling decision — checkpoint alpha.2, remaining work alpha.3
 
 The owner subsequently authorized publishing the completed coherent checkpoint as alpha.2 and moving all unfinished large blocks to alpha.3. This supersedes the earlier scheduling statements above. Preserve original issue requirements and progress; use milestones and a current status note rather than claiming missing work is complete. In particular, keep the full-editor epic and incomplete project/media/Canvas/restore work open for alpha.3. Publishing alpha.2 alone never satisfies an issue or grants final owner acceptance.
+
+
+## Owner-tested alpha.2 and alpha.3 execution — 2026-11-08
+
+The owner confirmed the published alpha.2 is functional on macOS and explicitly authorized closing fully satisfied alpha.2 issues, then implementing alpha.3 and closing the remaining issues as their criteria are met. This is final owner acceptance for technically complete alpha.2 work; no duplicate approval question is necessary. Issue #3 was closed with exact tagged installer and platform preservation evidence. Other issues retain unmet acceptance checks, even where their main defect appears repaired. General macOS approval does not supply missing failure, input, compatibility or Windows/Linux GUI evidence. Alpha.3 implementation is now authorized; the prior release freeze is lifted.
+
+
+## Direct issue wording
+
+Describe the bug, requested capability, expected workflow, evidence and acceptance directly. Avoid `Owner report`, `The owner wants/requires/observed`, or explanations that a capability exists because a particular person asked for it. This wording preference applies to new issues and subsequent substantive edits; do not rewrite historical investigation comments merely to erase their chronology. A completed feature is described by its resulting behavior and verification.
+
+Issue #14 tracks research-backed manuscript formatting and direct image/block/table sizing. Include genuine writer/editor/screenwriter requests, competitor comparisons, selected-scope rationale and backwards-compatible Studio import/migration checks. Do not turn unvalidated research candidates into implicitly committed product scope.

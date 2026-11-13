@@ -91,7 +91,7 @@ Read the structured preferences contract in `DESKTOP_UX.md` before reviewing set
 
 - Header/title/close control share a vertical center; the footer is bounded and Done has equal vertical insets. Verify normal and minimum-size Settings captures.
 - Settings group headings align left with the navigation grid. No centered group labels, overlapping text or mixed utility icon families.
-- All utility glyphs use the licensed Lucide subset; product branding uses the monk/book mark. Check 28-pixel toolbar readability and light/dark contrast.
+- All utility glyphs use the licensed Lucide subset; product branding uses the approved lion-writer mark. Check 32-pixel toolbar readability and light/dark contrast.
 - Appearance preview cards display actual theme colors and keep mode and palette as separate controls. Selected state is legible without relying solely on fill color.
 - Show the real complete updated interface and open the owner's isolated demonstration preview after the icon replacement.
 
@@ -130,3 +130,62 @@ An opaque-block capture must name expected nonzero visible atom IDs/types, estab
 ## Owner-approved alpha.2 checkpoint boundary — 2026-11-08
 
 The owner explicitly authorized releasing the current completed coherent native editor checkpoint and moving unfinished large blocks to alpha.3. For this prerelease, the independent named scope is `native-rich-editor-alpha`: the implemented writing workspace, nonoverlapping currently integrated block rendering, bounded manuscript/controls/preferences and installable packages. Review the actual final source and captures; block P0/P1 defects within that scope. Retain specific limitations, pending broad original-parity, IME/accessibility, full Canvas/media/import/export and rich-assistant checks. Historical full-editor alpha.2 acceptance matrices remain the alpha.3 migration target, not a false declaration that those checks passed. Public engineering-alpha publication does not close product issues or certify daily use. The independent reviewer must make the final scoped decision; the implementer must not rewrite a pending full-parity gate into an approval.
+
+
+## Correction matrix: F-42 and F-43 — connected Canvas writing
+
+- A new or existing text card is writable in place with a clearly discoverable editing state. Exercise actual native text selection, paste, CJK composition and text Undo at several board zooms, clipped card edges and minimum window size. Card movement, deletion and board shortcuts must not steal typing. Verify new-card focus and returning to board manipulation.
+- Save acknowledgement never replaces a newer draft or cursor. Exercise typing during save, failed/stale save, retry, cancellation, navigation and reopen with exact content/revision checks. Modal-only editing cannot pass #15.
+- Review the selected board↔document/character/lore relationship design against PT-LINK-01, PT-CHAR-01, PT-LORE-01 and PT-LINK-02. The author can understand whether they are editing a shared record, a live reference, a snapshot or an independent note, and can return to the exact manuscript/board context.
+- Do not accept inferred automatic synchronization, navigation-only demonstrations or silently copied divergent text as a completed connected-writing workflow. Test rename/move/delete/restore, missing/stale references, separate layout/content Undo and compatible export/restore after scope selection. Written hypotheses and source preservation alone do not supply native acceptance.
+
+## Two mandatory axes for alpha.3
+
+The existing `UX_GATE.json.coverage` must accept every mandatory inventory, capability and role journey in `docs/migration/PARITY_SCOPE.json` before `full-editor-parity` or `full-parity` release acceptance. This is enforced before1.0 as well. Inventory sign-off explicitly confirms an independent omission review. Each capability needs a reachable native entry, semantic preservation evidence and native interaction evidence. Each journey covers the authored main/return-context/cancel/stale/failure-recovery/save-reopen/compatibility paths. See ROLE_JOURNEYS.md and F-45.
+
+Every accepted record names the exact source/lock/contract fingerprint, independent reviewer and SHA-256-bound evidence reports. The full accepted gate also hashes its narrative interaction report. A changed contract, implementation or report invalidates the associated acceptance. The validator checks consistency and missing evidence; the reviewer remains responsible for actually observing the tasks and challenging omissions or awkward workflows. Two PNGs, a source audit, raw-data preservation, an engine test or a written persona cannot establish native completion or user-research validation.
+
+Reviewed Markdown evidence begins with a `writercraft-evidence` HTML-comment JSON receipt declaring `source_fingerprint`, `build_ref`, `platform` and explicit `observations` with `kind`/`id` (and all `paths` for a journey). The validator checks the report's own candidate and observation claims, not only a hash copied onto a coverage row. The remainder records the actual steps/results, test/build URLs and limitations. A report can cover multiple IDs only by explicitly listing and substantiating them; this is not permission to fabricate observations.
+
+The current contract declares only `full-editor-parity`. Requesting `full-parity` fails until an expanded full-product catalog and its independent coverage are authored; changing the label to1.0 cannot reuse the narrower alpha.3 inventory.
+
+
+## Correction F-46 — existing-block editing and image reduction
+
+The earlier #7 insertion/model evidence does not qualify discoverable re-editing of existing rendered blocks. Independently exercise an existing Mermaid block and block/inline formula in the exact compiled candidate: double-click opens the captured current source, an object context-menu Edit action and keyboard path reach the same guarded editor without expanding the permanent toolbar; single-click still selects, Apply rerenders, Cancel/Escape changes nothing, Undo/Redo and save/reopen preserve identity and surrounding prose. Verify stale/failed edits preserve the draft. Do not accept only a toolbar-source reading or insert-dialog screenshot.
+
+For selected #14 sizing, make an already inserted image visibly smaller, retain aspect ratio when locked, Undo/Redo and reopen, and compare original asset bytes and stored dimensions. Workspace zoom alone fails this scenario. Canvas B01–B26 and its independent review remain mandatory and active under #17.
+
+
+## Correction F-47 — coherent native flow interaction
+
+Connection UX is rejected pending a source-backed library/reference decision and actual direct interaction. Review drag from a visible handle to a valid target, live preview/target affordance, release as one guarded operation, Escape/focus-loss/outside-target cancellation, endpoint drag to reconnect the same stable edge, direct edge selection and label editing. Embedded card input/media controls and camera gestures must own their events without accidental graph changes. Menu/property reachability and route screenshots alone do not pass.
+
+Compare the chosen native substrate with React Flow and the complete B01–B26 contract; record reused parts, missing behavior and maintenance responsibility. A library demo, popularity or recent commit date is not qualification. Preserve the existing model/persistence boundaries and exact-source hosted/native/independent gates. F-47 supersedes any implied acceptance of the current two-click/menu-first connection interaction.
+
+## F-48/F-49 — separate engine and scoped alpha.3 acceptance
+
+CraftCanvas has a source-backed standalone roadmap and an independent production gate. Its WriterCraft-ready handoff permits exact-qualified integration, not automatic B01–B26 acceptance. A separately authorized app agent may deliver a named non-Canvas alpha.3 workflow checkpoint before that handoff. Review the actual completed character/screenwriting task and unblocked fixes selected by that release; retain pending full Canvas/full-product coverage. Do not label a subset `full-editor-parity` or infer natural connection UX acceptance from retained scripted lifecycle captures.
+
+## F-50/F-51 — hierarchy-led author sessions and substantial native acceptance
+
+Read ALPHA3_STRUCTURED_WRITING_PLAN.md and the structured-writing-alpha change. An isolated character form is not the selected outcome. Review a complete original story project with multiple chapters/scenes and character/reference branches, created and revised through the native UI. Observe full folder/document lifecycle, a meaningful motivation-to-dialogue revision, exact consultation return, author-defined markup across scenes, save/reopen and readable/canonical handoff. Source fixtures/API-created records are corroboration only, never the author journey.
+
+Explicitly inspect subtree trash/restore without reviving independently trashed children; typed schema-valid moves; duplicate-title identity; tag-only notes; assignment removal versus project-wide label rename/removal; guarded same-ID markup restoration; detached/trashed target states; and draft preservation. Do not invent human research participation or claim professional screenplay element/pagination support. Project-kind taxonomy remains undecided. Reject missing lifecycle operations or a control gallery, and retain pending broad parity after a scoped acceptance.
+
+## F-52 — concurrent visual and usability acceptance
+
+Maintain a capture index for every visited native surface and dialog in the complete author journey. Independently assess action grouping/discoverability, excess spacing, content density, modal and pane bounds, legible hierarchy, keyboard focus and icon recognition. Consider a coherent custom/filled desktop icon treatment from actual comparisons, with accessible names and consistent sizing. Do not certify production quality from a palette change or from successful commands alone.
+
+Blocking usability or visual findings require implementation rework and a fresh compiled capture/interaction on the changed source. The index must distinguish observed states from unvisited areas, and the reviewer must state the actual desktop/platform coverage. This applies to the active #14 workflow and then the #7 and #11 surfaces when their sequential work begins. Visual polish cannot silently change manuscript semantics, remove required actions or manufacture full parity.
+
+## F-53 — direct tree authoring
+
+Accept hierarchy organization only after actual pointer dragging into folders and between siblings shows accurate target highlighting/insertion lines. Exercise invalid self/descendant/schema drops, outside-target release, Escape, edge autoscroll and delayed expansion. Inspect three/four-level indentation and full-width titles on the populated story. F-54 supersedes adjacent row buttons: verify right-click and Shift+F10 creation/lifecycle actions on the exact targeted item. Drag preview/cancellation must not persist changes; a successful drop is one guarded operation preserving IDs/content/history. The removed bottom Organize project entry and a move dialog cannot stand in for this interaction.
+
+
+## F-54 — project labels and compact note inspection
+
+Require project-defined label creation before assignment, named color selection, reuse on notes in different documents, consistent inline/sidebar color, guarded recoloring/rename/removal and durable unused definitions. Existing uncolored tags remain exact. Multiple labels retain visible order and an explicit primary color; selected, hovered, resolved, overlapping and detached states cannot invent attachment or obscure label identity. Color must have a named accessible cue in both Light and Dark.
+
+Inspect one/two-note and populated inspectors: quote, authored note and labels are distinct; list height follows content up to a bounded maximum; details do not disappear below fixed empty padding. Label selection/creation, draft Cancel/resume/preflight and existing lifecycle/recovery stay reachable at common/minimum widths and long localized labels. Verify right-click/keyboard actions in full-width tree rows without permanent Add/More buttons. Pre-F-54 images cannot accept this change.

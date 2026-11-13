@@ -34,18 +34,19 @@ impl StudioApp {
                     }
                 });
                 if create {
-                    let result = (|| -> AppResult<()> {
-                        let project = self.workspace.create_project(self.project_name.trim())?;
-                        self.create_empty_manuscript(&project.id, l.text("First chapter"))?;
-                        self.projects = self.workspace.list_projects()?;
-                        self.open_project(project)?;
-                        Ok(())
-                    })();
-                    if result.is_ok() {
-                        self.project_dialog = false;
-                        self.project_name.clear();
+                    match self.create_project_from_form() {
+                        Ok(project) => {
+                            // A creation receipt closes the form even if subsequent navigation fails.
+                            self.project_dialog = false;
+                            self.project_name.clear();
+                            let result = (|| -> AppResult<()> {
+                                self.projects = self.workspace.list_projects()?;
+                                self.open_project(project)
+                            })();
+                            self.record_error(result);
+                        }
+                        Err(error) => self.record_error(Err(error)),
                     }
-                    self.record_error(result);
                 }
             });
             if response.should_close() {
@@ -82,23 +83,20 @@ impl StudioApp {
                         }
                     });
                     if create {
-                        let result = (|| -> AppResult<()> {
-                            self.save()?;
-                            if let Some(project) = &self.project {
-                                let document = self.create_empty_manuscript(
-                                    &project.id,
-                                    self.document_name.trim(),
-                                )?;
-                                self.documents = self.workspace.list_documents(&project.id)?;
-                                self.open_document(document)?;
+                        match self.create_document_from_form() {
+                            Ok(document) => {
+                                self.document_dialog = false;
+                                self.document_name.clear();
+                                let result = (|| -> AppResult<()> {
+                                    self.documents =
+                                        self.workspace.list_documents(&document.project_id)?;
+                                    self.refresh_project_tree()?;
+                                    self.open_document(document)
+                                })();
+                                self.record_error(result);
                             }
-                            Ok(())
-                        })();
-                        if result.is_ok() {
-                            self.document_dialog = false;
-                            self.document_name.clear();
+                            Err(error) => self.record_error(Err(error)),
                         }
-                        self.record_error(result);
                     }
                 },
             );
@@ -109,43 +107,8 @@ impl StudioApp {
         if self.settings_open {
             self.settings_dialog(ctx, t);
         }
-        if let Some(preview) = &self.import_preview {
-            let response = modal(
-                ctx,
-                l,
-                "archive-preview",
-                l.text(".wstudio project preview"),
-                540.0,
-                |ui| {
-                    ui.heading(&preview.title);
-                    ui.add_space(10.0);
-                    ui.label(l.format(
-                        "Format version: {version} · Documents: {count}",
-                        &[
-                            ("version", preview.format_version.to_string()),
-                            ("count", preview.documents.len().to_string()),
-                        ],
-                    ));
-                    ui.add_space(12.0);
-                    ui.label(l.text("Archive checked. Text preview is available. Full project import and rich-document editing are not implemented yet."));
-                    ui.add_space(12.0);
-                    egui::ScrollArea::vertical()
-                        .max_height(300.0)
-                        .show(ui, |ui| {
-                            for document in &preview.documents {
-                                egui::CollapsingHeader::new(&document.title)
-                                    .id_salt(&document.id)
-                                    .show(ui, |ui| {
-                                        ui.label(&document.plain_text);
-                                    });
-                            }
-                        });
-                },
-            );
-            if response.should_close() {
-                self.import_preview = None;
-            }
-        }
+        self.project_import
+            .dialog(ctx, &self.database, self.language, t);
         if let Some(message) = self.error.clone() {
             let response = modal(ctx, l, "error", l.text("Attention needed"), 440.0, |ui| {
                 ui.label(l.text(message.msgid));
@@ -154,7 +117,7 @@ impl StudioApp {
                     ui.label(&message.details);
                 });
                 ui.add_space(12.0);
-                if ui.button(l.text("Understood")).clicked() {
+                if components::action(ui, l.text("Understood"), true, Some(t)).clicked() {
                     self.error = None;
                 }
             });
@@ -164,19 +127,170 @@ impl StudioApp {
         }
     }
 
-    fn create_empty_manuscript(&self, project_id: &str, title: &str) -> AppResult<Document> {
+    fn prepare_creation(&mut self) -> AppResult<()> {
         #[cfg(feature = "editor-preview")]
-        {
-            let content =
-                craft_editor_model::Document::plain(uuid::Uuid::new_v4().to_string(), "")?
-                    .to_json()?;
-            Ok(self
-                .workspace
-                .create_rich_document(project_id, title, content)?)
-        }
+        self.ensure_canvas_navigation()?;
+        self.commit_title_edit()?;
+        self.save()
+    }
+
+    pub(super) fn create_project_from_form(&mut self) -> AppResult<Project> {
+        self.prepare_creation()?;
+        #[cfg(feature = "editor-preview")]
+        let format = studio_core::InitialManuscript::Structured;
         #[cfg(not(feature = "editor-preview"))]
-        {
-            Ok(self.workspace.create_document(project_id, title, "")?)
+        let format = studio_core::InitialManuscript::Plain;
+        Ok(self
+            .workspace
+            .create_project_with_manuscript(
+                self.project_name.trim(),
+                self.language.text("First chapter"),
+                format,
+            )?
+            .project)
+    }
+
+    pub(super) fn create_document_from_form(&mut self) -> AppResult<Document> {
+        self.prepare_creation()?;
+        let project = self.project.as_ref().ok_or_else(|| {
+            studio_core::StudioError::Validation(
+                "Choose a project before creating a manuscript".into(),
+            )
+        })?;
+        let project_id = project.id.clone();
+        self.workspace.initialize_project_tree(&project_id)?;
+        let structure = self.workspace.project_structure(&project_id)?;
+        let kind = structure.schema["nodeTypes"]
+            .as_array()
+            .and_then(|types| {
+                types.iter().find(|kind| {
+                    kind["canBeRoot"].as_bool() == Some(true)
+                        && kind["contentBearing"].as_bool() == Some(true)
+                })
+            })
+            .and_then(|kind| kind["key"].as_str())
+            .ok_or("project_has_no_root_manuscript_type")?;
+        let format = if cfg!(feature = "editor-preview") {
+            studio_core::InitialManuscript::Structured
+        } else {
+            studio_core::InitialManuscript::Plain
+        };
+        let node = self.workspace.create_project_tree_node_with_format(
+            &project_id,
+            structure.revision,
+            None,
+            kind,
+            self.document_name.trim(),
+            format,
+        )?;
+        // Creation has committed. Close the form before any fallible view acquisition so a
+        // refresh failure cannot invite a second creation of the same authored item.
+        self.document_dialog = false;
+        self.document_name.clear();
+        Ok(self.workspace.document(
+            node.document_id
+                .as_deref()
+                .ok_or("created_manuscript_missing")?,
+        )?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn frame(app: &mut StudioApp, ctx: &egui::Context, events: Vec<egui::Event>, time: f64) {
+        let tokens = theme::resolve(&ThemeSettings::default(), false);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1000.0, 680.0),
+                )),
+                events,
+                time: Some(time),
+                ..Default::default()
+            },
+            |ui| app.dialogs(ui.ctx(), tokens),
+        );
+        output.textures_delta.clear();
+    }
+    fn enter() -> egui::Event {
+        egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
         }
+    }
+    #[test]
+    fn native_project_form_should_create_and_open_exactly_one_initial_manuscript() -> AppResult<()>
+    {
+        let directory = tempfile::tempdir()?;
+        let ctx = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(ctx.clone());
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("project-form.sqlite"),
+            false,
+            None,
+        )?;
+        app.project_dialog = true;
+        frame(&mut app, &ctx, vec![], 0.0);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Text("Created from native form 日本語".into())],
+            0.1,
+        );
+        frame(&mut app, &ctx, vec![enter()], 0.2);
+        assert!(!app.project_dialog);
+        assert!(!app.document_dialog);
+        assert!(app.project_name.is_empty());
+        let project = app.project.as_ref().ok_or("new project did not open")?;
+        assert_eq!(project.title, "Created from native form 日本語");
+        assert_eq!(app.workspace.list_projects()?.len(), 1);
+        let documents = app.workspace.list_documents(&project.id)?;
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].title, app.language.text("First chapter"));
+        assert_eq!(
+            app.document.as_ref().map(|document| document.id.as_str()),
+            Some(documents[0].id.as_str())
+        );
+        Ok(())
+    }
+    #[test]
+    fn native_document_form_should_create_and_open_the_typed_document_once() -> AppResult<()> {
+        let directory = tempfile::tempdir()?;
+        let ctx = egui::Context::default();
+        let creation = eframe::CreationContext::_new_kittest(ctx.clone());
+        let mut app = StudioApp::new(
+            &creation,
+            directory.path().join("document-form.sqlite"),
+            false,
+            None,
+        )?;
+        let project = app.workspace.create_project("Existing project")?;
+        app.open_project(project.clone())?;
+        app.document_dialog = true;
+        frame(&mut app, &ctx, vec![], 0.0);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Text("Created chapter 😀".into())],
+            0.1,
+        );
+        frame(&mut app, &ctx, vec![enter()], 0.2);
+        assert!(!app.document_dialog);
+        assert!(app.document_name.is_empty());
+        assert_eq!(app.workspace.list_projects()?.len(), 1);
+        let documents = app.workspace.list_documents(&project.id)?;
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].title, "Created chapter 😀");
+        assert_eq!(
+            app.document.as_ref().map(|document| document.id.as_str()),
+            Some(documents[0].id.as_str())
+        );
+        Ok(())
     }
 }

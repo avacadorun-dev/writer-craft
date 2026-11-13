@@ -18,6 +18,9 @@ pub(super) fn selected_companion(
     snapshot: &ProjectExportSnapshot,
     selected: &HashSet<String>,
 ) -> Result<SelectedCompanion> {
+    if snapshot.has_retained_evidence() {
+        return Err(TransferError::Invalid("This project retains imported native evidence; use the native canonical export instead of the old selected companion".into()));
+    }
     let original = snapshot.manifest();
     let nodes = array(original, "nodes")
         .iter()
@@ -188,6 +191,9 @@ pub(super) fn selected_companion(
                 .collect(),
         );
     }
+    if let Some(labels) = native.get("projectLabels") {
+        state["projectLabels"] = selected_labels(labels, &state)?;
+    }
     let mut recovery = json!({"format":"writercraft-recovery-evidence","formatVersion":1,"authority":"untrusted-on-import"});
     for domain in ["proseDrafts", "richDrafts"] {
         recovery[domain] = Value::Array(
@@ -237,6 +243,49 @@ pub(super) fn selected_companion(
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
     value[key].as_array().map(Vec::as_slice).unwrap_or(&[])
 }
+
+fn selected_labels(catalog: &Value, state: &Value) -> Result<Value> {
+    let fields = catalog.as_object().ok_or_else(|| {
+        TransferError::Invalid(
+            "Project label catalog is invalid; use complete-project canonical export".into(),
+        )
+    })?;
+    if fields
+        .keys()
+        .any(|key| !matches!(key.as_str(), "schemaVersion" | "revision" | "labels"))
+    {
+        return Err(TransferError::Invalid("Project labels contain extension data that cannot be scoped safely; use complete-project canonical export".into()));
+    }
+    let mut names = HashSet::new();
+    let mut collect = |annotation: &Value| {
+        for name in array(annotation, "tags") {
+            if let Some(name) = name.as_str() {
+                names.insert(name.to_owned());
+            }
+        }
+    };
+    for note in array(state, "annotations") {
+        collect(&note["state"]);
+    }
+    for event in array(state, "annotationHistory") {
+        collect(&event["before"]);
+        collect(&event["after"]);
+    }
+    let mut selected = catalog.clone();
+    selected["labels"] = Value::Array(
+        array(catalog, "labels")
+            .iter()
+            .filter(|label| {
+                label["name"]
+                    .as_str()
+                    .is_some_and(|name| names.contains(name))
+            })
+            .cloned()
+            .collect(),
+    );
+    Ok(selected)
+}
+
 fn collect_references(value: &Value, assets: &mut HashSet<String>, sources: &mut HashSet<String>) {
     if let Some(id) = value["attrs"]["assetId"].as_str().filter(|s| !s.is_empty()) {
         assets.insert(id.to_owned());
@@ -288,4 +337,37 @@ fn asset_id(source: &str) -> Option<&str> {
             .strip_prefix("/api/media/")
             .and_then(|s| s.strip_suffix("/content"))
     })
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::*;
+
+    #[test]
+    fn selected_catalog_preserves_included_colors_and_history_without_leaking_unused_names()
+    -> Result<()> {
+        let catalog = json!({"schemaVersion":1,"revision":8,"labels":[
+            {"name":"Promise","color":"violet","retired":false,"vendor":{"keep":"included"}},
+            {"name":"Earlier motive","color":"amber","retired":true},
+            {"name":"Unrelated private vocabulary","color":"rose","retired":false},
+            {"name":"Unused private label","color":"gray","retired":true}
+        ]});
+        let state = json!({"annotations":[{"state":{"tags":["Promise"]}}],"annotationHistory":[
+            {"before":{"tags":["Earlier motive","Old name with no retained definition"]},"after":{"tags":["Promise"]}}
+        ]});
+        let selected = selected_labels(&catalog, &state)?;
+        assert_eq!(
+            selected["labels"],
+            json!([catalog["labels"][0], catalog["labels"][1]])
+        );
+        assert_eq!(selected["revision"], 8);
+        Ok(())
+    }
+
+    #[test]
+    fn selected_catalog_refuses_unscopable_unknown_project_data() {
+        let catalog =
+            json!({"schemaVersion":1,"revision":0,"labels":[],"vendor":{"private":"unrelated"}});
+        assert!(selected_labels(&catalog, &json!({})).is_err());
+    }
 }

@@ -66,3 +66,9 @@ The owner froze functionality to the actual existing Writers Studio inventory. T
 ## Shared shell geometry correction — F-19
 
 Toolbar identity and navigator are separate components with one shared layout boundary. Resizing, hiding or adaptively replacing the navigator updates the matching toolbar identity zone. Allocate a bounded title region before placing neighboring controls; truncate with access to the complete title instead of overlapping labels or reducing utility hit targets. Reviewers must compare these components together in compiled narrow/common/wide and long-title captures. This implements the owner's observed alignment correction and changes no author feature scope.
+
+## Machine-checked completeness and complete tasks
+
+`docs/migration/PARITY_SCOPE.json` joins source-byte inventories, mandatory capability IDs, issue numbers and six complete task journeys in [ROLE_JOURNEYS.md](ROLE_JOURNEYS.md). Editor N/M/E/C IDs keep their original meanings. Canvas B01–B26 record the previously under-specified original authoring baseline (#17). Broader project/domain/media/transfer rows are initial groups and require independent omission review and refinement before acceptance; they are not proof that the inventory is exhaustive.
+
+The `coverage` section in the existing UX gate records both axes for one source/lock/contract fingerprint. Do not replace the complete source inventory with the six role tasks. Link each implementation slice to its exact rows and failure paths; retain all pending rows. Full-product work outside the selected release remains explicitly scoped in FEATURE_PARITY and NEXT_RELEASE.

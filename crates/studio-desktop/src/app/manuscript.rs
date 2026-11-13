@@ -7,6 +7,14 @@ impl StudioApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(t.editor).inner_margin(0))
             .show(ui, |ui| {
+                #[cfg(feature = "editor-preview")]
+                {
+                    let blocked = self.modal_open();
+                    if let Some(canvas) = &mut self.canvas {
+                        canvas.show(ui, &self.database, self.language, t, blocked);
+                        return;
+                    }
+                }
                 let Some(document) = self.document.clone() else {
                     ui.centered_and_justified(|ui| {
                         if ui.button(l.text("Add your first document")).clicked() {
@@ -16,12 +24,12 @@ impl StudioApp {
                     return;
                 };
                 egui::Panel::top("document-heading")
-                    .exact_size(56.0)
+                    .exact_size(44.0)
                     .resizable(false)
                     .frame(
                         egui::Frame::new()
                             .fill(t.editor)
-                            .inner_margin(egui::Margin::symmetric(24, 8)),
+                            .inner_margin(egui::Margin::symmetric(20, 4)),
                     )
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
@@ -58,7 +66,7 @@ impl StudioApp {
                                 (ui.available_width() - focus_width - badge_width - 128.0)
                                     .max(60.0);
                             ui.allocate_ui_with_layout(
-                                egui::vec2(title_width, 40.0),
+                                egui::vec2(title_width, 36.0),
                                 Layout::left_to_right(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.is_recovery_read_only(), |ui| {
@@ -93,8 +101,7 @@ impl StudioApp {
                                 }
                                 #[cfg(feature = "editor-preview")]
                                 if self.rich.is_some()
-                                    && icons::icon_button(ui, Icon::Assistant, l.text("Notes"))
-                                        .clicked()
+                                    && icons::icon_button(ui, Icon::Tag, l.text("Notes")).clicked()
                                 {
                                     self.inspector = Inspector::Notes;
                                     self.inspector_visible = true;

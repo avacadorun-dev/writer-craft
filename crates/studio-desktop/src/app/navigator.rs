@@ -14,6 +14,9 @@ impl StudioApp {
                     .inner_margin(egui::Margin::symmetric(16, 14)),
             )
             .show(ui, |ui| {
+                if !self.library {
+                    self.navigator_utilities(ui, t);
+                }
                 ui.horizontal(|ui| {
                     ui.add_space(8.0);
                     ui.label(
@@ -27,13 +30,32 @@ impl StudioApp {
                         .color(t.muted),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if !self.library {
+                            let more =
+                                icons::icon_button(ui, Icon::More, l.text("Project actions"));
+                            egui::Popup::menu(&more).show(|ui| {
+                                if ui.button(l.text("Trash")).clicked() {
+                                    let result = self.refresh_project_tree();
+                                    if result.is_ok() {
+                                        self.tree_ui.trash_open = true;
+                                    }
+                                    self.record_error(result);
+                                    ui.close();
+                                }
+                                if ui.button(l.text("Refresh project")).clicked() {
+                                    let result = self.refresh_project_tree();
+                                    self.record_error(result);
+                                    ui.close();
+                                }
+                            });
+                        }
                         if icons::icon_button(
                             ui,
                             Icon::Plus,
                             if self.library {
                                 l.text("Create project")
                             } else {
-                                l.text("Add document")
+                                l.text("Add at root…")
                             },
                         )
                         .clicked()
@@ -41,12 +63,14 @@ impl StudioApp {
                             if self.library {
                                 self.project_dialog = true;
                             } else {
-                                self.document_dialog = true;
+                                let result =
+                                    self.tree_action(project_tree::TreeAction::Create(None));
+                                self.record_error(result);
                             }
                         }
                     });
                 });
-                ui.add_space(12.0);
+                ui.add_space(8.0);
                 if self.library {
                     nav_row(ui, Icon::Book, l.text("All projects"), true, t);
                     ui.add_space(6.0);
@@ -69,72 +93,85 @@ impl StudioApp {
                         .color(t.muted),
                     );
                 } else {
-                    components::singleline(ui, &mut self.search, l.text("Find a document…"));
-                    ui.add_space(14.0);
-                    ui.horizontal(|ui| {
-                        ui.add_space(8.0);
-                        icons::icon(ui, Icon::Folder, 20.0, t.muted);
-                        ui.label(RichText::new(l.text("Manuscript")).size(13.0).strong());
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.label(
-                                RichText::new(self.documents.len().to_string())
-                                    .size(12.0)
-                                    .color(t.muted),
-                            )
-                            .on_hover_text(l.format(
-                                "Documents: {count}",
-                                &[("count", self.documents.len().to_string())],
-                            ));
-                        });
-                    });
-                    ui.add_space(6.0);
-                    let mut selected = None;
-                    egui::ScrollArea::vertical()
-                        .id_salt("document-tree")
-                        .auto_shrink([false, false])
-                        .max_height((ui.available_height() - 90.0).max(80.0))
-                        .show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 0.0;
-                            for document in &self.documents {
-                                if !self.search.is_empty()
-                                    && !document
-                                        .title
-                                        .to_lowercase()
-                                        .contains(&self.search.to_lowercase())
-                                {
-                                    continue;
-                                }
-                                let active = self
-                                    .document
-                                    .as_ref()
-                                    .is_some_and(|current| current.id == document.id);
-                                if nav_row(ui, Icon::Document, &document.title, active, t).clicked()
-                                {
-                                    selected = Some(document.clone());
-                                }
-                            }
-                        });
-                    if let Some(document) = selected {
-                        let result = self.open_document(document);
+                    self.reference_return_control(ui);
+                    let search =
+                        components::singleline(ui, &mut self.search, l.text("Find in the tree…"));
+                    #[cfg(feature = "editor-preview")]
+                    super::capture_connected_writing::control(
+                        ui.ctx(),
+                        "navigator.search",
+                        search.rect,
+                    );
+                    #[cfg(not(feature = "editor-preview"))]
+                    let _ = search;
+                    ui.add_space(8.0);
+                    let tree_rect = ui.available_rect_before_wrap();
+                    let clip_rect = tree_rect.intersect(ui.clip_rect());
+                    let action = ui
+                        .scope_builder(
+                            egui::UiBuilder::new()
+                                .max_rect(tree_rect)
+                                .layout(Layout::top_down(Align::Min)),
+                            |ui| {
+                                ui.set_clip_rect(clip_rect);
+                                self.project_outline.show(
+                                    ui,
+                                    &self.documents,
+                                    project_navigation::OutlineSelection {
+                                        document: self
+                                            .document
+                                            .as_ref()
+                                            .map(|document| document.id.as_str()),
+                                        node: self.tree_ui.selected.as_deref(),
+                                        structure: self.tree_ui.structure.as_ref(),
+                                    },
+                                    &self.search,
+                                    l,
+                                    t,
+                                )
+                            },
+                        )
+                        .inner;
+                    if let Some(action) = action {
+                        let result = self.tree_action(action);
                         self.record_error(result);
                     }
-                    ui.add_space(14.0);
-                    ui.separator();
-                    ui.add_space(10.0);
-                    if nav_row(
-                        ui,
-                        Icon::History,
-                        l.text("Document history"),
-                        self.inspector_visible && self.inspector == Inspector::Versions,
-                        t,
-                    )
-                    .clicked()
-                    {
-                        self.inspector = Inspector::Versions;
-                        self.inspector_visible = true;
-                        self.prefer_inspector = true;
-                        self.focus_mode = false;
+                }
+            });
+    }
+
+    fn navigator_utilities(&mut self, ui: &mut egui::Ui, t: Tokens) {
+        let l = self.language;
+        egui::Panel::bottom("navigator-utilities")
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(egui::Frame::NONE)
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                ui.separator();
+                ui.add_space(8.0);
+                #[cfg(feature = "editor-preview")]
+                {
+                    self.canvas_navigation(ui, t);
+                    ui.add_space(4.0);
+                    if nav_row(ui, Icon::Tag, l.text("Project markup"), false, t).clicked() {
+                        let result = self.open_project_marks();
+                        self.record_error(result);
                     }
+                }
+                if nav_row(
+                    ui,
+                    Icon::History,
+                    l.text("Document history"),
+                    self.inspector_visible && self.inspector == Inspector::Versions,
+                    t,
+                )
+                .clicked()
+                {
+                    self.inspector = Inspector::Versions;
+                    self.inspector_visible = true;
+                    self.prefer_inspector = true;
+                    self.focus_mode = false;
                 }
             });
     }

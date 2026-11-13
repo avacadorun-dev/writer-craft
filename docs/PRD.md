@@ -62,4 +62,4 @@ Automatic engineering preview builds target macOS Apple silicon, Windows x64 and
 
 The command bar and visible navigator/inspector share vertical boundaries. Long project and chapter titles truncate within allocated regions with full-title tooltips, never overlap commands. Settings use a permanent category sidebar, bounded content and fixed footer with the spacing contract in `docs/design/DESKTOP_UX.md`. The eight sections reflect existing Writers Studio scope; unavailable sections are informational until the actual legacy capability is migrated. No inactive switches may imply a working provider or MCP connection.
 
-The brand retains the original monk with a book, adapted for native toolbar and app-icon sizes. Utility book icons remain utility icons rather than substituting for the product mark.
+The current brand is the approved lion writer with a quill and book (#16), replacing the earlier monk identity. Preserve the supplied artwork; use separate full-tile toolbar/banner and padded OS-icon exports. Utility icons remain Lucide controls rather than substituting for the product mark.

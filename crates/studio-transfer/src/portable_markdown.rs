@@ -161,10 +161,15 @@ pub fn export_markdown_folder_with_progress(
                         && revision["revision"].as_u64() == Some(current)
                 })
                 .ok_or_else(|| TransferError::Invalid("Export document head is missing".into()))?;
+            let anchors = HashMap::new();
             let mut renderer = MarkdownRenderer {
                 current: path,
                 project: &project_id,
                 nodes: &plan.node_paths,
+                anchors: &anchors,
+                heading_offset: 0,
+                block_anchors: true,
+                companion_links: true,
                 assets: &plan.asset_paths,
                 conversions: BTreeSet::new(),
             };
@@ -540,7 +545,7 @@ fn plan_export(
         scope: scope.into(),
     })
 }
-fn ordered_tree(nodes: &[Value], allow_outside_parents: bool) -> Result<Vec<usize>> {
+pub(super) fn ordered_tree(nodes: &[Value], allow_outside_parents: bool) -> Result<Vec<usize>> {
     let known: HashSet<&str> = nodes
         .iter()
         .map(|node| required(node, "id"))
@@ -648,7 +653,7 @@ fn reading_index(plan: &ExportPlan) -> Result<String> {
     }
     Ok(out)
 }
-fn rewrite_canvas_resources(
+pub(super) fn rewrite_canvas_resources(
     content: &mut Value,
     current: &str,
     nodes: &HashMap<String, String>,
@@ -657,19 +662,85 @@ fn rewrite_canvas_resources(
 ) -> Result<()> {
     if let Some(items) = content["nodes"].as_array_mut() {
         for node in items {
-            if node["type"].as_str() == Some("file")
-                && let Some(resource) = node["x-writers-studio"]
+            if node["type"].as_str() == Some("file") {
+                if let Some(resource) = node["x-writers-studio"]
                     .get("resource")
                     .filter(|value| !value.is_null())
-            {
-                let target = resource_path(resource, nodes, canvases, assets)?;
-                node["file"] = Value::String(relative_file_path(current, target)?);
+                {
+                    let target = resource_path(resource, nodes, canvases, assets)?;
+                    let resource = json!({"kind":resource["kind"],"id":resource["id"]});
+                    node["file"] = Value::String(relative_file_path(current, target)?);
+                    // Only a scoped resource identifier belongs to the reader extension. Authored
+                    // private/unknown payloads and source paths remain solely canonical objects.
+                    node["x-writers-studio"] = json!({"resource":resource});
+                } else {
+                    reading_placeholder(
+                        node,
+                        "Unresolved file reference. The original is retained in the WriterCraft canonical companion.",
+                    );
+                }
+            } else {
+                if let Some(fields) = node.as_object_mut() {
+                    fields.remove("x-writers-studio");
+                }
+                let kind = node["type"].as_str().unwrap_or("");
+                if !matches!(kind, "text" | "link" | "group")
+                    || (kind == "link"
+                        && !node["url"].as_str().is_some_and(|url| {
+                            url.trim().starts_with("https://") || url.trim().starts_with("http://")
+                        }))
+                {
+                    reading_placeholder(
+                        node,
+                        "Unsupported Canvas item. The original is retained in the WriterCraft canonical companion.",
+                    );
+                }
+            }
+            let kind = node["type"].as_str().unwrap_or("").to_owned();
+            if let Some(fields) = node.as_object_mut() {
+                fields.retain(|key, _| {
+                    ["id", "type", "x", "y", "width", "height", "color"].contains(&key.as_str())
+                        || match kind.as_str() {
+                            "file" => {
+                                ["file", "subpath", "x-writers-studio"].contains(&key.as_str())
+                            }
+                            "text" => key == "text",
+                            "link" => key == "url",
+                            "group" => key == "label",
+                            _ => false,
+                        }
+                });
             }
         }
     }
+    if let Some(edges) = content["edges"].as_array_mut() {
+        for edge in edges {
+            if let Some(fields) = edge.as_object_mut() {
+                fields.retain(|key, _| {
+                    [
+                        "id", "fromNode", "fromSide", "toNode", "toSide", "fromEnd", "toEnd",
+                        "color", "label",
+                    ]
+                    .contains(&key.as_str())
+                });
+            }
+        }
+    }
+    if let Some(fields) = content.as_object_mut() {
+        fields.retain(|key, _| matches!(key.as_str(), "nodes" | "edges"));
+    }
     Ok(())
 }
-fn resource_path<'a>(
+fn reading_placeholder(node: &mut Value, message: &str) {
+    if let Some(fields) = node.as_object_mut() {
+        for key in ["file", "subpath", "url", "x-writers-studio"] {
+            fields.remove(key);
+        }
+    }
+    node["type"] = json!("text");
+    node["text"] = json!(message);
+}
+pub(super) fn resource_path<'a>(
     resource: &Value,
     nodes: &'a HashMap<String, String>,
     canvases: &'a HashMap<String, String>,
@@ -690,7 +761,7 @@ fn resource_path<'a>(
 fn asset_key(kind: &str, id: &str) -> String {
     format!("{kind}:{id}")
 }
-fn artifact_extension(attachment: &ProjectAttachment) -> String {
+pub(super) fn artifact_extension(attachment: &ProjectAttachment) -> String {
     let known = extension(&attachment.media_type);
     if known != ".bin" {
         return known.into();
@@ -721,10 +792,10 @@ fn extension(mime: &str) -> &str {
         _ => ".bin",
     }
 }
-fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+pub(super) fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
     value[key].as_array().map(Vec::as_slice).unwrap_or(&[])
 }
-fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+pub(super) fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
     value[key]
         .as_str()
         .ok_or_else(|| TransferError::Invalid(format!("Portable export field {key} is missing")))
@@ -735,13 +806,17 @@ fn invalid<T>(message: &str) -> Result<T> {
 fn core_error(error: studio_core::StudioError) -> TransferError {
     TransferError::Invalid(error.to_string())
 }
-fn check_cancel(cancel: &ProjectTransferCancellation) -> Result<()> {
+pub(super) fn check_cancel(cancel: &ProjectTransferCancellation) -> Result<()> {
     if cancel.is_cancelled() {
         return invalid("Export cancelled; any new output remains explicitly incomplete");
     }
     Ok(())
 }
-fn ensure_parent(root: &Path, relative: &str, owned: &mut HashSet<PathBuf>) -> Result<()> {
+pub(super) fn ensure_parent(
+    root: &Path,
+    relative: &str,
+    owned: &mut HashSet<PathBuf>,
+) -> Result<()> {
     if !safe_relative(relative) {
         return invalid("Unsafe portable output path");
     }
@@ -758,7 +833,7 @@ fn ensure_parent(root: &Path, relative: &str, owned: &mut HashSet<PathBuf>) -> R
     }
     Ok(())
 }
-fn write_new(
+pub(super) fn write_new(
     root: &Path,
     relative: &str,
     bytes: &[u8],
@@ -782,7 +857,7 @@ fn write_new(
     }
     writer.finish(relative)
 }
-struct DigestWriter {
+pub(super) struct DigestWriter {
     file: File,
     digest: Sha256,
     length: u64,
@@ -802,7 +877,15 @@ impl Write for DigestWriter {
     }
 }
 impl DigestWriter {
-    fn finish(mut self, path: &str) -> Result<PortableExportFile> {
+    /// Start a digesting payload writer.
+    pub(super) fn new(file: File) -> Self {
+        Self {
+            file,
+            digest: Sha256::new(),
+            length: 0,
+        }
+    }
+    pub(super) fn finish(mut self, path: &str) -> Result<PortableExportFile> {
         self.flush()?;
         self.file.sync_all()?;
         Ok(PortableExportFile {
@@ -812,7 +895,7 @@ impl DigestWriter {
         })
     }
 }
-fn verify_file(
+pub(super) fn verify_file(
     root: &Path,
     expected: &PortableExportFile,
     cancel: &ProjectTransferCancellation,
@@ -838,7 +921,7 @@ fn verify_file(
     }
     Ok(())
 }
-fn sync_directory(path: &Path) -> Result<()> {
+pub(super) fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         File::open(path)?.sync_all()?;

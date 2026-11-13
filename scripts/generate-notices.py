@@ -14,6 +14,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
+MAX_SOURCE_ROOT_NOTICE_BYTES = 2 * 1024 * 1024
+MAX_SOURCE_ROOT_NOTICES = 64
+
 NOTICE_NAME = re.compile(r"(?:^|[._-])(?:licen[cs]e|copying|copyright|notice|ofl)(?:$|[._-])", re.IGNORECASE)
 
 
@@ -41,24 +44,49 @@ def normal_dependencies(metadata):
                   key=lambda item: (item["name"], item["version"], item.get("source") or ""))
 
 
+
+def git_source_root(package, directory):
+    """Find only this Git dependency's bounded checkout root, without reading Git metadata."""
+    if not (package.get("source") or "").startswith("git+"):
+        return None
+    current = directory
+    for _ in range(9):
+        if current.is_symlink():
+            return None
+        marker = current / ".git"
+        if marker.is_symlink():
+            return None
+        if marker.exists():
+            return current if marker.is_dir() or marker.is_file() else None
+        if current == current.parent:
+            break
+        current = current.parent
+    return None
+
+
 def package_notices(package):
     """Return package-relative names and verbatim decoded texts, plus availability notes."""
-    directory = Path(package["manifest_path"]).parent
-    if not directory.is_dir():
+    manifest_directory = Path(package["manifest_path"]).parent
+    if not manifest_directory.is_dir():
         return [], ["Package source is unavailable; license/notice text could not be collected."]
     paths, warnings = set(), []
+    # Check the supplied checkout path before resolving aliases: resolution must not
+    # hide a symlink at the checkout boundary or its .git marker.
+    verified_root = git_source_root(package, manifest_directory)
+    directory = manifest_directory.resolve()
+    source_root = verified_root.resolve() if verified_root is not None else None
     declared = package.get("license_file")
     if declared:
         candidate = Path(declared)
         if not candidate.is_absolute():
             candidate = directory / candidate
         try:
-            candidate.resolve().relative_to(directory.resolve())
+            candidate.resolve().relative_to(source_root or directory)
         except ValueError:
-            warnings.append("Declared license file is outside the package source; not collected.")
+            warnings.append("Declared license file is outside the package source/verified Git checkout; not collected.")
         else:
             if candidate.is_file() and not candidate.is_symlink():
-                paths.add(candidate)
+                paths.add(candidate.resolve())
             else:
                 warnings.append("Declared license file is unavailable; text could not be collected.")
     for current, directories, files in os.walk(directory):
@@ -70,10 +98,26 @@ def package_notices(package):
                                        for part in candidate.relative_to(directory).parts[:-1])
             if (NOTICE_NAME.search(name) or in_license_directory) and candidate.is_file() and not candidate.is_symlink():
                 paths.add(candidate)
-    notices = []
-    for path in sorted(paths, key=lambda item: item.relative_to(directory).as_posix()):
-        relative = path.relative_to(directory).as_posix()
+    if source_root is not None and source_root != directory:
+        # Git workspace members often inherit SPDX terms while storing license texts at the root.
+        # Inspect only immediate notice files; never recurse through unrelated sibling packages.
+        root_files = sorted(path for path in source_root.iterdir()
+                            if NOTICE_NAME.search(path.name) and path.is_file() and not path.is_symlink())
+        if len(root_files) > MAX_SOURCE_ROOT_NOTICES:
+            warnings.append("Git source root notice count exceeds the collection bound.")
+        paths.update(root_files[:MAX_SOURCE_ROOT_NOTICES])
+    def relative_notice(path):
         try:
+            return path.relative_to(directory).as_posix()
+        except ValueError:
+            return "@source-root/" + path.relative_to(source_root).as_posix()
+    notices = []
+    for path in sorted(paths, key=relative_notice):
+        relative = relative_notice(path)
+        try:
+            if relative.startswith("@source-root/") and path.stat().st_size > MAX_SOURCE_ROOT_NOTICE_BYTES:
+                warnings.append("Git source root notice exceeds the collection byte bound: " + relative)
+                continue
             raw = path.read_bytes()
         except OSError:
             warnings.append("Notice file unavailable: " + relative)
@@ -278,6 +322,136 @@ class NoticeTests(unittest.TestCase):
             (root / "fonts/SofiaSans-LICENSE.txt").write_bytes(b"")
             with self.assertRaisesRegex(ValueError, "bounded nonempty regular file"):
                 bundled_font_notices(root)
+
+
+    def git_member_fixture(self, root, source="git+https://example.org/upstream?rev=abc#abc"):
+        checkout = root / "checkout"
+        checkout.mkdir()
+        (checkout / ".git").mkdir()
+        (checkout / "Cargo.toml").write_text("[workspace]\nmembers = [\"crates/member\"]\n")
+        member = checkout / "crates/member"
+        member.mkdir(parents=True)
+        (member / "Cargo.toml").write_text("[package]\nname = \"member\"\n")
+        return checkout, member, {"manifest_path": str(member / "Cargo.toml"), "source": source}
+
+    def test_git_member_preserves_exact_root_licenses_and_nested_embedded_notices(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, member, package = self.git_member_fixture(root)
+            original = b"Copyright upstream\r\nPermission granted verbatim.\r\n"
+            (checkout / "LICENSE-MIT").write_bytes(original)
+            (checkout / "LICENSE-APACHE").write_bytes(b"Apache terms\n")
+            (member / "fonts").mkdir()
+            (member / "fonts/OFL.txt").write_bytes(b"Embedded font terms\n")
+            (checkout / "crates/unrelated").mkdir()
+            (checkout / "crates/unrelated/LICENSE").write_bytes(b"Unrelated sibling terms\n")
+            notices, warnings = package_notices(package)
+            self.assertEqual(warnings, [])
+            self.assertIn(("@source-root/LICENSE-MIT", "UTF-8", original.decode("utf-8")), notices)
+            self.assertIn(("fonts/OFL.txt", "UTF-8", "Embedded font terms\n"), notices)
+            self.assertNotIn("Unrelated sibling terms", str(notices))
+            self.assertNotIn(str(root), str(notices))
+
+    def test_root_license_file_reference_is_allowed_only_inside_verified_git_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, _member, package = self.git_member_fixture(root)
+            (checkout / "TERMS.txt").write_bytes(b"Exact declared workspace terms\n")
+            package["license_file"] = "../../TERMS.txt"
+            notices, warnings = package_notices(package)
+            self.assertEqual(warnings, [])
+            self.assertEqual(notices, [("@source-root/TERMS.txt", "UTF-8", "Exact declared workspace terms\n")])
+            (root / "PRIVATE.txt").write_bytes(b"Never collect outside checkout\n")
+            package["license_file"] = "../../../PRIVATE.txt"
+            notices, warnings = package_notices(package)
+            self.assertEqual(notices, [])
+            self.assertTrue(any("outside" in warning for warning in warnings))
+
+    def test_filesystem_aliases_use_the_same_package_and_verified_checkout_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            actual = root / "actual"
+            actual.mkdir()
+            checkout, member, package = self.git_member_fixture(actual)
+            alias = root / "alias"
+            try:
+                alias.symlink_to(actual, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symbolic link creation unavailable")
+            (checkout / "TERMS.txt").write_bytes(b"Declared root terms\r\n")
+            (member / "LICENSE").write_bytes(b"Member terms\n")
+            (member / "legal").mkdir()
+            (member / "legal/terms.txt").write_bytes(b"Declared member terms\n")
+            alias_package = dict(package, manifest_path=str(alias / "checkout/crates/member/Cargo.toml"))
+            for declared in ("../../TERMS.txt", "legal/terms.txt"):
+                with self.subTest(declared=declared):
+                    package["license_file"] = declared
+                    alias_package["license_file"] = declared
+                    notices, warnings = package_notices(alias_package)
+                    self.assertEqual((notices, warnings), package_notices(package))
+                    self.assertEqual(warnings, [])
+                    self.assertNotIn(str(root), str(notices))
+            self.assertIn(("legal/terms.txt", "UTF-8", "Declared member terms\n"), notices)
+            (actual / "PRIVATE.txt").write_bytes(b"Never collect outside checkout\n")
+            alias_package["license_file"] = "../../../PRIVATE.txt"
+            notices, warnings = package_notices(alias_package)
+            self.assertTrue(any("outside" in warning for warning in warnings))
+            self.assertNotIn("Never collect outside checkout", str(notices))
+
+    def test_canonicalization_does_not_hide_an_unverified_symlink_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, _member, package = self.git_member_fixture(root)
+            (checkout / "TERMS.txt").write_bytes(b"Unverified ancestor terms\n")
+            linked_checkout = root / "linked-checkout"
+            try:
+                linked_checkout.symlink_to(checkout, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symbolic link creation unavailable")
+            package["manifest_path"] = str(linked_checkout / "crates/member/Cargo.toml")
+            package["license_file"] = "../../TERMS.txt"
+            notices, warnings = package_notices(package)
+            self.assertEqual(notices, [])
+            self.assertTrue(any("outside" in warning for warning in warnings))
+
+    def test_registry_or_unverified_source_never_collects_ancestor_git_licenses(self):
+        for source in (None, "registry+https://github.com/rust-lang/crates.io-index"):
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as temporary:
+                checkout, _member, package = self.git_member_fixture(Path(temporary), source)
+                (checkout / "LICENSE").write_bytes(b"Ancestor terms\n")
+                package["license_file"] = "../../LICENSE"
+                notices, warnings = package_notices(package)
+                self.assertEqual(notices, [])
+                self.assertTrue(any("outside" in warning for warning in warnings))
+
+    def test_git_root_symlinks_and_oversized_notice_are_not_followed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, _member, package = self.git_member_fixture(root)
+            (root / "outside.txt").write_bytes(b"Private outside bytes\n")
+            try:
+                (checkout / "LICENSE-LINK").symlink_to(root / "outside.txt")
+            except OSError:
+                self.skipTest("Symbolic link creation unavailable")
+            (checkout / "LICENSE-HUGE").write_bytes(b"x" * (MAX_SOURCE_ROOT_NOTICE_BYTES + 1))
+            notices, warnings = package_notices(package)
+            self.assertEqual(notices, [])
+            self.assertTrue(any("byte bound" in warning for warning in warnings))
+            self.assertNotIn(str(root), str(warnings))
+
+    def test_git_checkout_search_and_root_notice_count_are_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout, member, package = self.git_member_fixture(root)
+            for index in range(MAX_SOURCE_ROOT_NOTICES + 1):
+                (checkout / ("LICENSE-" + str(index))).write_text("Terms\n")
+            notices, warnings = package_notices(package)
+            self.assertEqual(len(notices), MAX_SOURCE_ROOT_NOTICES)
+            self.assertTrue(any("count" in warning for warning in warnings))
+            deep = member.joinpath(*(["nested"] * 10))
+            deep.mkdir(parents=True)
+            package["manifest_path"] = str(deep / "Cargo.toml")
+            self.assertIsNone(git_source_root(package, deep))
 
     def test_incomplete_dependency_graph_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:

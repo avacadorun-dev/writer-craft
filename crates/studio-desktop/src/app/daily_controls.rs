@@ -399,7 +399,7 @@ impl StudioApp {
                     },
                 })
                 .map_err(|_| "The selection could not be restored. Close Find and try again.")?;
-            rich.session.request_scroll_to_caret();
+            rich.session.request_scroll_to_selection();
             return Ok(true);
         }
         if draft.plain_body.as_deref() != Some(self.body.as_str()) {

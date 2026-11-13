@@ -501,7 +501,7 @@ fn additive_schema_three_migration_preserves_documents_and_existing_rich_history
     assert_eq!(
         raw.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        8
+        11
     );
 }
 
@@ -607,4 +607,81 @@ fn read_only_document_refuses_every_annotation_metadata_mutation() {
         Err(StudioError::ReadOnly { .. })
     ));
     assert_eq!(workspace.annotation(&annotation.id).unwrap(), annotation);
+}
+
+#[test]
+fn source_capacity_unicode_notes_remain_editable_and_overflow_never_changes_saved_work() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("long-notes.sqlite");
+    let limit = studio_core::MAX_PROJECT_ANNOTATION_NOTE_CHARACTERS;
+    let body = "Я😀中".repeat(limit / 3);
+    assert_eq!(body.chars().count(), limit);
+    let (document, saved) = {
+        let workspace = Workspace::open(&path).unwrap();
+        let project = workspace.create_project("Source note capacity").unwrap();
+        let document = workspace
+            .create_rich_document(&project.id, "Doc", content("echo"))
+            .unwrap();
+        let anchor = workspace
+            .capture_annotation_anchor(
+                &document.id,
+                document.revision,
+                "p",
+                ScalarOffset(0),
+                ScalarOffset(4),
+                "echo",
+            )
+            .unwrap();
+        let saved = workspace
+            .create_annotation(&document.id, document.revision, anchor.clone(), &body)
+            .unwrap();
+        let too_long = format!("{body}😀");
+        assert!(matches!(
+            workspace.create_annotation(&document.id, document.revision, anchor, &too_long),
+            Err(StudioError::Validation(_))
+        ));
+        assert_eq!(
+            workspace.annotations(&document.id).unwrap(),
+            vec![saved.clone()]
+        );
+        assert_eq!(workspace.document(&document.id).unwrap(), document);
+        (document, saved)
+    };
+    let workspace = Workspace::open(&path).unwrap();
+    assert_eq!(workspace.annotation(&saved.id).unwrap(), saved);
+    let edited = format!("😀{}", "中".repeat(limit - 1));
+    let updated = workspace
+        .update_annotation(
+            &saved.id,
+            document.revision,
+            saved.revision,
+            AnnotationPatch {
+                note: Some(edited.clone()),
+                status: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.note, edited);
+    let history = serde_json::to_value(workspace.annotation_history(&saved.id).unwrap()).unwrap();
+    assert!(matches!(
+        workspace.update_annotation(
+            &saved.id,
+            document.revision,
+            updated.revision,
+            AnnotationPatch {
+                note: Some(format!("{edited}Я")),
+                status: None
+            }
+        ),
+        Err(StudioError::Validation(_))
+    ));
+    assert_eq!(workspace.annotation(&saved.id).unwrap(), updated);
+    assert_eq!(
+        serde_json::to_value(workspace.annotation_history(&saved.id).unwrap()).unwrap(),
+        history
+    );
+    assert_eq!(workspace.document(&document.id).unwrap(), document);
+    drop(workspace);
+    let reopened = Workspace::open(path).unwrap();
+    assert_eq!(reopened.annotation(&saved.id).unwrap(), updated);
 }

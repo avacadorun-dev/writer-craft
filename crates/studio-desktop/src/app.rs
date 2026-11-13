@@ -1,5 +1,9 @@
 //! Bounded native writer workspace: state and command orchestration.
 #[cfg(feature = "editor-preview")]
+mod canvas;
+#[cfg(feature = "editor-preview")]
+mod capture_connected_writing;
+#[cfg(feature = "editor-preview")]
 mod clipboard_host;
 #[cfg(feature = "editor-preview")]
 mod clipboard_jobs;
@@ -11,21 +15,31 @@ mod library;
 mod manuscript;
 mod native_capture;
 #[cfg(feature = "editor-preview")]
+mod native_media;
+#[cfg(feature = "editor-preview")]
 mod native_services;
+mod navigation_return;
 mod navigator;
 #[cfg(feature = "editor-preview")]
 mod notes;
 #[cfg(feature = "editor-preview")]
 mod project_clipboard;
+mod project_import;
+mod project_navigation;
+mod project_transfer;
+mod project_tree;
 #[cfg(feature = "editor-preview")]
 mod proofing;
 #[cfg(feature = "editor-preview")]
 mod recovery;
+mod reference_navigation;
 #[cfg(feature = "editor-preview")]
 mod rendering;
 mod review;
 #[cfg(feature = "editor-preview")]
 mod rich_editor;
+#[cfg(feature = "editor-preview")]
+mod rich_review;
 mod settings;
 mod storage;
 use crate::{
@@ -72,13 +86,21 @@ pub struct StudioApp {
     storage: storage::StorageState,
     projects: Vec<Project>,
     project: Option<Project>,
+    project_outline: project_navigation::ProjectOutline,
+    tree_ui: project_tree::TreeUi,
+    reference_return: Option<navigation_return::NavigationReturn>,
+    reference_origin_title: String,
     documents: Vec<Document>,
     document: Option<Document>,
     body: String,
     #[cfg(feature = "editor-preview")]
     rich: Option<rich_editor::RichState>,
     #[cfg(feature = "editor-preview")]
+    canvas: Option<canvas::CanvasState>,
+    #[cfg(feature = "editor-preview")]
     notes: notes::NotesState,
+    #[cfg(feature = "editor-preview")]
+    rich_review: rich_review::RichReviewState,
     #[cfg(feature = "editor-preview")]
     recovery: Option<recovery::RecoveryDialog>,
     #[cfg(feature = "editor-preview")]
@@ -121,10 +143,8 @@ pub struct StudioApp {
     focus_replacement: bool,
     reason: String,
     proposals: Vec<Proposal>,
-    import_job: Option<
-        mpsc::Receiver<Result<studio_transfer::ImportPreview, studio_transfer::TransferError>>,
-    >,
-    import_preview: Option<studio_transfer::ImportPreview>,
+    project_import: project_import::ProjectImportState,
+    project_transfer: project_transfer::ProjectTransferState,
     capture: Option<PathBuf>,
     capture_probe: native_capture::CaptureProbe,
     frames: u32,
@@ -137,6 +157,7 @@ impl StudioApp {
         demo: bool,
         capture: Option<PathBuf>,
     ) -> AppResult<Self> {
+        crate::brand::initialize(&cc.egui_ctx)?;
         let workspace = Workspace::open(&database)?;
         let mut preference_errors = Vec::new();
         let interface_path = database.with_file_name("interface.json");
@@ -209,13 +230,21 @@ impl StudioApp {
             storage: storage::StorageState::default(),
             projects: vec![],
             project: None,
+            project_outline: project_navigation::ProjectOutline::default(),
+            tree_ui: project_tree::TreeUi::default(),
+            reference_return: None,
+            reference_origin_title: String::new(),
             documents: vec![],
             document: None,
             body: String::new(),
             #[cfg(feature = "editor-preview")]
             rich: None,
             #[cfg(feature = "editor-preview")]
+            canvas: None,
+            #[cfg(feature = "editor-preview")]
             notes: notes::NotesState::default(),
+            #[cfg(feature = "editor-preview")]
+            rich_review: rich_review::RichReviewState::default(),
             #[cfg(feature = "editor-preview")]
             recovery: None,
             #[cfg(feature = "editor-preview")]
@@ -263,8 +292,8 @@ impl StudioApp {
             focus_replacement: false,
             reason: String::new(),
             proposals: vec![],
-            import_job: None,
-            import_preview: None,
+            project_import: project_import::ProjectImportState::default(),
+            project_transfer: project_transfer::ProjectTransferState::default(),
             capture,
             capture_probe: native_capture::CaptureProbe::default(),
             frames: 0,
@@ -325,12 +354,21 @@ impl StudioApp {
         }
         // These read-only presentation overrides belong only to explicitly requested captures.
         if app.capture.is_some() {
+            if demo && std::env::args().any(|argument| argument == "--capture-home") {
+                app.library = true;
+            }
             if std::env::args().any(|argument| argument == "--capture-focus") {
                 app.focus_mode = true;
             }
             if std::env::args().any(|argument| argument == "--capture-max-text") {
                 app.font_size = 28.0;
                 app.editor_preferences.values.font_size = 28.0;
+            }
+            if std::env::args().any(|argument| argument == "--capture-transfer") {
+                app.capture_manuscript_export(false)?;
+            }
+            if std::env::args().any(|argument| argument == "--capture-transfer-preview") {
+                app.capture_manuscript_export(true)?;
             }
             #[cfg(feature = "editor-preview")]
             if std::env::args().any(|argument| argument == "--capture-notes") {
@@ -349,7 +387,7 @@ impl StudioApp {
             app.stage()?;
         }
         if app.capture.is_some() {
-            app.initialize_capture(demo)?;
+            app.initialize_capture(demo, &cc.egui_ctx)?;
         }
         Ok(app)
     }
@@ -365,12 +403,21 @@ impl StudioApp {
     }
 
     fn open_project(&mut self, project: Project) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        self.ensure_canvas_navigation()?;
         self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
         self.save()?;
         let documents = self.workspace.list_documents(&project.id)?;
-        if let Some(document) = documents.first().cloned() {
+        let nodes = self.workspace.initialize_project_tree(&project.id)?;
+        let structure = self.workspace.project_structure(&project.id)?;
+        let outline = project_navigation::ProjectOutline::prepare(&project.id, &nodes)?;
+        let first = documents
+            .iter()
+            .find(|document| project_tree::document_is_active(&nodes, &document.id))
+            .cloned();
+        if let Some(document) = first {
             // The old project/context remains intact if opening needs an explicit
             // recovery choice. Never display an empty project after a guarded refusal.
             self.open_document(document)?;
@@ -388,13 +435,37 @@ impl StudioApp {
             }
             self.daily_controls.document_changed();
         }
+        #[cfg(feature = "editor-preview")]
+        {
+            self.canvas = None;
+        }
         self.documents = documents;
+        self.project_outline = outline;
+        self.tree_ui = project_tree::TreeUi::with_structure(nodes, structure);
+        self.tree_ui.selected = self
+            .document
+            .as_ref()
+            .and_then(|document| {
+                self.tree_ui
+                    .nodes
+                    .iter()
+                    .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            })
+            .map(|node| node.logical_id.clone());
         self.project = Some(project);
         self.library = false;
         Ok(())
     }
 
     fn open_document(&mut self, document: Document) -> AppResult<()> {
+        if !project_tree::document_is_active(
+            &self.workspace.project_tree(&document.project_id)?,
+            &document.id,
+        ) {
+            return Err(project_tree::TrashedDocument.into());
+        }
+        #[cfg(feature = "editor-preview")]
+        self.ensure_canvas_navigation()?;
         self.commit_title_edit()?;
         #[cfg(feature = "editor-preview")]
         self.cancel_clipboard_work();
@@ -469,9 +540,20 @@ impl StudioApp {
                 self.body = state.session.document().plain_text();
             }
             self.rich = rich;
+            self.canvas = None;
         }
         self.proposals = self.workspace.proposals(&document.id)?;
         self.document = Some(document);
+        self.tree_ui.selected = self
+            .document
+            .as_ref()
+            .and_then(|document| {
+                self.tree_ui
+                    .nodes
+                    .iter()
+                    .find(|node| node.document_id.as_deref() == Some(document.id.as_str()))
+            })
+            .map(|node| node.logical_id.clone());
         self.daily_controls.document_changed();
         #[cfg(feature = "editor-preview")]
         if recovered_checkpoint {
@@ -490,6 +572,10 @@ impl StudioApp {
     }
 
     fn save_explicit(&mut self) -> AppResult<()> {
+        #[cfg(feature = "editor-preview")]
+        if let Some(canvas) = &mut self.canvas {
+            return canvas.save_now(&self.database);
+        }
         self.commit_title_edit()?;
         self.save()
     }
@@ -589,22 +675,7 @@ impl StudioApp {
     }
 
     fn choose_archive(&mut self) {
-        let l = self.language;
-        if self.import_job.is_some() {
-            return;
-        }
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter(l.text("Writers Studio project"), &["wstudio"])
-            .pick_file()
-        {
-            let (sender, receiver) = mpsc::channel();
-            std::thread::spawn(move || {
-                let result = studio_transfer::inspect_archive(path);
-                let _ = sender.send(result);
-            });
-            self.import_job = Some(receiver);
-            self.status = "Checking project archive…".into();
-        }
+        self.choose_project_archive();
     }
     fn export_text(&mut self) {
         let l = self.language;
@@ -682,7 +753,12 @@ impl StudioApp {
     fn rich_modal_open(&self) -> bool {
         #[cfg(feature = "editor-preview")]
         {
-            self.notes.modal_open()
+            self.rich_review.full_open
+                || self
+                    .canvas
+                    .as_ref()
+                    .is_some_and(canvas::CanvasState::modal_open)
+                || self.notes.modal_open()
                 || self.recovery.is_some()
                 || self
                     .rich
@@ -698,22 +774,39 @@ impl StudioApp {
         self.settings_open
             || self.project_dialog
             || self.document_dialog
-            || self.import_preview.is_some()
+            || self.project_import.modal_open()
+            || self.project_transfer.modal_open()
             || self.error.is_some()
             || self.full_review.is_some()
             || self.rich_modal_open()
             || self.daily_controls.modal_open()
             || self.storage.modal_open()
+            || self.tree_ui.modal_open()
     }
 }
 
 impl eframe::App for StudioApp {
+    #[cfg(feature = "editor-preview")]
+    fn raw_input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
+        if let Some(probe) = &mut self.capture_probe.connected {
+            probe.raw_input(ctx, input);
+        }
+        let blocked = self.modal_open();
+        if let Some(canvas) = &mut self.canvas {
+            canvas.prepare_input(ctx, input, blocked);
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let t = theme::tokens(&ctx);
         #[cfg(feature = "editor-preview")]
         self.clipboard_frame_start(&ctx);
         self.poll_storage(&ctx);
+        #[cfg(feature = "editor-preview")]
+        self.poll_canvas(&ctx);
+        self.poll_project_transfer(&ctx);
+        self.poll_project_import(&ctx);
         if !self.modal_open() {
             self.shortcuts(&ctx);
         }
@@ -725,11 +818,30 @@ impl eframe::App for StudioApp {
             let result = self.save();
             self.record_error(result);
         }
-        if (self.dirty.is_some() && !self.autosave_paused) || self.import_job.is_some() {
+        if (self.dirty.is_some() && !self.autosave_paused)
+            || self.project_import.busy()
+            || self.project_transfer.busy()
+        {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
-        if ctx.input(|i| i.viewport().close_requested()) && self.storage.modal_open() {
+        #[cfg(feature = "editor-preview")]
+        let canvas_close_blocked = self
+            .canvas
+            .as_ref()
+            .is_some_and(canvas::CanvasState::blocks_navigation);
+        #[cfg(not(feature = "editor-preview"))]
+        let canvas_close_blocked = false;
+        if ctx.input(|i| i.viewport().close_requested())
+            && (self.storage.modal_open()
+                || self.project_import.busy()
+                || self.project_transfer.busy()
+                || canvas_close_blocked)
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            #[cfg(feature = "editor-preview")]
+            if canvas_close_blocked {
+                self.record_error(Err(canvas::PendingCanvas.into()));
+            }
         } else if ctx.input(|i| i.viewport().close_requested()) {
             let title_result = self.commit_title_edit();
             if title_result.is_err() {
@@ -737,7 +849,8 @@ impl eframe::App for StudioApp {
                 self.record_error(title_result);
             } else {
                 #[cfg(feature = "editor-preview")]
-                let note_drafts_pending = self.notes.has_unsaved_drafts();
+                let note_drafts_pending =
+                    self.notes.has_unsaved_drafts() || self.rich_review.has_unsaved_drafts();
                 #[cfg(not(feature = "editor-preview"))]
                 let note_drafts_pending = false;
                 if note_drafts_pending {
@@ -755,28 +868,6 @@ impl eframe::App for StudioApp {
                 }
             }
         }
-        if let Some(receiver) = &self.import_job {
-            let received = receiver.try_recv();
-            if matches!(received, Err(mpsc::TryRecvError::Disconnected)) {
-                self.import_job = None;
-                self.error = Some(UiError {
-                    msgid: "Archive checking was interrupted. Try opening it again.",
-                    details: "Archive worker disconnected".into(),
-                });
-                self.status = "Attention needed".into();
-            } else if let Ok(result) = received {
-                match result {
-                    Ok(preview) => {
-                        self.import_preview = Some(preview);
-                        self.status = "Archive checked".into();
-                    }
-                    Err(error) => {
-                        self.record_error(Err(Box::new(error)));
-                    }
-                }
-                self.import_job = None;
-            }
-        }
         self.prepare_capture_frame();
         self.toolbar(ui, t);
         self.status_bar(ui, t);
@@ -789,16 +880,28 @@ impl eframe::App for StudioApp {
         if self.library {
             self.library(ui, t);
         } else {
-            if show_inspector {
+            #[cfg(feature = "editor-preview")]
+            let canvas_open = self.canvas.is_some();
+            #[cfg(not(feature = "editor-preview"))]
+            let canvas_open = false;
+            if show_inspector && !canvas_open {
                 self.inspector(ui, t);
             }
             self.editor(ui, t);
         }
         let had_modal = self.modal_open();
         self.full_review_dialog(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        self.rich_review_dialog(&ctx, t);
         self.dialogs(&ctx, t);
         self.daily_control_dialogs(&ctx, t);
+        self.tree_dialogs(&ctx, t);
         self.storage_dialog(&ctx, t);
+        self.project_transfer_dialog(&ctx, t);
+        #[cfg(feature = "editor-preview")]
+        if let Some(canvas) = &mut self.canvas {
+            canvas.dialogs(&ctx, &self.database, self.language, t);
+        }
         #[cfg(feature = "editor-preview")]
         self.notes_dialogs(&ctx, t);
         #[cfg(feature = "editor-preview")]
@@ -817,7 +920,63 @@ impl eframe::App for StudioApp {
     }
 }
 
+const PROJECT_LABEL_ERROR_MESSAGES: &[&str] = &[
+    "The project labels changed; review the label catalog again",
+    "These project labels belong to another project; reopen the label picker",
+    "A selected label is unavailable; review the project label picker again",
+    "This project label is unavailable; refresh the catalog",
+    "This project label is not active; restore it before changing it",
+    "That tag already exists; choose a distinct name",
+    "This label was removed; restore it in the project label catalog before assigning it",
+    "This label name is retired; restore the retained label instead of reusing its name",
+    "This project label is not retired; refresh the catalog",
+    "This project label catalog version is not supported; preserve the original project",
+    "This project label color is not supported; preserve the original project",
+    "The restored label catalog does not match its current passage assignments",
+    "The project label revision is invalid",
+    "The project label catalog needs label definitions",
+    "A project label name is missing",
+    "Project label names must be unique, including retired labels",
+    "Project label retirement must be explicit",
+    "Project label revision disagrees with its saved catalog",
+    "The tagged passages changed; review the project tag again",
+    "Use at most 32 tags on one passage",
+    "Each tag needs 1–80 characters without line breaks",
+    "Each tag can occur only once on a passage",
+    "Project label catalog is invalid; use complete-project canonical export",
+    "Project labels contain extension data that cannot be scoped safely; use complete-project canonical export",
+];
+const COMMITTED_LABEL_MESSAGES: &[&str] = &[
+    "The edit was applied, but its note changed. Open Notes to review it before resolving it.",
+    "This note or manuscript changed. Review it in Notes before resolving it.",
+    "The note was updated, but the panel could not refresh. Reopen Notes before continuing.",
+    "This passage cannot be revealed safely. Save or restore the document, then select it again.",
+    "Write a replacement before saving this draft, or discard it.",
+    "This marked passage is unavailable. Restore or reattach it first.",
+    "This marked passage changed. Refresh the review before applying it.",
+    "The edit was saved, but the panel could not refresh. Reopen the document before continuing.",
+    "There is no recent markup removal to undo",
+    "Return to this document to undo markup removal",
+    "Save or cancel the pending note edits before Undo",
+    "The original label assignment is unavailable; use Project markup",
+    "The pending note is too long; preserve its text before removing the mark",
+    "Review the project label picker before removing changed assignments",
+    "This label is no longer assigned to the mark; refresh its note",
+    "The label was created. Add it to the passage again.",
+    "The label was created, but this passage already has 32 labels.",
+];
+
 fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'static str {
+    if let Some(error) = error.downcast_ref::<project_tree::RestoreBlocked>() {
+        return error.msgid();
+    }
+    if error.is::<project_tree::TrashedDocument>() {
+        return "This document is in Trash. Restore its branch before opening it.";
+    }
+    #[cfg(feature = "editor-preview")]
+    if error.is::<canvas::PendingCanvas>() {
+        return "Finish or preserve the pending board operation before leaving.";
+    }
     #[cfg(feature = "editor-preview")]
     if error.is::<recovery::ReadOnlyRecoveryView>() {
         return "Recovery preview is read only. Preserved note drafts remain available.";
@@ -828,11 +987,19 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::Validation(message) if message == "protected_workspace_export_path" => {
                 "Choose an export file outside the workspace database and settings files."
             }
-            StudioError::Validation(_) | StudioError::InvalidTextRange { .. } => {
-                "Check the entered values and try again."
-            }
+            StudioError::Validation(message) => PROJECT_LABEL_ERROR_MESSAGES
+                .iter()
+                .chain(COMMITTED_LABEL_MESSAGES)
+                .copied()
+                .find(|known| *known == message.as_str())
+                .unwrap_or("Check the entered values and try again."),
+            StudioError::InvalidTextRange { .. } => "Check the entered values and try again.",
             StudioError::RevisionConflict { .. } => {
                 "The document changed. Reload it before saving."
+            }
+            StudioError::ProjectStructureConflict { .. }
+            | StudioError::ProjectNodeChanged { .. } => {
+                "The project structure changed. Refresh the project before continuing."
             }
             StudioError::AnnotationConflict { .. } => "The note changed. Reload it before editing.",
             StudioError::DraftAnnotationConflict => {
@@ -876,13 +1043,29 @@ fn error_message(error: &(dyn std::error::Error + Send + Sync + 'static)) -> &'s
             StudioError::Json(_) => "The saved data could not be decoded.",
         };
     }
+    let detail = error.to_string();
+    if let Some(message) = COMMITTED_LABEL_MESSAGES
+        .iter()
+        .copied()
+        .find(|known| *known == detail.as_str())
+    {
+        return message;
+    }
     #[cfg(feature = "editor-preview")]
     if let Some(craft_editor_egui::Error::Clipboard(error)) =
         error.downcast_ref::<craft_editor_egui::Error>()
     {
         return clipboard_host::message(error);
     }
-    if error.is::<studio_transfer::TransferError>() {
+    if let Some(error) = error.downcast_ref::<studio_transfer::TransferError>() {
+        if let studio_transfer::TransferError::Invalid(message) = error
+            && let Some(known) = PROJECT_LABEL_ERROR_MESSAGES
+                .iter()
+                .copied()
+                .find(|known| *known == message.as_str())
+        {
+            return known;
+        }
         return "The archive could not be checked. The original project was not changed.";
     }
     if error.is::<std::io::Error>() {
@@ -968,6 +1151,15 @@ fn install_fonts(ctx: &egui::Context) {
         ))
         .into(),
     );
+    // A named home-only heading face; shared chrome and prose keep their families.
+    fonts.font_data.insert(
+        "Home Heading".into(),
+        egui::FontData::from_static(include_bytes!("../../../assets/fonts/Inter-Bold.ttf")).into(),
+    );
+    fonts.families.insert(
+        FontFamily::Name("HomeHeading".into()),
+        vec!["Home Heading".into(), "Noto CJK".into()],
+    );
     fonts.font_data.insert(
         "Noto CJK".into(),
         egui::FontData::from_static(include_bytes!(
@@ -983,6 +1175,12 @@ fn install_fonts(ctx: &egui::Context) {
     fonts
         .families
         .entry(FontFamily::Proportional)
+        .or_default()
+        .push("Noto CJK".into());
+    // Native card/source editors use Monospace; keep its Latin faces ahead of CJK.
+    fonts
+        .families
+        .entry(FontFamily::Monospace)
         .or_default()
         .push("Noto CJK".into());
     let mut manuscript_faces = vec!["Source Serif".into()];
@@ -1023,6 +1221,8 @@ fn nav_row(
             .max_rect(rect.shrink2(Vec2::new(8.0, 3.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
+    // Hierarchy rows suppress outer item gaps; utility icon/text spacing stays explicit.
+    child.spacing_mut().item_spacing.x = 8.0;
     icons::icon(
         &mut child,
         icon,
@@ -1112,6 +1312,59 @@ mod tests {
             });
         });
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn monospace_card_input_resolves_cjk_glyphs_without_changing_latin_metrics() {
+        let context = egui::Context::default();
+        install_fonts(&context);
+        let mut output = context.run_ui(egui::RawInput::default(), |ui| {
+            ui.ctx().fonts_mut(|fonts| {
+                let font = FontId::monospace(13.0);
+                // Resolve actual glyphs through the same family as native card input.
+                // These fallback glyphs are distinct from epaint's replacement face.
+                for character in "日本語にほんカタカナ简体中文漢字".chars() {
+                    assert!(
+                        fonts.has_glyph(&font, character),
+                        "Missing native Monospace glyph for {character:?}",
+                    );
+                }
+                let advance = fonts.glyph_width(&font, 'i');
+                assert!(advance > 0.0);
+                for character in "Wm0{}".chars() {
+                    assert!(
+                        (fonts.glyph_width(&font, character) - advance).abs() < 0.001,
+                        "Latin monospace advance changed for {character:?}",
+                    );
+                }
+            });
+        });
+        output.textures_delta.clear();
+        output.platform_output.commands.clear();
+    }
+
+    #[test]
+    fn label_refusals_have_actionable_messages_in_every_language() {
+        let error = studio_core::StudioError::Validation(
+            "The project labels changed; review the label catalog again".into(),
+        );
+        assert_eq!(
+            error_message(&error),
+            "The project labels changed; review the label catalog again"
+        );
+        for key in PROJECT_LABEL_ERROR_MESSAGES
+            .iter()
+            .chain(COMMITTED_LABEL_MESSAGES)
+        {
+            for language in Language::ALL {
+                assert_ne!(
+                    language.text(key),
+                    "⟦missing translation⟧",
+                    "{}: {key}",
+                    language.code()
+                );
+            }
+        }
     }
 
     #[test]
@@ -1572,6 +1825,12 @@ mod catalog_source_checks {
             include_str!("app/authoring.rs"),
             include_str!("app/rich_editor.rs"),
             include_str!("app/notes.rs"),
+            include_str!("app/notes/labels.rs"),
+            include_str!("app/notes/presentation.rs"),
+            include_str!("app/notes/quick_actions.rs"),
+            include_str!("app/rich_review.rs"),
+            include_str!("app/rich_review/markup_completion.rs"),
+            include_str!("app/project_navigation.rs"),
             include_str!("app/clipboard_host.rs"),
             include_str!("app/rendering.rs"),
             include_str!("app/daily_controls.rs"),
